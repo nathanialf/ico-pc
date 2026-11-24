@@ -419,6 +419,9 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "누르고 있기: R2를 누르고 있는 동안 줌합니다. 전환: R2를 한 번 누르면 줌하고, 다시 누르면 원래대로 돌아갑니다.",
     [UI_STR_OPT_CAMERA_RESET] = "카메라 리셋",
     [UI_STR_CAMERA_RESET_NOTE] = "켬: 오른쪽 스틱을 누르면(R3) 카메라가 바로 이코에게 돌아옵니다.",
+    [UI_STR_OPT_YORDA_LOOK] = "요르다 보기",
+    [UI_STR_YORDA_LOOK_NOTE] =
+        "이코와 카메라가 요르다를 부르지 않고 그쪽을 향합니다. 누르고 있기: L3를 누르고 있는 동안. 전환: L3를 누를 때마다 시작과 끝.",
     [UI_STR_OPT_BUTTON_PICTURES] = "버튼 그림",
     [UI_STR_BUTTON_PICTURES_NOTE] =
         "메뉴와 포토 모드에 표시되는 버튼 그림입니다. 자동은 마지막으로 사용한 컨트롤러에 맞게 바뀝니다.",

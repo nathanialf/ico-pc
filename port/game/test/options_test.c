@@ -2845,6 +2845,93 @@ static void test_camera_reset(const char *dir)
     }
 }
 
+/* [gameplay] yorda_look (options.h, yorda_look.h): off on every disc by
+   default, "hold" and "toggle" read, any other word off, the setter, the
+   reload; the four subBoyCollision copies' hook (a text scan of boyact.c:
+   the call, the look block, the camera with her on the screen, her other
+   stage) and the simulation key */
+static void test_yorda_look(const char *dir)
+{
+    static const char *const words[5] = {"off", "hold", "toggle", "Hold", "on"};
+    static const int want[5] = {ICO_YORDA_LOOK_OFF, ICO_YORDA_LOOK_HOLD, ICO_YORDA_LOOK_TOGGLE,
+                                ICO_YORDA_LOOK_OFF, ICO_YORDA_LOOK_OFF};
+    char path[512];
+    char text[96];
+    char *src;
+    FILE *f;
+
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_yorda_look() == ICO_YORDA_LOOK_OFF); /* every disc's default */
+    CHECK(strcmp(ico_opt_yorda_look_name(ICO_YORDA_LOOK_OFF), "off") == 0 &&
+          strcmp(ico_opt_yorda_look_name(ICO_YORDA_LOOK_HOLD), "hold") == 0 &&
+          strcmp(ico_opt_yorda_look_name(ICO_YORDA_LOOK_TOGGLE), "toggle") == 0 &&
+          strcmp(ico_opt_yorda_look_name(9), "off") == 0);
+    snprintf(path, sizeof(path), "%s/options_test.toml", dir);
+    for (int i = 0; i < 5; i++) {
+        f = fopen(path, "wb");
+        if (f == NULL) {
+            fprintf(stderr, "cannot write %s\n", path);
+            failures++;
+            return;
+        }
+        snprintf(text, sizeof(text), "[gameplay]\nyorda_look = \"%s\"\n", words[i]);
+        fputs(text, f);
+        fclose(f);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_opt_reload();
+        CHECK(ico_opt_yorda_look() == want[i]);
+    }
+    ico_opt_set_yorda_look(ICO_YORDA_LOOK_TOGGLE);
+    CHECK(ico_opt_yorda_look() == ICO_YORDA_LOOK_TOGGLE);
+    ico_opt_set_yorda_look(7);
+    CHECK(ico_opt_yorda_look() == ICO_YORDA_LOOK_OFF);
+    ico_opt_set_yorda_look(ICO_YORDA_LOOK_HOLD);
+    ico_opt_reload();
+    CHECK(ico_opt_yorda_look() == ICO_YORDA_LOOK_OFF); /* the file says "on" */
+    remove(path);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_yorda_look() == ICO_YORDA_LOOK_OFF);
+
+    src = read_source(ICO_BOYACT_SRC);
+    CHECK(src != NULL);
+    if (src != NULL) {
+        CHECK(count_of(src, "ico_yorda_look(") == 4 + 1 /* the declaration */);
+        CHECK(count_of(src, "look = ico_yorda_look(pad[0].now & 0x200,\n") == 4);
+        /* live: under control, no Free movement; the European body also not
+           in its own cut to her capture (privInsCam) */
+        CHECK(count_of(src, "IsAbleBoyControl() != 0 && ico_free_movement() == 0,\n") == 3);
+        CHECK(count_of(src, "IsAbleBoyControl() != 0 && ico_free_movement() == 0 &&\n"
+                            "                                      privInsCam.on == 0,\n") == 1);
+        CHECK(count_of(src, "ACTGame_FLAG_TETSUNAGI() != 0, stage_no);") == 4);
+        /* the look block: the second player's R1 or the look (three twins),
+           the European body's call, her R1 or the look */
+        CHECK(count_of(src, "((girlControlMode != 0 && (GOBJ_ACT(girlGObj)->pad.now & 8)) || "
+                            "look)) {") == 3);
+        CHECK(count_of(src,
+                       "girlControlMode != 0 && girlGObj != 0 && (GOBJ_ACT(girlGObj)->pad.now & "
+                       "8)) {") == 0);
+        CHECK(count_of(src, "(looking || ((int)(GOBJ_ACT(girlGObj)->flags20.ll >> 26) & 1) || "
+                            "look)) {") == 1);
+        /* the camera also with her on the screen, under the script's flag */
+        CHECK(count_of(src, "if ((girlLookInScreen == 0 || look) && ((int)(sub->flags20.ll >> ") ==
+              3);
+        CHECK(count_of(src, "if (girlLookInScreen == 0 || look) {\n") == 1);
+        /* her other stage, as R1 there */
+        CHECK(count_of(src, "if (((sub->pad.now & 0x8) || look) && lo != 0) {") == 4);
+        CHECK(count_of(src, "if ((sub->pad.now & 0x8) && lo != 0) {") == 0);
+        free(src);
+    }
+    src = read_source(ICO_SIM_KEYS_SRC);
+    CHECK(src != NULL);
+    if (src != NULL) {
+        CHECK(count_of(src, "\"gameplay.yorda_look\",") == 1);
+        CHECK(count_of(src, "\"off\",      /* gameplay.yorda_look */") == 1);
+        free(src);
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 2 && ico_region_select(argv[2]) != 0) {
@@ -2869,6 +2956,7 @@ int main(int argc, char **argv)
     test_button_pictures(argc > 1 ? argv[1] : ".");
     test_zoom_type(argc > 1 ? argv[1] : ".");
     test_camera_reset(argc > 1 ? argv[1] : ".");
+    test_yorda_look(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");
     test_video_effects_depth(argc > 1 ? argv[1] : ".");
     test_video_full_pixel(argc > 1 ? argv[1] : ".");

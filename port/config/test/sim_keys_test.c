@@ -105,6 +105,10 @@ static void test_list(void)
     /* Controls > Camera reset changes the look-around: off, the game's own */
     CHECK(listed("gameplay.camera_reset") &&
           strcmp(ico_sim_key_default("gameplay.camera_reset"), "off") == 0);
+    /* Controls > Look at Yorda changes the boy's look and the camera: off,
+       the game's own */
+    CHECK(listed("gameplay.yorda_look") &&
+          strcmp(ico_sim_key_default("gameplay.yorda_look"), "off") == 0);
     CHECK(listed("video.video_mode"));
 }
 
@@ -290,6 +294,18 @@ static void test_defaults(const char *dir)
     CHECK(k != NULL && strcmp(k, "gameplay.camera_reset") == 0 &&
           strcmp(out, "gameplay.camera_reset=(absent) (now on)") == 0);
     CHECK(ico_config_set_string("gameplay.camera_reset", "") == 0);
+    /* a state saved before gameplay.yorda_look existed: the same with it off,
+       a difference with it on */
+    drop_line(t, "gameplay.yorda_look", older, sizeof older);
+    CHECK(strstr(older, "gameplay.yorda_look=") == NULL && strlen(older) < strlen(t));
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
+    CHECK(ico_config_set_string("gameplay.yorda_look", "off") == 0);
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
+    CHECK(ico_config_set_string("gameplay.yorda_look", "toggle") == 0);
+    k = ico_sim_keys_first_diff(older, out, sizeof out);
+    CHECK(k != NULL && strcmp(k, "gameplay.yorda_look") == 0 &&
+          strcmp(out, "gameplay.yorda_look=(absent) (now toggle)") == 0);
+    CHECK(ico_config_set_string("gameplay.yorda_look", "") == 0);
     /* a key without one fixed default, absent, set now: differs */
     drop_line(t, "dev.start_stage", older, sizeof older);
     CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
@@ -495,7 +511,7 @@ static void test_unset_is_default(void)
         }
         CHECK(ico_config_set_string(ICO_SIM_KEYS[i], "") == 0);
     }
-    CHECK(n_fixed == 18); /* the list's 20 keys less the two without one text */
+    CHECK(n_fixed == 19); /* the list's 21 keys less the two without one text */
 
     /* a key without one default text: unset is the disc's own choice, so
        unset and a value still differ */
@@ -555,12 +571,13 @@ static void test_carry(void)
             CHECK(0);
         }
     }
-    CHECK(n >= 20);
+    CHECK(n >= 21);
     CHECK(fixups == (int)(sizeof kFixup / sizeof kFixup[0]));
     CHECK(kept == 1);
     CHECK(ico_sim_key_carry("gameplay.mirror") == ICO_SIM_CARRY_HARMLESS);
     CHECK(ico_sim_key_carry("gameplay.zoom_type") == ICO_SIM_CARRY_HARMLESS &&
-          ico_sim_key_carry("gameplay.camera_reset") == ICO_SIM_CARRY_HARMLESS);
+          ico_sim_key_carry("gameplay.camera_reset") == ICO_SIM_CARRY_HARMLESS &&
+          ico_sim_key_carry("gameplay.yorda_look") == ICO_SIM_CARRY_HARMLESS);
     CHECK(ico_sim_key_carry("gameplay.pit_time") == -1); /* retired */
     CHECK(ico_sim_key_carry("no.such") == -1 && ico_sim_key_carry(NULL) == -1);
     CHECK(strcmp(ico_sim_key_carry_name(ICO_SIM_CARRY_FIXUP), "fix-up") == 0 &&

@@ -422,6 +422,9 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_OPT_CAMERA_RESET] = "Restablecer cámara",
         [UI_STR_CAMERA_RESET_NOTE] =
             "Activado: pulsa el stick derecho (R3) para devolver la cámara a Ico al instante.",
+        [UI_STR_OPT_YORDA_LOOK] = "Mirar a Yorda",
+        [UI_STR_YORDA_LOOK_NOTE] =
+            "Ico y la cámara miran a Yorda sin llamarla. Mantener: mientras pulsas L3. Alternar: L3 lo activa y lo desactiva.",
         [UI_STR_OPT_BUTTON_PICTURES] = "Imágenes de los botones",
         [UI_STR_BUTTON_PICTURES_NOTE] =
             "Los botones que se muestran en los menús y el modo foto. Automático sigue al último mando usado.",

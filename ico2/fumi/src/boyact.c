@@ -57,6 +57,9 @@ extern int ico_door_grace_holds(int dest_stage);
 /* PC port: port/game/ico_rows.h: Developer > Free movement, read in place of the
    local debug switch that the four boy control loops leave at 0 */
 extern int ico_free_movement(void);
+/* PC port: port/game/yorda_look.h: Options > Controls > Look at Yorda, L3 runs
+   subBoyCollision's look at her (head and camera) without the call */
+extern int ico_yorda_look(int l3, int live, int hand, int stage);
 
 typedef struct { /* field names derived */
     int a, b, c;
@@ -4799,7 +4802,13 @@ static void subBoyCollision_ntsc(GObj *volatile self)
             int tgt[4];
             int ofs[4];
             int cpos[4];
+            int look;
 
+            /* PC port: Look at Yorda (yorda_look.h): L3 asks for the look
+               below without the call (no wish bit, no mail to her) */
+            look = ico_yorda_look(pad[0].now & 0x200,
+                                  IsAbleBoyControl() != 0 && ico_free_movement() == 0,
+                                  ACTGame_FLAG_TETSUNAGI() != 0, stage_no);
             if (((int)(sub->wish0.ll >> 44) & 1) == 0 || ((int)(sub->wish2.ll >> 44) & 1) == 0) {
                 girlLookStarted = 0;
                 girlLookInScreen = 0;
@@ -4855,7 +4864,7 @@ static void subBoyCollision_ntsc(GObj *volatile self)
                 looking = girlGObj != 0;
                 if (looking) {
                     _ACTLookTarget_Set((void *)self, girlGObj, 0, 4, 2);
-                    if (girlLookInScreen == 0 && ((int)(sub->flags20.ll >> 12) & 1)) {
+                    if ((girlLookInScreen == 0 || look) && ((int)(sub->flags20.ll >> 12) & 1)) {
                         if ((int)(sub->flags20.ll >> 13) & 1) {
                             void *lo = isysGObjSearchFromObjLayoutID(4);
 
@@ -4876,7 +4885,8 @@ static void subBoyCollision_ntsc(GObj *volatile self)
                pad, read by subGirlControl_ntsc) turns the boy's look and the camera
                to her, as the arm's own look does with girlLookInScreen 0 */
             if (!(((int)(sub->wish0.ll >> 44) & 1) && ((int)(sub->wish2.ll >> 44) & 1)) &&
-                girlControlMode != 0 && girlGObj != 0 && (GOBJ_ACT(girlGObj)->pad.now & 8)) {
+                girlGObj != 0 &&
+                ((girlControlMode != 0 && (GOBJ_ACT(girlGObj)->pad.now & 8)) || look)) {
                 _ACTLookTarget_Set((void *)self, girlGObj, 0, 4, 2);
                 if (girlLookInScreen == 0 && ((int)(sub->flags20.ll >> 12) & 1)) {
                     if ((int)(sub->flags20.ll >> 13) & 1) {
@@ -4973,7 +4983,7 @@ static void subBoyCollision_ntsc(GObj *volatile self)
                     camOn = 1;
                     looking = 0;
                 }
-                if ((sub->pad.now & 0x8) && lo != 0) {
+                if (((sub->pad.now & 0x8) || look) && lo != 0) {
                     ((float *)tgt)[0] = test_CURRENTROOT(boyGObj)[0];
                     ((float *)tgt)[1] = test_CURRENTROOT(boyGObj)[1];
                     ((float *)tgt)[2] = test_CURRENTROOT(boyGObj)[2];
@@ -5196,7 +5206,13 @@ static void subBoyCollision_jun26(GObj *volatile self)
             int scr[4];
             int tgt[4];
             int ofs[4];
+            int look;
 
+            /* PC port: Look at Yorda (yorda_look.h): L3 asks for the look
+               below without the call (no wish bit, no mail to her) */
+            look = ico_yorda_look(pad[0].now & 0x200,
+                                  IsAbleBoyControl() != 0 && ico_free_movement() == 0,
+                                  ACTGame_FLAG_TETSUNAGI() != 0, stage_no);
             if (((int)(sub->wish0.ll >> 44) & 1) == 0 || ((int)(sub->wish2.ll >> 12) & 1) == 0) {
                 girlLookStarted = 0;
                 girlLookInScreen = 0;
@@ -5236,7 +5252,7 @@ static void subBoyCollision_jun26(GObj *volatile self)
                 }
                 if (girlGObj != 0) {
                     _ACTLookTarget_Set((void *)self, girlGObj, 0, 4, 2);
-                    if (girlLookInScreen == 0) {
+                    if (girlLookInScreen == 0 || look) {
                         Camctrl_SetTarget(self, girlGObj, 1);
                     }
                 }
@@ -5247,7 +5263,8 @@ static void subBoyCollision_jun26(GObj *volatile self)
                pad, read by subGirlControl_jun26) turns the boy's look and the camera
                to her, as the arm's own look does with girlLookInScreen 0 */
             if (!(((int)(sub->wish0.ll >> 44) & 1) && ((int)(sub->wish2.ll >> 12) & 1)) &&
-                girlControlMode != 0 && girlGObj != 0 && (GOBJ_ACT(girlGObj)->pad.now & 8)) {
+                girlGObj != 0 &&
+                ((girlControlMode != 0 && (GOBJ_ACT(girlGObj)->pad.now & 8)) || look)) {
                 _ACTLookTarget_Set((void *)self, girlGObj, 0, 4, 2);
                 if (girlLookInScreen == 0) {
                     Camctrl_SetTarget(self, girlGObj, 1);
@@ -5319,7 +5336,7 @@ static void subBoyCollision_jun26(GObj *volatile self)
             if (camOn == 0 && girlGObj == 0) {
                 void *lo = isysGObjSearchFromObjLayoutID(4);
 
-                if ((sub->pad.now & 0x8) && lo != 0) {
+                if (((sub->pad.now & 0x8) || look) && lo != 0) {
                     GetOtherStageGirlOrient((float *)ofs, GetCurrentCameraSet2());
                     ((float *)tgt)[0] = test_CURRENTROOT(boyGObj)[0];
                     ((float *)tgt)[1] = test_CURRENTROOT(boyGObj)[1];
@@ -5526,7 +5543,13 @@ static void subBoyCollision_aug6(GObj *volatile self)
             int tgt[4];
             int ofs[4];
             int cpos[4];
+            int look;
 
+            /* PC port: Look at Yorda (yorda_look.h): L3 asks for the look
+               below without the call (no wish bit, no mail to her) */
+            look = ico_yorda_look(pad[0].now & 0x200,
+                                  IsAbleBoyControl() != 0 && ico_free_movement() == 0,
+                                  ACTGame_FLAG_TETSUNAGI() != 0, stage_no);
             if (((int)(sub->wish0.ll >> 44) & 1) == 0 || ((int)(sub->wish2.ll >> 44) & 1) == 0) {
                 girlLookStarted = 0;
                 girlLookInScreen = 0;
@@ -5567,7 +5590,7 @@ static void subBoyCollision_aug6(GObj *volatile self)
                 looking = girlGObj != 0;
                 if (looking) {
                     _ACTLookTarget_Set((void *)self, girlGObj, 0, 4, 2);
-                    if (girlLookInScreen == 0 && ((int)(sub->flags20.ll >> 9) & 1)) {
+                    if ((girlLookInScreen == 0 || look) && ((int)(sub->flags20.ll >> 9) & 1)) {
                         if ((int)(sub->flags20.ll >> 10) & 1) {
                             void *lo = isysGObjSearchFromObjLayoutID(4);
 
@@ -5588,7 +5611,8 @@ static void subBoyCollision_aug6(GObj *volatile self)
                pad, read by subGirlControl_aug6) turns the boy's look and the camera
                to her, as the arm's own look does with girlLookInScreen 0 */
             if (!(((int)(sub->wish0.ll >> 44) & 1) && ((int)(sub->wish2.ll >> 44) & 1)) &&
-                girlControlMode != 0 && girlGObj != 0 && (GOBJ_ACT(girlGObj)->pad.now & 8)) {
+                girlGObj != 0 &&
+                ((girlControlMode != 0 && (GOBJ_ACT(girlGObj)->pad.now & 8)) || look)) {
                 _ACTLookTarget_Set((void *)self, girlGObj, 0, 4, 2);
                 if (girlLookInScreen == 0 && ((int)(sub->flags20.ll >> 9) & 1)) {
                     if ((int)(sub->flags20.ll >> 10) & 1) {
@@ -5685,7 +5709,7 @@ static void subBoyCollision_aug6(GObj *volatile self)
                     camOn = 1;
                     looking = 0;
                 }
-                if ((sub->pad.now & 0x8) && lo != 0) {
+                if (((sub->pad.now & 0x8) || look) && lo != 0) {
                     GetOtherStageGirlOrient((float *)ofs, GetCurrentCameraSet2());
                     ((float *)tgt)[0] = test_CURRENTROOT(boyGObj)[0];
                     ((float *)tgt)[1] = test_CURRENTROOT(boyGObj)[1];
@@ -5944,7 +5968,14 @@ void subBoyCollision(GObj *volatile self)
             int broot[4];
             int ofs[4];
             int cpos[4];
+            int look;
 
+            /* PC port: Look at Yorda (yorda_look.h): L3 asks for the look
+               below without the call (no wish bit, no mail to her) */
+            look = ico_yorda_look(pad[0].now & 0x200,
+                                  IsAbleBoyControl() != 0 && ico_free_movement() == 0 &&
+                                      privInsCam.on == 0,
+                                  ACTGame_FLAG_TETSUNAGI() != 0, stage_no);
             looking = 0;
             if (((int)(sub->wish0.ll >> 46) & 1) == 0 || ((int)(sub->wish2.ll >> 46) & 1) == 0) {
                 girlLookStarted = 0;
@@ -6005,9 +6036,10 @@ void subBoyCollision(GObj *volatile self)
                 hold = sub->pad.now & 0x8;
                 looking = hold != 0;
             }
-            if (girlGObj != 0 && (looking || ((int)(GOBJ_ACT(girlGObj)->flags20.ll >> 26) & 1))) {
+            if (girlGObj != 0 &&
+                (looking || ((int)(GOBJ_ACT(girlGObj)->flags20.ll >> 26) & 1) || look)) {
                 _ACTLookTarget_Set((void *)self, girlGObj, 0, 4, 2);
-                if (girlLookInScreen == 0 && ((int)(sub->flags20.ll >> 23) & 1)) {
+                if ((girlLookInScreen == 0 || look) && ((int)(sub->flags20.ll >> 23) & 1)) {
                     if (((int)(sub->flags20.ll >> 24) & 3) != 0) {
                         void *lo = isysGObjSearchFromObjLayoutID(0x4);
 
@@ -6119,7 +6151,7 @@ void subBoyCollision(GObj *volatile self)
                     camOn = 1;
                     looking = 0;
                 }
-                if ((sub->pad.now & 0x8) && lo != 0) {
+                if (((sub->pad.now & 0x8) || look) && lo != 0) {
                     ((float *)broot)[0] = test_CURRENTROOT(boyGObj)[0];
                     ((float *)broot)[1] = test_CURRENTROOT(boyGObj)[1];
                     ((float *)broot)[2] = test_CURRENTROOT(boyGObj)[2];

@@ -55,6 +55,20 @@ until you let go, so it does not swing straight back out. You can move R3 to
 another button under **Remap controls**. The touch screen has no R3 button.
 Save states load whichever way it is set.
 
+## Can I see where Yorda is without calling her?
+
+**Pressing R1 to find Yorda makes her come to me. Can I just look at her?**
+
+Yes. Open **Options > Controls > Look at Yorda** and choose **Hold** or
+**Toggle**. Then L3 (click the left stick in, or keyboard V) turns Ico's
+head and the camera to her, as a call does, but she stays where she is.
+With **Hold** the camera looks while you keep L3 held; with **Toggle** one
+press starts the look and the next ends it. When she is in another part of
+the castle, the camera turns toward her wherever R1 would. You can move L3 to another button
+under **Remap controls**. The touch screen has no L3 button. The row shows
+from the title screen and the pause menu, on every disc. Save states load
+whichever way it is set.
+
 ## The on-screen buttons are in my way
 
 **Can I move them, make them smaller or hide some?**

@@ -477,6 +477,21 @@ A change takes effect the next time you start the game.
   under **Remap controls**. It shows from the title screen and the pause
   menu, on every disc, and is kept in the settings file. Save states load
   whichever way it is set.
+- **Look at Yorda** is **Off** (the game as it shipped), **Hold** or
+  **Toggle**. It lets L3 (clicking the left stick in) turn Ico's head and
+  the camera to Yorda without calling her: she does not come. With
+  **Hold** the look lasts while you keep L3 held; with **Toggle** one press
+  starts it and the next ends it, and it also ends when a cutscene takes
+  over, in another room, when you take her hand or when Camera reset brings
+  the camera back. The camera turns even when she is already on the screen,
+  and, when she is in another part of the castle, toward her wherever R1
+  would. Where
+  the game keeps the camera still for a call, only Ico's head turns. You
+  can give L3 to another key or button under **Remap controls**; the touch
+  screen has no L3 button. It shows from the title screen and the pause
+  menu, on every disc, and is kept in the settings file. Save states load
+  whichever way it is set.
+  [More about Look at Yorda](CONTROLS.md#play-with-a-gamepad-a-keyboard-or-a-mouse).
 - **Analogue stick fix** is the same switch as the one on the Gameplay
   page, shown here too so you find it with the other controls. Turn it on
   in either place and it is on in both.

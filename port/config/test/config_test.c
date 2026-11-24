@@ -601,6 +601,9 @@ static void test_first_run(void)
     /* Camera reset, off: the game as shipped on every disc */
     CHECK_STR(ico_config_get_string("gameplay.camera_reset", "?"), "off");
     CHECK(text != NULL && strstr(text, "camera_reset = \"off\"") != NULL);
+    /* Look at Yorda, off: the game as shipped on every disc */
+    CHECK_STR(ico_config_get_string("gameplay.yorda_look", "?"), "off");
+    CHECK(text != NULL && strstr(text, "yorda_look = \"off\"") != NULL);
     /* the difficulty rows are each save's (port/game/difficulty.h): the first
        run writes none of their retired keys */
     CHECK(ico_config_get_string("gameplay.pit_time", NULL) == NULL);

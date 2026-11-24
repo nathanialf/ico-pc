@@ -2110,8 +2110,8 @@ static void testQuitGame(void)
    Mouse camera speed, Mouse camera range and Camera swings back follow
    Invert (mouse_camera_speed, mouse_full_range, mouse_return, written only
    when changed); the six mouse rows come after Hold type, Zoom type, Camera
-   reset and Stick fix, hidden on Android; seventeen rows (the pause menu with a touch screen: its Touch
-   screen row) fit 11 lines apart */
+   reset, Look at Yorda and Stick fix, hidden on Android; eighteen rows (the pause menu with a touch
+   screen: its Touch screen row) fit 11 lines apart */
 static int s_i17aTouch;
 
 static int i17aTouch(void)
@@ -2246,9 +2246,12 @@ static void testMouseCamera(void)
                 const int cam = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_CAMERA_RESET);
                 CHECK(zoom >= 0 && lt_ext_prop(zoom)->downItem == cam,
                       "title %d: Camera reset after Zoom type", title);
-                CHECK(cam >= 0 && lt_ext_prop(cam)->downItem ==
-                                      ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX),
-                      "title %d: Stick fix after Camera reset", title);
+                const int look = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_YORDA_LOOK);
+                CHECK(cam >= 0 && lt_ext_prop(cam)->downItem == look,
+                      "title %d: Look at Yorda after Camera reset", title);
+                CHECK(look >= 0 && lt_ext_prop(look)->downItem ==
+                                       ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX),
+                      "title %d: Stick fix after Look at Yorda", title);
                 CHECK(
                     lt_ext_prop(ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX))->downItem ==
                         ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_MOUSE_CAMERA),
@@ -2272,7 +2275,7 @@ static void testMouseCamera(void)
     }
     ico_video_set_android(0);
 
-    /* seventeen rows with a touch screen from the pause menu: the window's
+    /* eighteen rows with a touch screen from the pause menu: the window's
        slots full, the last box inside the 226 lines */
     s_i17aTouch = 1;
     ui_settings_set_touch_query(i17aTouch);
@@ -2282,10 +2285,10 @@ static void testMouseCamera(void)
         frame(0);
     }
     int n = 0, slots = 0;
-    CHECK(ui_settings_page_scroll(UI_PAGE_CONTROLS, &n, NULL, &slots) == 1 && n == 17 &&
+    CHECK(ui_settings_page_scroll(UI_PAGE_CONTROLS, &n, NULL, &slots) == 1 && n == 18 &&
               slots == WIN_SLOTS,
-          "seventeen rows shown, %d in view (%d)", slots, n);
-    checkPageFits(UI_PAGE_CONTROLS, "Controls, seventeen rows (touch screen)");
+          "eighteen rows shown, %d in view (%d)", slots, n);
+    checkPageFits(UI_PAGE_CONTROLS, "Controls, eighteen rows (touch screen)");
     press(0x10);
     CHECK(settle(mainL, 60), "Controls: back");
     ui_settings_set_touch_query(NULL);
@@ -2884,9 +2887,10 @@ static void testDuplicatedRows(void)
         for (int i = 0; i < n; i++) {
             at = opts[i] == UI_OPT_STICK_FIX ? i : at;
         }
-        CHECK(at > 2 && opts[at - 1] == UI_OPT_CAMERA_RESET && opts[at - 2] == UI_OPT_ZOOM_TYPE &&
-                  opts[at - 3] == UI_OPT_HOLD_TYPE,
-              "title %d: stick fix follows Hold type, Zoom type and Camera reset", title);
+        CHECK(at > 3 && opts[at - 1] == UI_OPT_YORDA_LOOK && opts[at - 2] == UI_OPT_CAMERA_RESET &&
+                  opts[at - 3] == UI_OPT_ZOOM_TYPE && opts[at - 4] == UI_OPT_HOLD_TYPE,
+              "title %d: stick fix follows Hold type, Zoom type, Camera reset and Look at Yorda",
+              title);
         CHECK(noteStarting(UI_PAGE_CONTROLS, "Also under Gameplay") >= 0,
               "title %d: the Controls row says it is also under Gameplay", title);
         lt_ext_layout(ctlL)->curItem = sf;
@@ -2968,7 +2972,7 @@ static void testDuplicatedRows(void)
               "row_of returns the first of several rows of one option");
     }
 
-    /* the fullest Controls page (pause menu, mouse and touch): seventeen rows
+    /* the fullest Controls page (pause menu, mouse and touch): eighteen rows
        fit in every language */
     useConfig("version = 1\n");
     ico_video_set_android(0);
@@ -2986,11 +2990,11 @@ static void testDuplicatedRows(void)
         for (int j = 0; j < n; j++) {
             shown += ui_settings_row_shown(labels[j]);
         }
-        CHECK(shown == 17, "language %d: Controls shows seventeen rows (%d)", i, shown);
+        CHECK(shown == 18, "language %d: Controls shows eighteen rows (%d)", i, shown);
         CHECK(strcmp(lt_ext_row_text(ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX)),
                      ui_str(UI_STR_OPT_STICK_FIX)) == 0,
               "language %d: the stick fix label", i);
-        checkPageFits(UI_PAGE_CONTROLS, "Controls, seventeen rows");
+        checkPageFits(UI_PAGE_CONTROLS, "Controls, eighteen rows");
         press(0x10);
         CHECK(settle(mainL, 60), "language %d: Controls: back", i);
     }
@@ -3659,6 +3663,70 @@ static void testCameraReset(void)
     useConfig("version = 1\n");
 }
 
+/* Controls > Look at Yorda ([gameplay] yorda_look, port/game/yorda_look.h):
+   shown from the title and the pause menu, Off by default; Right steps to
+   Hold, then Toggle, each setting the key, its note shows on the cursor,
+   leaving the page saves yorda_look = "toggle"; Left steps back to Hold and
+   Off, Right from Toggle comes round to Off */
+static void testYordaLook(void)
+{
+    static const char *const kText[3] = {"Off", "Hold", "Toggle"};
+    static const char *const kWord[3] = {"off", "hold", "toggle"};
+    char p[1100];
+
+    gFlagGameClear = 0;
+    for (int title = 1; title >= 0; title--) {
+        stage_no = title ? 1 : 11;
+        useConfig("version = 1\n");
+        const int mainL = enterMain(title);
+        const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
+        const int row = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_YORDA_LOOK);
+        CHECK(row >= 0 && ui_settings_row_shown(row), "title %d: the Look at Yorda row is shown",
+              title);
+        CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Look at Yorda") == 0,
+              "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
+        CHECK(ico_opt_yorda_look() == ICO_YORDA_LOOK_OFF &&
+                  strcmp(ui_settings_value_text(UI_OPT_YORDA_LOOK), "Off") == 0,
+              "title %d: Off by default (%s)", title, ui_settings_value_text(UI_OPT_YORDA_LOOK));
+        lt_ext_layout(ctlL)->curItem = row;
+        for (int v = 1; v <= 2; v++) {
+            press(LT_PAD_RIGHT);
+            CHECK(ico_opt_yorda_look() == v &&
+                      strcmp(ui_settings_value_text(UI_OPT_YORDA_LOOK), kText[v]) == 0 &&
+                      strcmp(ico_config_get_string("gameplay.yorda_look", ""), kWord[v]) == 0,
+                  "title %d: Right: %s, the key set", title, kText[v]);
+        }
+        const int note = noteStarting(UI_PAGE_CONTROLS, "Ico and the camera turn to Yorda");
+        CHECK(note >= 0 && !lt_ext_prop(note)->masked,
+              "title %d: the Look at Yorda note on the cursor", title);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "title %d: Controls: back", title);
+        path(p, sizeof(p), "settings_test.toml");
+        IcoToml *t = ico_toml_load(p);
+        const char *saved = t != NULL ? ico_toml_get(t, "gameplay.yorda_look") : NULL;
+        CHECK(saved != NULL && strcmp(saved, "toggle") == 0,
+              "title %d: leaving Controls saved gameplay.yorda_look = \"toggle\"", title);
+        if (t != NULL) {
+            ico_toml_free(t);
+        }
+        openPage(mainL, 4, UI_PAGE_CONTROLS);
+        lt_ext_layout(ctlL)->curItem = row;
+        for (int v = 1; v >= 0; v--) {
+            press(LT_PAD_LEFT);
+            CHECK(ico_opt_yorda_look() == v &&
+                      strcmp(ui_settings_value_text(UI_OPT_YORDA_LOOK), kText[v]) == 0 &&
+                      strcmp(ico_config_get_string("gameplay.yorda_look", ""), kWord[v]) == 0,
+                  "title %d: Left: %s again", title, kText[v]);
+        }
+        press(LT_PAD_LEFT); /* round to Toggle, then Right round to Off */
+        press(LT_PAD_RIGHT);
+        CHECK(ico_opt_yorda_look() == ICO_YORDA_LOOK_OFF, "title %d: Toggle, Right: Off", title);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "title %d: Controls: back again", title);
+    }
+    useConfig("version = 1\n");
+}
+
 /* Gameplay > Chains > Natural chains ([gameplay] natural_chains): a row from
    the title and the pause menu after Yorda trips, the last before Back, Off
    by default; a step turns it on and sets the key, the saved file has it,
@@ -4285,7 +4353,7 @@ static void testOtherDiscPointer(const char *slug)
 }
 
 /* Controls > Touch screen (UI_PAGE_TOUCH): the link only with a touch
-   screen; Controls' seventeen rows and the page's nine fit from both
+   screen; Controls' eighteen rows and the page's nine fit from both
    entries; the overlay's three rows moved there (their values, steps, save
    and read back as [input] touch_mode, touch_size, touch_opacity); the
    overlay's note on Touch controls; Back to Controls on its Touch screen
@@ -5497,6 +5565,7 @@ int main(int argc, char **argv)
     testZoomType();
     /* Controls > Camera reset */
     testCameraReset();
+    testYordaLook();
     /* Controls > Touch screen, Edit layout */
     testTouchPage();
     testTouchEditorPage();
