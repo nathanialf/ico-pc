@@ -923,6 +923,20 @@ while it said `trying` is its own (`...: the fast pixel build was being tried th
 tried again` on their lines), and its step takes the cull's and the twins' stages as their steps
 read them.
 
+The index compaction's mark, for its Mali-G52 form (`port/platform/compact_mark.c`;
+[PIPELINES.md](PIPELINES.md#the-mali-g52s-form)), is read first of the marks, by the same rules and
+table: `logs/compact-mark.txt` holds `trying <v>` (before its own start-up test's first replay with
+it), `counting <v>` (the test passed), `on <v>` (250 pictures read back with it), `failed <v>` (the
+test refused it; a test that could not check removes the file) or `blocked <v>`; the renderer gets
+`ICO_COMPACT_BLOCK`, `ICO_COMPACT_MARK` and `ICO_COMPACT_VERSION`. Its test runs before the other
+attempts' self-tests write their marks, so its step reads their files as the previous run left them
+(`vu_zero_mark_stage_beside`: the cull's, the twins', the fast pixel build's, the lean vertex
+outputs') and the rate card's: at `counting` or `on`, a bad end while one of them was trying is
+theirs. One line where there was a mark: `ico_pc: the previous run: index compaction: was being
+tried when it ended (a lost graphics device): off on this install until the version changes
+(blocked <version>)`, `... was on, its first pictures being counted, when it ended (a crash): the
+discard-free twins were being tried then (their mark): tried again`.
+
 Each mark blocks only its own subject (`vu_zero_mark_blocks_beside`): the cull's step reads both
 marks before either is rewritten, so a bad end while the other attempt's mark said `trying` is that
 attempt's, and a subject at `counting` or `on` is tried again with `...: the discard-free twins were

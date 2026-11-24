@@ -20,8 +20,11 @@
 #           Enhanced preset at 16:9 and 2x, at 16:9 with MSAA 4x, and at
 #           16:9 and 1280x720 (a fractional scale)
 #   mali    issue 179's Mali-G52 on lavapipe: the Arm fakes
-#           (ICO_VK_FAKE_LIMITS=mali, ICO_VK_FAKE_VENDOR=0x13B5), its
-#           settings: 1x, 21:9, half height
+#           (ICO_VK_FAKE_LIMITS=mali, ICO_VK_FAKE_VENDOR=0x13B5) and its
+#           class (ICO_RD_VU_COMPACT_ARM=1: the =1 run draws the Mali-G52's
+#           form, the lists written by the CPU first and only the fillers by
+#           the GPU, rd_vu_compact.h; corpus and pixel draw the other form),
+#           its settings: 1x, 21:9, half height
 #   pixel   the Pixel 10 Pro Fold's (ICO_VK_FAKE_LIMITS=moltenvk, Enhanced at
 #           2364x1080, full height, full pixel, presented at 2364x1080)
 # Every target's PNG (SCENE and DISPLAY among them) must be equal byte for
@@ -126,7 +129,8 @@ if(nentries EQUAL 0)
 endif()
 
 set(env_corpus ICO_RD_VU_RECORD=compute)
-set(env_mali ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5 ICO_RD_VU_RECORD=compute)
+set(env_mali ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5 ICO_RD_VU_RECORD=compute
+             ICO_RD_VU_COMPACT_ARM=1)
 set(env_pixel ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_RECORD=compute)
 set(settings_corpus orig enh169 msaa frac)
 set(settings_mali mali)

@@ -43,13 +43,40 @@
  * today's index lists.  The lavapipe A/B (rd_vu_compact_ab) compares every
  * target with it on and off over tools/vu_flat0_dumps.txt.
  *
+ * The Mali-G52's form (since v0.11.16; rd_vu_compact_selftest.c, issue
+ * 179): v0.11.6 drew black there with the compaction on (from the first 3D
+ * picture every picture's work stopped after list 0's start), the cause not
+ * proven (build-host/tmp/v01116/handbacks/TRI-COMPACT.md ranks a driver
+ * that takes a draw's vertex range from its list before pass K wrote it, a
+ * read of a stale list, and the keep stage's one-lane stores widened and
+ * lost).  On that class the CPU first writes every planned draw's whole
+ * list, raised, into the fourth plane (the record buffer made in host
+ * visible memory there: RHI_MEM_UPLOAD), and pass K writes only the
+ * fillers (g_aux1.w bit 1).  A list read before pass K is then the whole
+ * list, whose range covers every value pass K writes; a filler store that
+ * is lost or lands late leaves its triangle as the CPU wrote it, which is
+ * the picture without the compaction (each corner of a mixed triangle is
+ * one of its own three, all past the same plane or culled: no fragment
+ * either way).  Its cost: the lists' bytes written by the CPU every
+ * picture (12 a triangle planned), counted in the window's line.  It is
+ * tried by its own start-up test, run after the record's at the play's
+ * record size (the record's test then runs without it): four draws of 8064
+ * triangles a replay in six replays over both frame slots, the lists placed
+ * at another offset every replay, each replay's lists and counts copied
+ * back and checked against the CPU's lists (rd_vu_cmp_check), the picture
+ * byte for byte against the same frames with it off, every stamp of the
+ * test's pictures written.  A pass runs it for the run; anything else
+ * leaves it off with the arm that failed, its mark (port/platform/
+ * compact_mark.h, logs/compact-mark.txt: trying, counting, on, failed)
+ * keeping it off on the install after a bad end while it was tried or on.
+ *
  * Where: the compute record only (the vertex stores and the render
  * targets: not applicable, their record passes are draws, a compute pass
  * after them would be the compute record's work on a device that does not
  * take it).  By class: RD_VU_COMPACT_ARM_DEFAULT (the Mali-G52: Arm's
  * vendor id under Vulkan with RD_VU_CMP_G52_NAME in the device name, the
- * one Arm device measured, issue 179: 0 since v0.11.7, below),
- * RD_VU_COMPACT_DEFAULT (the PowerVR
+ * one Arm device measured, issue 179: 0 from v0.11.7 to v0.11.15, 1 since
+ * v0.11.16 with the Mali-G52's form above), RD_VU_COMPACT_DEFAULT (the PowerVR
  * D-Series DXT-48-1536, whose compute record the PowerVR rule ships,
  * rd_vu_class.h); every other device on the compute record is off by
  * default ("measured on the Mali-G52 only").  Tried by the start-up
@@ -76,8 +103,8 @@
 /* the class decisions: on where the self-test passes (1) or off (0); every
    other device on the compute record is off by default (measured on the
    Mali-G52 only).  RD_VU_COMPACT_DEFAULT (1, the DXT's) and
-   RD_VU_COMPACT_ARM_DEFAULT (0 since v0.11.7, the Mali-G52's: issue 179's
-   black pictures, the reason beside them) are the device table's values
+   RD_VU_COMPACT_ARM_DEFAULT (1 since v0.11.16 with the Mali-G52's form,
+   0 from v0.11.7: issue 179's black pictures) are the device table's values
    (port/rhi/rhi_device_table.h, its rows powervr-dxt-48-1536 and mali-g52;
    docs/port/DEVICE_TABLE.md), and rd_vu_compact.c reads them from the
    rows */
@@ -134,11 +161,57 @@ bool rd_vu_cmp_plan_call(RdVuCmpPlan *p, const uint32_t *src, uint32_t first, ui
 uint32_t rd_vu_cmp_counts_base(const RdVuCmpPlan *p);
 
 /* the counts: by group (0 list 0, 1 the other lists) the triangles the
-   game drops, those past the box, those kept */
+   game drops, those past the box, those kept; the Mali-G52's form's lists
+   written by the CPU (bytes and time over cpuPictures replays) */
 typedef struct RdVuCmpCounts {
     uint64_t drop[2], outside[2], kept[2];
     uint32_t pictures; /* the readbacks they came from */
+    uint64_t cpuBytes, cpuNs;
+    uint32_t cpuPictures;
 } RdVuCmpCounts;
+
+/* the Mali-G52's form: one planned draw's list as the CPU writes it before
+   pass K, dst[i] = src[i] + raise (mod 2^32, as the shader adds it) */
+void rd_vu_cmp_fill(uint32_t *dst, const uint32_t *src, uint32_t count, uint32_t raise);
+
+/* The start-up test's read-back check of one planned draw (its own test,
+ * rd_vu_compact_selftest.c): got the list read back (count values), src
+ * the draw's source values, raise its raise, texels its workgroups' counts
+ * texels read back (x drop, y outside, z kept), expect what the test's
+ * geometry says of every triangle (RD_VU_CMP_EXPECT_*).  A triangle reads
+ * back as the CPU wrote it, as the filler (corner 1 three times), mixed
+ * (each value its own or the filler's, not all one: filler stores lost),
+ * or wrong (any other value: a stale or lost list).  Per workgroup the
+ * fillers must be its left-out count (drop + outside): fewer are filler
+ * writes missing (the mixed ones and those read back whole), more are
+ * fillers it did not count; the counts must add up to its triangles */
+enum { RD_VU_CMP_EXPECT_ANY = 0, RD_VU_CMP_EXPECT_KEPT, RD_VU_CMP_EXPECT_LEFT };
+
+typedef struct RdVuCmpCheck {
+    uint64_t tris, asWritten, fillers, mixed, wrong;
+    uint64_t missing, extra; /* against the workgroups' left-out counts */
+    uint64_t badCounts;      /* workgroups whose counts are not their triangles */
+    uint64_t unexpected;     /* triangles not as the test's geometry says */
+    uint64_t leftOut;        /* the workgroups' left-out counts summed */
+    uint32_t first;          /* the first problem's triangle in its draw (UINT32_MAX none) */
+} RdVuCmpCheck;
+
+void rd_vu_cmp_check_reset(RdVuCmpCheck *r);
+/* adds one draw's check into r; true when this draw had no problem */
+bool rd_vu_cmp_check(RdVuCmpCheck *r, const uint32_t *got, const uint32_t *src, uint32_t count,
+                     uint32_t raise, const uint32_t *texels, int expect);
+/* r has no problem (nothing wrong, mixed, missing, extra, unexpected, no
+   bad count) */
+bool rd_vu_cmp_check_ok(const RdVuCmpCheck *r);
+/* the check's words (no newline), the length written (cut at cap - 1):
+ *   N triangles read back: A as the CPU wrote them, F fillers where the
+ *   GPU counted L left out[; M mixed (a filler store lost in part); K
+ *   filler writes missing (an unwritten filler leaves its triangle as it
+ *   was); E fillers past the GPU's count; W triangles with a value neither
+ *   the CPU's nor a filler (a stale or lost list); B workgroups whose
+ *   counts are not their triangles; U triangles not as the test's geometry
+ *   says] */
+size_t rd_vu_cmp_check_text(char *out, size_t cap, const RdVuCmpCheck *r);
 
 /* adds a picture's counts texels (n texels of four uints: x drop, y
    outside, z kept, w 1 a list 0 draw's) into acc, one picture more */
@@ -149,7 +222,9 @@ uint64_t rd_vu_cmp_left_out(const RdVuCmpCounts *c);
  *   window: index compaction: triangles left out as drawing nothing, a
  *     picture: N of M in list 0 (P %), by class: the game's drops D,
  *     outside the target or the depth range O; the other lists N2 of M2
- *     (P2 %) (K pictures read back, two frame slots behind)
+ *     (P2 %) (K pictures read back, two frame slots behind)[; the lists
+ *     written by the CPU first (the Mali-G52's form): B KB and T ms a
+ *     picture over C pictures]
  * the length written (cut at cap - 1) */
 size_t rd_vu_cmp_block_text(char *out, size_t cap, const RdVuCmpCounts *c);
 
@@ -231,6 +306,38 @@ void rd__vu_compact_selftest_done(bool on);
    plan (0 none) */
 void rd__vu_compact_selftest_far(bool on);
 uint32_t rd__vu_compact_far_at(void);
+
+/* ------------------------------------------------ the Mali-G52's form */
+/* the CPU writes the lists first and pass K only the fillers (the class's
+   form while the fourth plane is carried; the record buffer is then made
+   in host-visible memory, rd_replay_vu.c recEnsure) */
+bool rd__vu_compact_cpu_lists(void);
+/* the record buffers made in host-visible memory (RHI_MEM_UPLOAD): the
+   form's, from its own test on (rd_replay_vu.c recEnsure) */
+bool rd__vu_compact_host_record(void);
+/* after the plan, before pass K: every planned draw's list written into
+   the mapped record buffer rec at value head (the fourth plane's first);
+   true when pass K may run (nothing to write in the other form), false
+   when the buffer could not be mapped (every draw then reads its own list:
+   the caller clears the plan's calls).  Counted for the window's line */
+bool rd__vu_compact_lists_first(RhiBuffer rec, uint32_t head);
+/* g_aux1.w of the keep stage: bit 0 the tests' sabotage, bit 1 the lists
+   written by the CPU (only fillers stored) */
+uint32_t rd__vu_compact_aux_flags(void);
+/* after pass K and the counts' copy (vuCompactPass), inside the start-up
+   test's replays alone: the lists from the plan's first value and the
+   counts copied back for rd_vu_compact_selftest.c; head the fourth plane's
+   first value, counts its counts' first texel, both from the record's
+   start */
+void rd__vu_compact_check_copy(RhiCommandList cl, RhiBuffer rec, uint32_t head, uint32_t counts);
+/* rd_vuprepass_selftest.c, after the record's test passed with the
+   compute record (t SCENE): the form's own start-up test
+   (rd_vu_compact_selftest.c); nothing where the class has the other form,
+   or the compaction is off before it */
+void rd__vu_compact_own_selftest(RdTargetRec *t);
+/* the pictures the compaction drew in play (its mark's probation; the
+   readback of each, rd__vu_compact_slot_begin) */
+#define RD_VU_CMP_PROBATION 250u
 #endif
 
 #endif /* PORT_RENDER_RD_VU_COMPACT_H */

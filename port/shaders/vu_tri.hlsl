@@ -541,8 +541,10 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
 //   g_aux1  x the draw's pass flags (VU_F_CUT_ONLY, VU_F_KICK_ONLY or 0),
 //           y the texel of its first workgroup's counts (after the plane's
 //           lists, a texel a workgroup), z 1 for a list 0 command's draw,
-//           w 1 under the tests' sabotage (ICO_RD_VU_COMPACT_SABOTAGE: every
-//           triangle written as a filler, so the self-test must refuse it)
+//           w bit 0 under the tests' sabotage (ICO_RD_VU_COMPACT_SABOTAGE=1:
+//           every triangle written as a filler, so the self-test must
+//           refuse it), bit 1 the list already written whole by the CPU
+//           (the Mali-G52's form): only the fillers stored
 // Drawing nothing, decided from the record words vu_main_vs reads with
 // vu_main_vs's statements (vu_keep_position), never from the rasteriser's
 // fill rule:
@@ -701,15 +703,20 @@ groupshared uint vu_keep_n[3];
         float4 p2 = vu_keep_position(i2, g_aux1.x, c2);
         uint drop = c0 & c1 & c2;
         uint past = drop != 0u ? 0u : vu_keep_outside(p0, p1, p2);
-        uint cls = drop != 0u || g_aux1.w != 0u ? 0u : (past != 0u ? 1u : 2u);
+        uint cls = drop != 0u || (g_aux1.w & 1u) != 0u ? 0u : (past != 0u ? 1u : 2u);
         if (cls != 2u) {
             i0 = i1; // the filler: corner 1, past the plane its triangle is past
             i2 = i1;
         }
-        uint o = g_aux0.y + 3u * t.x;
-        vu_keep_store(o, i0 + g_aux0.w);
-        vu_keep_store(o + 1u, i1 + g_aux0.w);
-        vu_keep_store(o + 2u, i2 + g_aux0.w);
+        // bit 1: the CPU wrote the whole list first (the Mali-G52's form),
+        // so a kept triangle is not stored again and a lost filler store
+        // leaves the triangle as the CPU wrote it
+        if (cls != 2u || (g_aux1.w & 2u) == 0u) {
+            uint o = g_aux0.y + 3u * t.x;
+            vu_keep_store(o, i0 + g_aux0.w);
+            vu_keep_store(o + 1u, i1 + g_aux0.w);
+            vu_keep_store(o + 2u, i2 + g_aux0.w);
+        }
         uint ignored;
         InterlockedAdd(vu_keep_n[cls], 1u, ignored);
     }

@@ -2181,7 +2181,7 @@ draws' invocation figures after the compaction).
 
 Where: the compute record only. The vertex stores and the render targets: not applicable (their
 record passes are draws; a compute pass after them would bring the compute record's work to a
-device that does not take it). By class: `RD_VU_COMPACT_ARM_DEFAULT` (the Mali-G52: Arm's vendor id under Vulkan and `Mali-G52` in the Vulkan device name, issue 179's `Mali-G52 MC2`, 0: the reporter's phone drew a black picture from its first 3D picture on with it at 1, every picture's GPU work stopping after list 0's start, and it is the likeliest of the changes that came with it there, the first index buffer the GPU wrote on that device; lavapipe draws the reporter's dumps the same with it on and off, and a bounds audit of the record and the index lists found nothing out of range, so this is not proven; it stays off there, as the picture was drawn before it came, [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-picture-health-report-issue-179)), `RD_VU_COMPACT_DEFAULT` (the PowerVR D-Series DXT-48-1536, whose compute record the PowerVR rule ships, 1); every other device on the compute record (another Mali, PanVK, a PowerVR without vertex stores, a `[dev] vu_record = "compute"`) is off by default (`measured on the Mali-G52 only`). The Mali-G52's class and both defines are the device table's rows `mali-g52` and `powervr-dxt-48-1536` (`port/rhi/rhi_device_table.h`, [DEVICE_TABLE.md](DEVICE_TABLE.md)). It
+device that does not take it). By class: `RD_VU_COMPACT_ARM_DEFAULT` (the Mali-G52: Arm's vendor id under Vulkan and `Mali-G52` in the Vulkan device name, issue 179's `Mali-G52 MC2`, 1, with its own form and its own test, [below](#the-mali-g52s-form); the reporter's phone drew a black picture from its first 3D picture on with the form above, every picture's GPU work stopping after list 0's start, the first index buffer the GPU wrote on that device; lavapipe draws the reporter's dumps the same with it on and off, and a bounds audit of the record and the index lists found nothing out of range, so the cause is not proven, [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-picture-health-report-issue-179)), `RD_VU_COMPACT_DEFAULT` (the PowerVR D-Series DXT-48-1536, whose compute record the PowerVR rule ships, 1); every other device on the compute record (another Mali, PanVK, a PowerVR without vertex stores, a `[dev] vu_record = "compute"`) is off by default (`measured on the Mali-G52 only`). The Mali-G52's class and both defines are the device table's rows `mali-g52` and `powervr-dxt-48-1536` (`port/rhi/rhi_device_table.h`, [DEVICE_TABLE.md](DEVICE_TABLE.md)). It
 is a new kind of GPU work on that driver (an extra compute output read by the vertex input stage),
 so it runs only where the start-up self-test passes (a self-test that never ran, such as one with no SCENE target, keeps it off; the tests' `ICO_RD_VU_COMPACT=1` alone runs it untested): the record's test runs with it and with a copy
 of the prelit mesh past the target's right edge (merged with the ticks copy), at the play record's
@@ -2194,7 +2194,66 @@ queued (`rd_health.h`), fails it (the Mali-G52's play came back black while a te
 test again without it, and a pass then refuses it for the run (`refused by its self-test`). The
 tests' switch `ICO_RD_VU_COMPACT=0|1`; `ICO_RD_VU_COMPACT_SABOTAGE=1` writes every triangle as a
 filler. The fourth plane is one more plane of the record (16 bytes a row's texel): on the Mali at
-512 rows, 8 MB a frame slot; it is allocated only where the compaction is to be tried and given up (the record made again without it) when the self-test refuses it or does not run. `rd_vu_compact_ab` compares every target with it on and off.
+512 rows, 8 MB a frame slot; it is allocated only where the compaction is to be tried and given up (the record made again without it) when the self-test refuses it or does not run. `rd_vu_compact_ab` compares every target with it on and off (its `mali` profile in the Mali-G52's form).
+
+##### The Mali-G52's form
+
+Three ways the form above can draw black on that phone and not on lavapipe are ranked in the
+investigation behind it, none proven: the driver takes a draw's vertex range from its index list
+before pass K has written it (a scan on the CPU at record or submit time, or on the GPU before the
+compute's barrier), the draws read a stale list at the play's scale, or the shader compiler turns
+the keep stage's one-lane stores into wider read-modify-writes that lose writes. On the Mali-G52's
+class (`rd__vu_compact_cpu_lists`) the CPU first writes every planned draw's whole list, raised,
+into the fourth plane (`rd__vu_compact_lists_first`, after the plan and before pass K), and pass K
+stores only the fillers (`g_aux1.w` bit 1); the record buffer is made in host-visible memory
+(`RHI_MEM_UPLOAD`, from the form's own test on: the record's test before it keeps device memory,
+where a record that falls back to the render targets takes texture copies). Under each of the
+three: a list read before pass K is the whole list, whose range covers every value pass K writes;
+a filler store that is lost or lands late leaves its triangle as the CPU wrote it, the picture
+without the compaction (a triangle mixed from both has only its own three corners, all past the
+same plane or culled: no fragment either way). The stores themselves were already whole 32-bit
+words, one invocation a word (race-free by the memory model); in this form a kept triangle is not
+stored at all, and whatever a widened store could leave behind is one of the two values the CPU's
+check accepts. The cost is on the CPU: the lists' bytes a picture (4 a value, 12 a triangle
+planned, code 36's cut and kick lists each), shown with the time it took in the window's line
+(`; the lists written by the CPU first (the Mali-G52's form): B KB and T ms a picture over C
+pictures`). A buffer that cannot be mapped leaves every draw on its own list for that picture.
+
+It is tried by its own start-up test (`rd_vu_compact_selftest.c`), run after the record's test
+passed with the compute record; the record's test then runs without the compaction. The record is
+made again at the play's size (`rd_early_start_rows`) and kept for play. Its frame: four commands
+of one prelit mesh of 64 strips of 128 vertices (8064 triangles, index values to 32768) on SCENE,
+at the centre (every triangle kept), across the target's right edge (both classes in the same
+workgroups), wholly right of it (every one outside) and past the GS region's 4095 (every one the
+region rule's drop). Drawn twice without the compaction (one picture in each frame slot), then six
+times with it back to back over both frame slots, the lists moved 1237 values a replay (never a
+whole texel, so no replay's lists sit where the replay before left them; the first in each slot
+over plane memory nothing wrote). After pass K each replay's lists and counts are copied back
+(`rd__vu_compact_check_copy`) and checked on the CPU (`rd_vu_cmp_check`): every triangle as the CPU
+wrote it or the filler, each workgroup's fillers its own count of left-out triangles, every
+triangle of the centre kept and of the two copies past the edge left out. Each picture with it
+must equal the one without byte for byte, and every recorded stamp of the test's pictures must be
+written (the sign the phone's black pictures carried, `rd_health.h`). A pass turns it on for the run; anything else
+leaves it off with the arm that failed and the cause it points at:
+
+    rd: VU index compaction: its own start-up test passed (the Mali-G52's form: 6 replays in both frame slots on the record at 512 rows, 4 draws of 8064 triangles a replay, the lists from value 1048576 moved 1237 values a replay; the lists read back: 193536 triangles read back: 72576 as the CPU wrote them, 120960 fillers where the GPU counted 120960 left out; the pictures byte for byte with it off, 24318 of 286720 pixels drawn; no stamp of the test's 8 pictures unwritten) on SCENE 640x448 at 640x448 texels in 412.0 ms
+    rd: VU index compaction: refused by its own start-up test (the lists: ...; 3 mixed (a filler store lost in part); 3 filler writes missing (an unwritten filler leaves its triangle as it was) in replay 2 of 6 (frame slot 1), draw 3 (past the edge), the first at triangle 517: the keep stage's stores lost, the report's third cause (...)) ...: off for the run, its mark says failed
+    rd: VU index compaction: not checked by its own start-up test (...): off for the run, nothing written as failed, tried again at the next start
+
+The arms and what each points at: values neither the CPU's nor a filler (a stale or lost list, or
+the CPU's lists not seen by the GPU: the second cause), fillers missing or mixed (the stores lost:
+the third cause, the picture still right), the lists right and the pictures not, or a stamp
+unwritten (the draws not drawing the lists they were given: the first or second cause). Its mark
+(`port/platform/compact_mark.c`, `logs/compact-mark.txt`, the zero-area cull's stages: `trying`
+synced before the first replay with it, `counting` on a pass, `on` after `RD_VU_CMP_PROBATION`
+(250) pictures read back with it, `failed` on a refusal, removed when not checked) keeps it off on
+the install after a bad end while it was tried or on; the step runs before the other attempts'
+marks and reads theirs as the previous run left them (an end while one of them was trying is
+theirs). The loss ladder's start without the pre-pass leaves it off too. Tests' words:
+`ICO_RD_VU_COMPACT_SABOTAGE=lists` (the CPU's lists written one triangle off) and `=readback` (one filler of
+the test's read-back taken back to its corner 0); `ICO_COMPACT_BLOCK` as the mark exports it. Not
+judged in play by the A/B judge: its five subjects are taken, and the subject would have to swap
+the plan and the CPU's lists per picture.
 
 #### The record stores' restart rung
 

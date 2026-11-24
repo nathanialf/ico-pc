@@ -381,6 +381,20 @@ int ico_attempt_decide_turn_fold(int turned, int env, int defaultOn, int selftes
    record the PowerVR rule ships there) */
 enum { ICO_ATT_CMP_OTHER = 0, ICO_ATT_CMP_G52 = 1, ICO_ATT_CMP_DXT = 2 };
 
+/* the index compaction's self-test results (selftest below): not run, the
+   record's self-test refused it, passed (the record's, or on the Mali-G52
+   its own test of the form whose lists the CPU writes first), refused by
+   that own test, kept off on the install by its mark
+   (port/platform/compact_mark.h), and its own test could not check it */
+enum {
+    ICO_ATT_CMP_ST_NOT_RUN = -1,
+    ICO_ATT_CMP_ST_REFUSED = 0,
+    ICO_ATT_CMP_ST_PASSED = 1,
+    ICO_ATT_CMP_ST_OWN_REFUSED = 2,
+    ICO_ATT_CMP_ST_MARKED = 3,
+    ICO_ATT_CMP_ST_UNCHECKED = 4
+};
+
 /* the index compaction (rd_vu_compact.c, at the pre-pass's start and after
    the record's self-test): compute the record is written by compute
    dispatches with the pre-pass on (else notWhy, the record path that
@@ -388,10 +402,10 @@ enum { ICO_ATT_CMP_OTHER = 0, ICO_ATT_CMP_G52 = 1, ICO_ATT_CMP_DXT = 2 };
    device is off by default, measured on the Mali-G52 only), env the tests'
    switch (ICO_RD_VU_COMPACT: -1 unset, 0, 1), defaultOn
    RD_VU_COMPACT_DEFAULT (the DXT's), armDefaultOn RD_VU_COMPACT_ARM_DEFAULT
-   (the Mali-G52's), selftest the record's start-up self-test with it (-1
-   not run, 0 refused it, 1 passed: a self-test that never ran keeps it
-   off, but under the tests' switch).  1 when the compaction runs (the row
-   on), else 0 */
+   (the Mali-G52's), selftest its start-up self-test (ICO_ATT_CMP_ST_*: a
+   self-test that never ran keeps it off, but under the tests' switch; a
+   refusal by the own test or the mark is off over the switch too).  1 when
+   the compaction runs (the row on), else 0 */
 int ico_attempt_decide_compaction(int compute, const char *notWhy, int cls, int env, int defaultOn,
                                   int armDefaultOn, int selftest);
 /* pure, no row: the compaction is to be tried by the record's start-up

@@ -168,6 +168,18 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   version's next start, removed at a later version's; no evidence while trying: blocked, while counting:
   not; the watchdog and a cleanly closed device loss while on: blocked; a SIGKILL while on: not;
   `ICO_VU_ZERO_MARK` and `ICO_VU_ZERO_VERSION` exported. CPU only.
+- `compact_mark_test.c` (`compact_mark`): the index compaction's mark on the install, for its
+  Mali-G52 form (`port/platform/compact_mark.c`, the cull's stages and table with its own file and
+  words): every stage at a crash blocked for the version in the mark and tried again by the next
+  version, a lost graphics device while trying blocked, the lines word for word; a clean close
+  while counting not blocked; no mark nothing; a text not known taken as `trying`; an end while
+  another attempt's mark said trying (counting or on tried again, trying blocked). Then the start's
+  step on files in a folder of its own: no mark, no line, the environment exported; closed from the
+  recent apps list while counting: not blocked, removed; a lost device while trying: `blocked
+  <version>`, `ICO_COMPACT_BLOCK` word for word, kept, removed at a later version's start; a crash
+  while on with the twins' mark (as the previous run left it) trying: not blocked, the twins named,
+  the cull's step after it leaving its file alone; the same with the lean vertex outputs' mark and
+  the rate card's file; the crash with nothing else trying: blocked. CPU only.
 - `fastps_mark_test.c` (`fastps_mark`): the fast pixel build's mark on the install
   (`port/platform/fastps_mark.c`, the cull's stages and table with its own file and words): every
   stage at a crash blocked for the version in the mark and tried again by the next version, the

@@ -7,3 +7,4 @@
 ## Fixed
 
 - An attempted fix for the slowdown in the boat scene and the cage scene on phones like the moto g24: a start-up check of the faster way of drawing scenery close to the camera wrongly failed on these phones, so that drawing was never used there; the check now prepares everything it compares before it starts, and the game times that way of drawing on its own while you play (never on the title screen) and keeps it only where it is faster.
+- An attempted fix for the slowdown in busy scenes such as the boat scene on phones like the moto g24: the scenery's shapes that cannot be seen are skipped again on these phones, in a safer way than the one that turned the picture black there before, and only after a start-up check that draws a scene of real size and confirms every picture comes out the same; if that check fails, or the game ends badly while using it, it stays off.

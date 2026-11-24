@@ -34,21 +34,24 @@
  * includes this header; the values of the rows mali-g52 and
  * powervr-dxt-48-1536, read by rd_vu_compact.c through
  * rhi_device_table_row_value): 1 on where its self-test passes, 0 off.
- * RD_VU_COMPACT_ARM_DEFAULT is 0 since v0.11.7: on in v0.11.6, the
- * Mali-G52 of issue 179 drew a black picture from its first 3D picture on
- * (every picture's GPU work stopped after list 0's start, the fences still
- * signalled), and the index compaction, the first index buffer the GPU
- * wrote on that device, is the likeliest of v0.11.6's changes there
+ * RD_VU_COMPACT_ARM_DEFAULT was 0 from v0.11.7 to v0.11.15: on in v0.11.6,
+ * the Mali-G52 of issue 179 drew a black picture from its first 3D picture
+ * on (every picture's GPU work stopped after list 0's start, the fences
+ * still signalled), and the index compaction, the first index buffer the
+ * GPU wrote on that device, is the likeliest of v0.11.6's changes there
  * (lavapipe draws the reporter's loss dumps the same with it on and off,
  * and the bounds audit, rd_vu_audit.h, found no access out of range: not
- * proven); off there, as v0.11.5 drew.  A -D on the compiler's command line
- * flips either for an rc build: it must reach this library and the
- * renderer alike (CMAKE_C_FLAGS does). */
+ * proven).  1 since v0.11.16 with the class's own form (rd_vu_compact.h:
+ * the CPU writes every planned list first, the GPU only the fillers),
+ * tried by its own start-up test at the play's record size, which reads
+ * the lists back, and kept off on the install by its mark after a bad
+ * end.  A -D on the compiler's command line flips either for an rc build:
+ * it must reach this library and the renderer alike (CMAKE_C_FLAGS does). */
 #ifndef RD_VU_COMPACT_DEFAULT
 #define RD_VU_COMPACT_DEFAULT 1
 #endif
 #ifndef RD_VU_COMPACT_ARM_DEFAULT
-#define RD_VU_COMPACT_ARM_DEFAULT 0
+#define RD_VU_COMPACT_ARM_DEFAULT 1
 #endif
 
 /* ------------------------------------------------------------ the identity */

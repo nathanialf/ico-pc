@@ -103,7 +103,9 @@
  * or off) is then that second run's, its "record" part saying so.  [dev]
  * vu_prepass_min is held off while the test runs.
  *
- * After a pass, the zero-area cull's own self-test (rd_vu_zero_selftest.c,
+ * After a pass, first the index compaction's own test where its class has
+ * the Mali-G52's form (rd_vu_compact_selftest.c; the record's test then
+ * runs without the compaction), then the zero-area cull's own self-test (rd_vu_zero_selftest.c,
  * rd_vu_zero.h) runs on the same SCENE and logs its line, then the
  * discard-free twins' (rd_nodiscard_selftest.c, rd_nodiscard.h); after a
  * failure or without a run both are off.
@@ -883,6 +885,9 @@ bool rd_vuprepass_selftest(void)
             break;
         }
         runSelftest(t, &v);
+    }
+    if (v.on) {
+        rd__vu_compact_own_selftest(t); /* the Mali-G52 form's own test (rd_vu_compact.h) */
     }
     s_vtRunning = false;
     g_rdRec.minHeld = false;

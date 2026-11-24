@@ -254,8 +254,11 @@ static bool recEnsure(uint32_t rows)
             /* the zero-area cull's checks copy slot A and the vertices out
                (rd_vu_zero.h) */
             (rd__vu_zero_copyable() ? (uint32_t)RHI_BUF_COPY_SRC : 0u);
-        s_recBuf[i] = rhi_create_buffer(
-            &(RhiBufferDesc){recBytes(rows), use, RHI_MEM_DEVICE, "rd vu record"});
+        /* host-visible where the CPU writes the compaction's lists first
+           (its Mali-G52 form, rd_vu_compact.h) */
+        s_recBuf[i] = rhi_create_buffer(&(RhiBufferDesc){
+            recBytes(rows), use, rd__vu_compact_host_record() ? RHI_MEM_UPLOAD : RHI_MEM_DEVICE,
+            "rd vu record"});
         s_recBufRows[i] = s_recBuf[i].id ? rows : 0u;
     }
     return s_recBuf[rd__ring_slot()].id != 0;
@@ -3156,6 +3159,12 @@ static void vuCompactPass(void)
        record's start */
     const uint32_t head = (uint32_t)(3u * plane * 4u);
     const uint32_t counts = (uint32_t)(3u * plane) + rd_vu_cmp_counts_base(plan);
+    if (!rd__vu_compact_lists_first(rec, head)) {
+        for (uint32_t i = 0; i < s_preN; i++) {
+            s_pre[i].cmpN = 0; /* the CPU could not write them: every draw its own list */
+        }
+        return;
+    }
     /* the lists into the slot's own buffer even under the self-test's STALE
        sabotage (which stores pass V's and T's records into the sink): a
        stale record then draws an earlier picture, never a value outside
@@ -3187,7 +3196,7 @@ static void vuCompactPass(void)
                                                      : 0u;
             cb.aux1[1] = counts + c->group;
             cb.aux1[2] = c->list0;
-            cb.aux1[3] = rd__vu_compact_sabotage() ? 1u : 0u; /* the tests' */
+            cb.aux1[3] = rd__vu_compact_aux_flags(); /* the tests' sabotage, the CPU's lists */
             const uint64_t dOff = cbCopy(&cb, sizeof(cb), ua);
             ok = dOff != ~0ull;
             if (ok) {
@@ -3213,6 +3222,7 @@ static void vuCompactPass(void)
        dispatched (its texels hold an earlier picture's, or nothing) */
     if (all) {
         rd__vu_compact_readback(cl, slot, rec, (uint64_t)counts * 16u, plan->groups);
+        rd__vu_compact_check_copy(cl, rec, head, counts); /* its own start-up test's */
     }
     if (rd_vu_audit_on()) {
         /* the tests' bounds audit (rd_vu_audit.h): each dispatched list's

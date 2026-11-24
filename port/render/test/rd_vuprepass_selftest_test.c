@@ -63,7 +63,9 @@
  * alive after either and more made after the second (made again at each
  * try, never a handle of the device before), its line on stderr.  The
  * discard-free twins (rd_nodiscard.h): their mark ICO_NODISCARD_MARK the
- * same way ("test: the discard-free twins' mark after the self-test: ...").
+ * same way ("test: the discard-free twins' mark after the self-test: ..."),
+ * and the index compaction's ICO_COMPACT_MARK ("test: the index
+ * compaction's mark after the self-test: ...", rd_vu_compact.h).
  * The log lines are matched by test/rd_vuprepass_selftest.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -354,6 +356,7 @@ int main(int argc, char **argv)
     zeroMarkLine("after the self-test");
     markLine("ICO_NODISCARD_MARK", "discard-free twins'", "after the self-test");
     markLine("ICO_FASTPS_MARK", "fast pixel build's", "after the self-test");
+    markLine("ICO_COMPACT_MARK", "index compaction's", "after the self-test");
     /* the rate card after the self-tests, as the window runs it after the
        start-up's (rd_ratecard.h: under ICO_RD_RATECARD=1 or a results
        file, the tests' rd_ratecard_*) */

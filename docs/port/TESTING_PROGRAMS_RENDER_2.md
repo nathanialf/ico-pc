@@ -289,7 +289,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   and a counts texel a workgroup, the device's largest index value raised and not), 65 triangles
   two workgroups, the counts' base (the texel after the lists); the counts summed by list
   (`w` 1 list 0) and a picture with no workgroup; the window's line word for word, cut in a short
-  buffer, 0 % with nothing judged; `ICO_RD_VU_COMPACT` unset, 0, `off`, 1, `on` and another word.
+  buffer, 0 % with nothing judged; `ICO_RD_VU_COMPACT` unset, 0, `off`, 1, `on` and another word;
+  the Mali-G52's form ([PIPELINES.md](PIPELINES.md#the-mali-g52s-form)): its lists as the CPU
+  writes them (raised mod 2^32), its own test's read-back check of each kind of triangle (as
+  written, the filler, mixed, a filler never written, a value of neither, fillers past the
+  workgroup's count, counts not its triangles, against the test's geometry both ways, 65 triangles
+  two workgroups) and its words, the window's line's CPU clause (KB and ms a picture).
 - `rd_vu_compact.cmake`'s self-test rows (`rd_vuprepass_selftest_compact`, `_compact_refused`,
   `_compact_mali`, `_compact_stores`; `test/rd_vuprepass_selftest.cmake`, lavapipe): the start-up
   self-test with the record by compute (`ICO_RD_VU_RECORD=compute`) passes with the compaction, the
@@ -297,11 +302,21 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   compaction's line `on: passed its start-up self-test`; with `ICO_RD_VU_COMPACT_SABOTAGE=1` the run
   with it fails, the run without it passes and the compaction is refused, the pre-pass on with the
   compute record; under the phone's limits and Arm's vendor id (`ICO_VK_FAKE_LIMITS=mali
-  ICO_VK_FAKE_VENDOR=0x13B5`, synchronisation validation with the submit-time checks) the Arm class
-  has it off by default (`RD_VU_COMPACT_ARM_DEFAULT 0`, the line naming the black picture), the
-  frame without the copy; with the vertex stores the compaction is not applicable and the frame has
-  no copy. The verdict's compaction words name the play record's rows, the fourth plane's value the
-  lists began at and the test's pictures whose stamps were all written.
+  ICO_VK_FAKE_VENDOR=0x13B5`, `ICO_VK_FAKE_NO_DYNAMIC=1`, synchronisation validation with the
+  submit-time checks) the Arm class (`ICO_RD_VU_COMPACT_ARM=1`) takes its own form: the record's
+  frame without the copy, its own test passing (6 replays, 193536 triangles read back as written or
+  as fillers where the GPU counted them, the pictures byte for byte, every stamp written), on after
+  it, its mark `counting` with the tests' version; with the vertex stores the compaction is not applicable and the
+  frame has no copy. The verdict's compaction words name the play record's rows, the fourth
+  plane's value the lists began at and the test's pictures whose stamps were all written. The
+  form's ways back, each asserted taken: `_compact_mali_lists` (`ICO_RD_VU_COMPACT_SABOTAGE=lists`:
+  the CPU's lists written one triangle off; refused by the lists' check, values neither the CPU's nor a
+  filler in replay 1's centre draw, the ledger's refusal, the mark `failed`),
+  `_compact_mali_readback` (`=readback`: one filler of the read-back taken back to its corner 0;
+  refused, 1 mixed and 1 filler write missing in replay 1's draw past the edge at triangle 0, the
+  third cause named), `_compact_mali_stamps` (`ICO_RD_HEALTH_FAKE=selftest`: refused by the stamps
+  with the lists and the pictures right), `_compact_mali_marked` (`ICO_COMPACT_BLOCK`: off on this
+  install with the mark's words, no own test, no copy).
 - `rd_health.cmake`'s self-test row (`rd_vuprepass_selftest_compact_stamps`; lavapipe): with
   `ICO_RD_HEALTH_FAKE=selftest` every record collected inside the compaction's run reads as a hang,
   so the record's test with it fails (`the GPU's own sign of a reset in N of the test's M
@@ -329,7 +344,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `--pass-dump --stats`, on every fixture of `port/render/test/fixtures/lists/vu_flat0.txt`
   ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a listed fixture that is absent FAILS): the corpus
   profile (Original 4:3 at 1x, Enhanced 16:9 at 2x, at 16:9 with MSAA 4x, at 16:9 and 1280x720),
-  the Arm fakes on issue 179's two Mali-G52 frames at their settings, the Pixel's three opening
+  the Arm fakes on issue 179's two Mali-G52 frames at their settings (with the Mali-G52's class,
+  `ICO_RD_VU_COMPACT_ARM=1`: its form, the lists written by the CPU first), the Pixel's three opening
   frames at its setting; with the draw merge, and without it at the first two corpus settings and
   the phones'. Every target's PNG the same bytes, the off run's `stats: VU index compaction off by
   default: not run`, the on run's `stats: VU index compaction on: N of M list 0 triangles left out
