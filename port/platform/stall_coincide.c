@@ -77,20 +77,30 @@ static int cmpd(const void *a, const void *b)
 
 int stall_pieces_judge(StallMoment *m, const double *ms, const double *median, unsigned n)
 {
-    double f[64], others[64];
-    unsigned k = 0, best = 0;
-    int bestAt = -1;
+    double f[64], others[64], add[64];
+    unsigned k = 0, best = 0, top = 0;
+    int bestAt = -1, topAt = -1;
 
     m->pieceN = m->grown = 0;
     m->pieceFactor = m->othersFactor = m->factorMin = m->factorMax = 0.0;
+    m->pieceAddedMs = m->topFactor = 0.0;
+    m->topFactorAt = -1;
     for (unsigned i = 0; i < n && k < 64u; i++) {
         if (!(median[i] >= STALL_RATIO_MIN_MS) || ms[i] < 0.0) {
             continue;
         }
         f[k] = ms[i] / median[i];
-        if (bestAt < 0 || f[k] > f[best]) {
+        add[k] = ms[i] - median[i];
+        /* the piece named: the one that added most time (issue 179's
+           v0.11.15 log named list 3 at 12.9 ms x23.9 beside list 0 at
+           103.4 ms x12.4: by factor, the piece that added an eighth) */
+        if (bestAt < 0 || add[k] > add[best]) {
             best = k;
             bestAt = (int)i;
+        }
+        if (topAt < 0 || f[k] > f[top]) {
+            top = k;
+            topAt = (int)i;
         }
         m->grown += f[k] >= STALL_GROWN ? 1u : 0u;
         k++;
@@ -100,6 +110,11 @@ int stall_pieces_judge(StallMoment *m, const double *ms, const double *median, u
     }
     m->pieceN = k;
     m->pieceFactor = f[best];
+    m->pieceAddedMs = add[best];
+    if (top != best) {
+        m->topFactor = f[top];
+        m->topFactorAt = topAt;
+    }
     m->factorMin = m->factorMax = f[0];
     unsigned no = 0;
     for (unsigned i = 0; i < k; i++) {
@@ -423,7 +438,12 @@ size_t stall_moment_text(const StallMoment *m, char *out, size_t cap)
         if (m->pieceN >= 2u && m->grown == m->pieceN) {
             put(&o, "every piece grew, x%.1f to x%.1f", m->factorMin, m->factorMax);
         } else {
-            put(&o, "%s x%.1f", m->pieceName[0] ? m->pieceName : "a piece", m->pieceFactor);
+            put(&o, "%s +%.1f ms x%.1f", m->pieceName[0] ? m->pieceName : "a piece",
+                m->pieceAddedMs, m->pieceFactor);
+            if (m->topFactorAt >= 0) {
+                put(&o, " (most grown by factor: %s x%.1f)",
+                    m->topName[0] ? m->topName : "another piece", m->topFactor);
+            }
             if (m->pieceN >= 2u) {
                 put(&o, ", the others x%.1f (their median; %u of %u at x%.0f or more)",
                     m->othersFactor, m->grown, m->pieceN, STALL_GROWN);
@@ -715,8 +735,12 @@ static void row_text(Out *o, const StallRow *r, const char *const *names)
     }
     if (r->piece >= 0) {
         char tmp[24];
-        put(o, "%s %.1f ms x%.1f", piece_of(names, r->piece, tmp, sizeof tmp), (double)r->pieceMs,
-            (double)r->pieceFactor);
+        put(o, "%s %.1f ms +%.1f ms x%.1f", piece_of(names, r->piece, tmp, sizeof tmp),
+            (double)r->pieceMs, (double)r->pieceAddedMs, (double)r->pieceFactor);
+        if (r->topPiece >= 0) {
+            put(o, " (most grown by factor: %s x%.1f)",
+                piece_of(names, r->topPiece, tmp, sizeof tmp), (double)r->topFactor);
+        }
     } else {
         put(o, "no piece judged");
     }

@@ -180,6 +180,7 @@ static StallTable s_table;
 static StallTris s_tris;
 static int s_stageNow = STALL_NO_STAGE;
 static int s_lastPiece = -1;
+static int s_lastTop = -1; /* another piece with the largest factor, -1 none */
 #define TRIS_SPAN_MS 2000.0
 
 _Static_assert(PIECES <= STALL_SHARE_PIECES, "the table's pieces");
@@ -266,6 +267,10 @@ static void moment_pieces(StallMoment *m, uint32_t replay)
     if (at >= 0) {
         piece_name(s_pc.what[at], m->pieceName, sizeof(m->pieceName));
         s_lastPiece = at;
+        s_lastTop = m->topFactorAt;
+        if (m->topFactorAt >= 0) {
+            piece_name(s_pc.what[m->topFactorAt], m->topName, sizeof(m->topName));
+        }
     }
     m->idleKnown = s_pc.idleKnown;
     m->idleBeforeMs = s_pc.idleMs;
@@ -998,6 +1003,7 @@ static void moment_now(StallMoment *m, double t0Ms, double t1Ms, uint32_t replay
 {
     memset(m, 0, sizeof(*m));
     s_lastPiece = -1;
+    s_lastTop = -1;
     if (s_hang.replay != 0 && replay >= s_hang.replay && replay - s_hang.replay <= 2u) {
         m->hangReplay = s_hang.replay;
         m->stampsMissing = s_hang.missing;
@@ -1065,7 +1071,7 @@ static void stall_row(const StallMoment *m, uint32_t replay, int kind, double ms
     row.kind = (uint8_t)kind;
     row.ms = (float)ms;
     row.passFactor = (float)passFactor;
-    row.piece = -1;
+    row.piece = row.topPiece = -1;
     snprintf(row.pass, sizeof row.pass, "%s", pass != NULL ? pass : "");
     row.tris = row.trisMed = row.trisMax = -1.0f;
     row.red[0] = row.pres[0] = -1.0f;
@@ -1074,6 +1080,11 @@ static void stall_row(const StallMoment *m, uint32_t replay, int kind, double ms
             row.piece = (int8_t)s_pc.what[s_lastPiece];
             row.pieceMs = (float)s_pc.ms[s_lastPiece];
             row.pieceFactor = (float)m->pieceFactor;
+            row.pieceAddedMs = (float)m->pieceAddedMs;
+            if (s_lastTop >= 0 && (unsigned)s_lastTop < s_pc.n) {
+                row.topPiece = (int8_t)s_pc.what[s_lastTop];
+                row.topFactor = (float)m->topFactor;
+            }
         }
         row.tris = (float)s_pc.tris;
         row.trisMed = s_pc.trisKnown ? (float)s_pc.trisMed : -1.0f;

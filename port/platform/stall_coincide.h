@@ -180,14 +180,19 @@ typedef struct StallMoment {
        stall line already had, judged.  The stalled replay's pieces timed
        pass by pass against their block medians (stall_pieces_judge;
        pieceN 0: the replay not timed pass by pass, or no median known):
-       the piece that grew most (pieceName, pieceFactor its time over its
-       median), the median of the others' factors (othersFactor, 0 with no
+       the piece that added most time (pieceName, pieceAddedMs its time
+       less its median, pieceFactor its time over its median; when another
+       piece has the largest factor: topName, topFactor, topFactorAt its
+       index, else -1), the median of the others' factors (othersFactor, 0 with no
        other), every piece's factors' range and the pieces at STALL_GROWN or
        more (grown); a piece whose median is under STALL_RATIO_MIN_MS is left
    out */
     unsigned pieceN, grown;
     char pieceName[48];
     double pieceFactor, othersFactor, factorMin, factorMax;
+    double pieceAddedMs, topFactor;
+    int topFactorAt;
+    char topName[48];
     /* the GPU idle before the stalled picture's first stamp after the one
        before's last (RdPerfRecord.gpuGapNs: under 0 begun before it ended);
        idleKnown 0 not timed after another */
@@ -201,8 +206,9 @@ typedef struct StallMoment {
 
 /* The pieces judged into m (pieceN, grown, the factors; the name left to
    the caller): n pieces' times ms[] and their block medians median[] (a
-   piece with no median of STALL_RATIO_MIN_MS or more left out).  The index of the piece with the
-   largest factor, -1 with none */
+   piece with no median of STALL_RATIO_MIN_MS or more left out).  The index of the piece that
+   added most time (ms less median), -1 with none; m->topFactorAt the piece
+   with the largest factor when it is another one */
 int stall_pieces_judge(StallMoment *m, const double *ms, const double *median, unsigned n);
 
 typedef struct StallSub StallSub;
@@ -295,10 +301,11 @@ typedef struct StallRow {
     uint8_t after;   /* the timed replays after it seen (to 2) */
     uint8_t carried; /* from the block before */
     uint8_t batteryKnown;
-    int8_t piece;     /* the piece that grew most, -1 none judged */
+    int8_t piece;     /* the piece that added most time, -1 none judged */
+    int8_t topPiece;  /* another piece with the largest factor, -1 none */
     float ms;         /* the present's, or the pass's */
     float passFactor; /* the pass's time over its median (kind 1) */
-    float pieceMs, pieceFactor;
+    float pieceMs, pieceFactor, pieceAddedMs, topFactor;
     float tris, trisMed, trisMax; /* trisMed, trisMax < 0: not known */
     float red[3], pres[3];        /* < 0: not timed */
     float batteryMa;
