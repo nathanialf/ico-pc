@@ -624,8 +624,8 @@ and released after it with the rest.
 layer; `H2` a near layer then a far one, every fragment of which fails depth; `Bl` one blended
 layer (Z not written); `V` 8 draws of 2048 triangles 100 GS pixels wide left of the target (kept by
 the zero-area cull: their boxes are wider than its 4 samples); `S` and `B` 8 draws of a 64x64 GS
-pixel square at the centre in 2x2 cells (2048 triangles) or in 2. The twins' frames are `L2` and
-`H2` again under the twins' hold (`rd__nd_hold`), the others with it off, checked by the twins'
+pixel square at the centre in 2x2 cells (2048 triangles) or in 2. The twins' frames are `L2`,
+`L1` and `H2` again under the twins' hold (`rd__nd_hold`), the others with it off, checked by the twins'
 own counts (a twin frame drew through them, the others did not). Every frame's pipelines are made
 first, untimed and outside the budget (gathered and made on the workers; the fast build's by a
 plain replay that asks for them and the twins' queue made at once), their time logged (`rate card:
@@ -649,14 +649,18 @@ start rewrites it, and an attempt that was counting or on is tried again (`...: 
 being tried then (its mark): tried again`); the card writes `blocked` and skips itself until its key
 changes.
 
-**The rates** (each the median of 5 with the least and the largest beside it, "not measured
-(why)" where it cannot be isolated), and how to read a scene's GPU time with the 10 s line's counts:
+**The rates** (each the median of 5; beside it the measured frame's least and largest time against
+the subtracted frame's median, so one slow replay of the subtracted frame does not widen it, and a
+ratio's the numerator's least and largest over the divisor's median; "not measured (why)" where it
+cannot be isolated, and "not measured (a difference not above 0)" where the two frames' medians
+differ by nothing or less: a cost is not below nothing), and how to read a scene's GPU time with
+the 10 s line's counts:
 
 | rate | from | multiply by |
 |---|---|---|
 | a shaded fragment, the ordinary build and the textured one | (`L2` - `E`) / (2 texels) | the fragments a list shades (OVERDRAW: lists 0-2 shade 6-7 times the target) |
 | a shaded fragment through the twin | the same under the hold | the twins' share of them |
-| a fragment hidden by depth, with discard and through the twin | (`H2` - `L1`) / texels, the hold off and on | the fragments the depth test rejects (about half of lists 0-2 in the boat); the difference is what a twin buys a hidden fragment: whether discard costs this chip its early depth test |
+| a fragment hidden by depth, with discard and through the twin | (`H2` - `L1`) / texels, the hold off and on (both frames under it: the visible layer subtracted costs what `H2`'s own does) | the fragments the depth test rejects (about half of lists 0-2 in the boat); the difference is what a twin buys a hidden fragment: whether discard costs this chip its early depth test |
 | a vertex | (`V` - `E`) / its corners (the VU pre-pass on or off, said) | the 10 s line's vertex invocations |
 | a triangle binned | (`S` - `B`) / (2046 x 8) | the triangles a list submits (most cover no pixel: OVERDRAW's 64-71 %) |
 | the 2x2-quad factor | (`S` - `E`) / (`B` - `E`): the small triangles' cost a covered texel over the large ones' | the lanes small triangles waste |
@@ -672,7 +676,8 @@ drawn over: the card measures what the chip does, not a fragment's shader cost a
 at TWxTH texels, <what it was sized to>; the median of 5 timed replays a frame (min, max beside
 it); T ms in all`, then one line a rate, `rate card: <rate>: <median> <unit> (min <least>, max
 <largest>)` or `rate card: <rate>: not measured (<why>)`; at a later start `... (from the run of
-<date>)` after each; `rate card: skipped (the run of <date> ended while measuring it on this
+<date>)` after each (the head's words for the spread: `(min, max beside it: the frame's least and
+largest against the subtracted frame's median)`); `rate card: skipped (the run of <date> ended while measuring it on this
 device: not measured again until the device, driver, backend, size or version changes)`; `rate
 card: not measured (no GPU timestamps ...)`.
 
