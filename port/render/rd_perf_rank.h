@@ -125,6 +125,11 @@ typedef struct RdPerfRankBlock {
     /* the invocations the shared vertices' lists saved
      * (RdPerfRecord.vuShareSaved, rd_vu_share.h) */
     double vuShareSaved;
+    /* per list over every record (RdPerfRecord): the VU triangles
+       (vuListTris), those drawn again by a draw's passes after its first
+       (vuListAgainTris) and the shadow volumes' triangles (shadowListTris):
+       the where table's rate card clause (rd_perf_where.h) */
+    double listTris[RD_LIST_COUNT], listAgainTris[RD_LIST_COUNT], listShadowTris[RD_LIST_COUNT];
     double colorLoad, colorStore, depthLoad, depthStore, clear, texels, copy, untracked;
     /* the slot wait: records with a blocking wait, their wait; those with
        a done time, its sum and the longest */

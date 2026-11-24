@@ -27,7 +27,7 @@ screen recording the app's Java side reports. The window's lines that use them a
 | `port/render/rd_perf_where.c`, `rd_perf_where.h` | where the time went, one table a perf scene block (`rd_perf_where_test`, every platform; [Where the time went](ANDROID_DIAGNOSTICS_LEDGERS.md#where-the-time-went)) |
 | `port/platform/stall_coincide.c` (the table), `power_read.c`, `vmstat_read.c` | the stalls against the pieces' shares and every stall's row; the battery's and `/proc/vmstat`'s parsers and lines (`stall_coincide_test`, `power_read_test`, `vmstat_read_test`, every platform; [Every stall in a table](ANDROID_DIAGNOSTICS_LEDGERS.md#every-stall-in-a-table-the-gpus-speed-the-battery-and-the-memory-events)) |
 | `port/render/rd_perf_more.c`, `rd_perf_more.h` | the cost counters' block sums and the costs and compare lines (`rd_perf_more_test`, every platform; [The cost counters](ANDROID_DIAGNOSTICS_LEDGERS.md#the-cost-counters)) |
-| `port/render/rd_perf_hooks.c`, `rd_perf_hooks.h` | the cost counters' increments: SCENE's pass breaks, the two-pass blend, the screen boxes by list |
+| `port/render/rd_perf_hooks.c`, `rd_perf_hooks.h` | the cost counters' increments: SCENE's pass breaks, the two-pass blend, the screen boxes by list, the triangles drawn again by a draw's later passes and the shadow volumes' triangles by list |
 
 ## The kernel GPU driver's sampler
 

@@ -120,8 +120,8 @@ The shadow cuts' counts come from the replay's record where the window reads it
 ### The cost counters
 
 `port/render/rd_perf_more.h` and `rd_perf_hooks.c` count into the replay's record (`RdPerfRecord`
-`noDual*`, `breakN`, `breakKB`, `listBox*`, `vuListTris`). The window adds each record into a
-block sum and prints one line per block:
+`noDual*`, `breakN`, `breakKB`, `listBox*`, `vuListTris`, `vuListAgainTris`, `shadowListTris`). The
+window adds each record into a block sum and prints one line per block:
 
 `window: costs a picture: two-pass blend 3.0 draws drawn twice (2.1k triangles' vertex work twice),
 1.0 drawn once by the colour pass; SCENE's pass ended mid-picture 3.0 times (DATE 2.0, 9.2 MB; aura
@@ -391,15 +391,35 @@ allowed most lowered), and did the stalls fall in those seconds?
 | Line | Holds |
 | --- | --- |
 | `where: <scene>: limit <bound>; P of T fps (the game G of R); GPU work W ms (S % of the D ms between presents); render thread C ms (S %); game step E ms (S % of its K ms tick)` | the limiting side (the perf scene line's verdict) and each side's share |
-| `where: GPU a picture S ms (work W ms): list 0 49.0 ms 47 % [283 draws, 1.2 MB loaded, 3.4 MB stored, 0.35 Mpx]; ...; pre-pass ...; before list 0 ...; present ...; effects (inside their lists): reduction ...; all: 70.1k triangles, 81.0k vertex invocations, 900 draws, 3.1 MB loaded, 6.2 MB stored, 12.0 Mpx` | each GPU piece a picture with its share of the span; a list's counts from the pictures timed pass by pass (`[...]` none); pieces of 0 ms left out |
+| `where: GPU a picture S ms (work W ms): list 0 49.0 ms 47 % [283 draws, 1.2 MB loaded, 3.4 MB stored, 0.35 Mpx]; ...; pre-pass ...; before list 0 ...; present ...; effects (inside their lists): reduction ...; all: 70.1k triangles, 81.0k vertex invocations, 900 draws, 3.1 MB loaded, 6.2 MB stored, 12.0 Mpx, 31.0k VU triangles drawn again by a later pass, 2.1k shadow volume triangles` | each GPU piece a picture with its share of the span; a list's counts from the pictures timed pass by pass (`[...]` none); pieces of 0 ms left out; the triangles a draw's later passes draw again (the two-pass blend's alpha pass) and the shadow volumes' triangles, both counted per list (`RdPerfRecord` `vuListAgainTris`, `shadowListTris`) |
 | `where: CPU a picture: render thread C ms (walk, uploads, binds, interpolation, submit); submit thread ...; present calls ...; GPU waits ...; game step ...` | the CPU's split |
 | `where: attempts: submit ahead on; <the rows on with their counts N/N2/N3>` | the attempts in the block (`ico_attempt_on_text`: nothing taken from the attempts line) |
 | `where: phone: thermal (...) 1/0.67/46.5/1200:1800; battery -812 mA; memory 1173 MB available, pressure not readable; stalls: 12 in 11 replays, most in list 0 (8)` | the phone's state and the block's stalls |
 | `where: largest: GPU list 0 49.0 ms (47 % of the GPU span); CPU walk 8.0 ms (8 % of the time between presents)` | the single largest GPU piece and CPU piece (the game step counts as one) |
+| `where: explained by the rate card (vertices and triangles; fragments not counted): list 0 81.7 of 49.0 ms (vertices at most 32.3 ms: 273.3k corners x 118.29 ns; triangles at most 49.4 ms: 91.1k x 541.76 ns, of them 31.0k drawn again by a later pass, 0.0k the shadow volumes'; passes 0.0 ms: 1.0 x 0.003 ms); list 3 ...` | per list that drew VU or shadow volume triangles: how many of its GPU ms a picture the start-up rate card's units account for |
 
-The rate card's hook: `rd_perf_where_explained_ms` takes a device's ns a fragment, a vertex and a
-triangle (`RdPerfWhereRates`); once it answers, the last line gains `; explained by the rate card: X
-of Y ms`. Here it answers -1 (no clause).
+**The rate card's line.** On a tile-based GPU the timestamps cannot split a pass's time by draw, so
+the last line multiplies the block's counts a picture by the rate card's units
+([RENDER_PERF.md](RENDER_PERF.md#the-rate-card), `rd_rate_card_get`, read through
+`rd_perf_where_rates_of`). Per list, `X of Y ms`: Y the list's GPU ms a picture (the GPU line's),
+X the sum of the terms the card has a figure for:
+
+| Term | Count a picture | Card unit | Bound |
+| --- | --- | --- | --- |
+| vertices | the list's VU corners: 3 a triangle, each pass (its triangles and those a draw's later passes draw again) | `a vertex`, ns a corner drawn off the target (`(V - E)` over 3 x 2048 x 8 corners) | with the VU pre-pass on, `at most`: the card's corner holds its pre-pass vertex, which play times apart (`pre-pass` on the GPU line), and the index compaction's and the shared vertices' savings are not taken off the count; with the pre-pass off on both, the count and the unit are the same kind (3 of the programs' own invocations a corner) |
+| triangles | the list's VU triangles, those drawn again and the shadow volumes' | `a triangle binned`, ns (`(S - B)` over 2046 x 8: a small visible triangle less a large one, its three corners and its 2x2 quad of fragments inside) | always `at most` |
+| passes | the list's render passes a timed picture | `a pass with nothing drawn`, ms (a cleared SCENE pass, a replay's span) | none |
+
+The fragments (shaded, hidden by depth, blended) and the bytes loaded and stored are not counted,
+so X is neither a bound of Y nor its share; a list whose X is far above Y says the card's units do
+not hold in play (the upper bounds), one far below says the time is in what is not counted. A
+term the card has no figure for prints `<term>: no rate card figure (<why>)`, never a number: the
+item not measured (its reason), its median at or below 0, another unit than ns (ms for a pass),
+the card's vertex timed with the other VU pre-pass state than the block's, the list's first pass
+not SCENE at the card's size, the list not timed pass by pass. No card this run, or a card whose
+device text names another graphics API than the block's (a switch after which the card was not
+measured again), prints `no rate card figure (<why>)` for the whole line; a block with no timed
+picture `no picture timed`; one with no VU or shadow volume triangles says so.
 
 ### The present latency line
 

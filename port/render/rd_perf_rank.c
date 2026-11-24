@@ -115,6 +115,11 @@ void rd_perf_rank_add_record(RdPerfRankBlock *b, const RdPerfRecord *r, double v
     b->vuTris += (double)r->vuTris;
     b->vuLeftOut += (double)(r->vuTrisLeftOut < r->vuTris ? r->vuTrisLeftOut : r->vuTris);
     b->vuShareSaved += (double)r->vuShareSaved;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        b->listTris[l] += (double)r->vuListTris[l];
+        b->listAgainTris[l] += (double)r->vuListAgainTris[l];
+        b->listShadowTris[l] += (double)r->shadowListTris[l];
+    }
     b->colorLoad += (double)r->colorLoadBytes;
     b->colorStore += (double)r->colorStoreBytes;
     b->depthLoad += (double)r->depthLoadBytes;

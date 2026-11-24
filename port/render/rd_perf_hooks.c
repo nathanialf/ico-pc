@@ -122,7 +122,7 @@ void rd__perf_nodual_pass(uint32_t flags, int fs)
     s_h.lastFactor = false;
 }
 
-void rd__perf_vu_draw(bool pair, bool colour, uint32_t tris)
+void rd__perf_vu_draw(bool pair, bool colour, uint32_t tris, int passes)
 {
     if (pair) {
         g_rdPerf.noDualPairs++;
@@ -133,6 +133,17 @@ void rd__perf_vu_draw(bool pair, bool colour, uint32_t tris)
     const int l = rd__replay_list();
     if (l >= 0 && l < RD_LIST_COUNT) {
         g_rdPerf.vuListTris[l] += tris;
+        if (passes > 1) {
+            g_rdPerf.vuListAgainTris[l] += tris * (uint32_t)(passes - 1);
+        }
+    }
+}
+
+void rd__perf_shadow_tris(uint32_t tris)
+{
+    const int l = rd__replay_list();
+    if (l >= 0 && l < RD_LIST_COUNT) {
+        g_rdPerf.shadowListTris[l] += tris;
     }
 }
 

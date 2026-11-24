@@ -23,6 +23,7 @@
 #include "rd_list_draws.h"
 #include "rd_perf_rank.h"
 #include "rd_perf_where.h"    /* where the time went: one table a block */
+#include "rd_ratecard.h"      /* rd_rate_card_get: the where table's last line */
 #include "rd_submit_thread.h" /* rd_thread_submit_ahead_now */
 #include "dump_zip.h"         /* the captures' scene-ledger.txt */
 #include "report.h"           /* the report's scene-ledger.txt */
@@ -310,10 +311,15 @@ void window_perf_rank_block(const WindowPerfBlock *in)
 }
 
 /* One table: where the block's time went (rd_perf_where.h), the
-   attempts', the phone's and the stalls' texts from their owners */
+   attempts', the phone's and the stalls' texts from their owners, and the
+   rate card of this start (rd_ratecard.h rd_rate_card_get: measured or
+   read back on this thread at start-up and after a graphics API switch)
+   for its last line */
 static void where_lines(const RdPerfRankInfo *info, const RdPerfRankVerdict *v)
 {
-    static char attempts[1536], on[1400], phone[384], stalls[160], line[2048];
+    static char attempts[1536], on[1400], phone[384], stalls[160], line[4096];
+    static RdRateCard card;
+    static RdPerfWhereRates rates;
     const char *aheadWhy = rd_thread_submit_ahead_off_why();
     (void)ico_attempt_on_text(on, sizeof on);
     snprintf(attempts, sizeof attempts, "submit ahead %s%s%s; %s",
@@ -322,7 +328,9 @@ static void where_lines(const RdPerfRankInfo *info, const RdPerfRankVerdict *v)
              !rd_thread_submit_ahead_now() && aheadWhy != NULL ? aheadWhy : "", on);
     (void)window_stall_where_phone(phone, sizeof phone);
     (void)window_stall_where_stalls(stalls, sizeof stalls);
-    const RdPerfWhereExtra x = {rd_perf_post_name, attempts, phone, stalls, NULL};
+    rd_perf_where_rates_of(rd_rate_card_get(&card) ? &card : NULL,
+                           rhi_backend_kind_name(rhi_backend()), &rates);
+    const RdPerfWhereExtra x = {rd_perf_post_name, attempts, phone, stalls, &rates};
     for (unsigned i = 0; i < RD_PERF_WHERE_LINES; i++) {
         if (rd_perf_where_text(&s_block, info, v, &x, i, line, sizeof line) > 0) {
             fprintf(stderr, "window: %s\n", line);

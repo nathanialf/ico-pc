@@ -67,6 +67,7 @@
 #include "rd_jitter.h"
 #include "rd_layer.h"
 #include "rd_passring.h"
+#include "rd_perf_hooks.h" /* rd__perf_shadow_tris */
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
 #include "rd_shadowres.h"
@@ -4456,6 +4457,7 @@ static void doShadowStripIn(Replay *r, const RdFrame *f, const RdCmd *c)
             rhi_cmd_set_bind_group(s_cl, 2, g2);
             rhi_cmd_set_stencil_ref(s_cl, 0);
             drawCmd(s_cl, count[decr], first, 1);
+            rd__perf_shadow_tris(count[decr] / 3u);
             rd__stats_here()->draws++;
         }
         first += count[decr];

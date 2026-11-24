@@ -1,8 +1,8 @@
 /* rd_perf_hooks.h: the cost counters' increments (rd_perf_more.h; rd.h
- * RdPerfRecord noDual*, breakN, breakKB, listBox*, vuListTris), one call
- * at each site, nothing in a site but the call (docs/port/
- * ANDROID_DIAGNOSTICS.md, "The cost counters").  Render thread only (the
- * replay's), as g_rdPerf. */
+ * RdPerfRecord noDual*, breakN, breakKB, listBox*, vuListTris,
+ * vuListAgainTris, shadowListTris), one call at each site, nothing in a
+ * site but the call (docs/port/ANDROID_DIAGNOSTICS.md, "The cost
+ * counters").  Render thread only (the replay's), as g_rdPerf. */
 #ifndef RD_PERF_HOOKS_H
 #define RD_PERF_HOOKS_H
 
@@ -24,8 +24,12 @@ void rd__perf_hooks_end(void);
 void rd__perf_nodual_pass(uint32_t flags, int fs);
 /* rd_replay_vu.c vuDraw: a VU draw's planned passes (pair: the colour pass
    and the alpha pass after it; colour: the colour pass alone), its
-   triangles (also counted by list: vuListTris) */
-void rd__perf_vu_draw(bool pair, bool colour, uint32_t tris);
+   triangles (also counted by list: vuListTris) and its passes (each after
+   the first draws the triangles again: vuListAgainTris) */
+void rd__perf_vu_draw(bool pair, bool colour, uint32_t tris, int passes);
+/* rd_replay.c doShadowStripIn: a shadow volume half's triangles drawn, by
+   list (shadowListTris) */
+void rd__perf_shadow_tris(uint32_t tris);
 
 /* rd_vis.c cmdVerdict: a list's VU draw command the culler kept, with its
    box under its matrix (m NULL: no box) and the target's rectangle (GS
