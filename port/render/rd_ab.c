@@ -356,7 +356,19 @@ RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep)
         /* the scenery ended (a menu, the title, a movie): a trial running
            ends with no verdict and no mark for the stage (its pairs are not
            judged, however many), and is tried again once there is scenery
-           again, 2 s into it (the cap counts it) */
+           again, 2 s into it.  It does not count toward RD_AB_TRIALS (review
+           M6: a few pauses would use the cap up and the subjects registered
+           last would never be timed); the cap bounds the trials that ran to
+           a verdict or to a "no verdict" of their own.  What bounds the
+           retries: each one needs RD_AB_START_MS of unbroken scenery again
+           (the count restarts below on every replay out of scenery), one
+           trial at a time, so at most one trial begins per stretch of play
+           or a cutscene of 2 s or more, and its off-arm replays are those of
+           the stretch past its first 2 s; the subject's own count
+           (subj.trials, the stats line and the ledger) still counts it */
+        if (t->active) {
+            a->trials--; /* before trialEndAgain's cap check */
+        }
         trialEndAgain(a, "the scenery ended", false, false,
                       "the next stretch of play or a cutscene");
         a->stageMs = nowMs; /* the 2 s count from the stage's scenery on */
@@ -367,12 +379,20 @@ RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep)
        gave no answer here before */
     if (!t->active && stage >= 0 && a->scenery && a->trials < RD_AB_TRIALS &&
         nowMs - a->stageMs >= RD_AB_START_MS) {
+        /* of those, the one with the fewest trials begun this run (the
+           registry's order among equals): a subject with no trial yet goes
+           before the retry of one that had one, so a trial broken again and
+           again (the scenery ended) never keeps the later subjects out */
+        int pick = -1;
         for (int i = 0; i < a->nSubj; i++) {
             if (a->subj[i].allowed && (a->usedNow & (1u << i)) &&
-                a->subj[i].carry == RD_AB_V_NONE && memFind(a, i, stage) < 0) {
-                trialStart(a, i);
-                break;
+                a->subj[i].carry == RD_AB_V_NONE && memFind(a, i, stage) < 0 &&
+                (pick < 0 || a->subj[i].trials < a->subj[pick].trials)) {
+                pick = i;
             }
+        }
+        if (pick >= 0) {
+            trialStart(a, pick);
         }
     }
     tag.off = verdictOff(a, stage);
@@ -588,7 +608,8 @@ size_t rd_ab_start_text(const RdAb *a, char *out, size_t cap)
             "with it and %u of %u cheaper with it, else off; no verdict under %u pairs in %u "
             "replays; the verdict kept for every stage for the rest of the run; with it until "
             "then, and timed again in the next stage after a trial with no verdict; never in the "
-            "boot logo and title's stage; a trial ends with no verdict when the scenery ends",
+            "boot logo and title's stage; a trial ends with no verdict when the scenery ends, "
+            "not counted in the trials a run; the attempt with the fewest trials tried first",
             RD_AB_START_MS / 1000.0, (unsigned)RD_AB_TRIALS, RD_AB_WORK_TOL * 100.0, RD_AB_LONG,
             (unsigned)RD_AB_MEDIAN_MIN, (unsigned)RD_AB_EARLY, RD_AB_GAIN * 100.0,
             (unsigned)RD_AB_PAIRS, RD_AB_GAIN * 100.0, (unsigned)RD_AB_FAVOUR,
