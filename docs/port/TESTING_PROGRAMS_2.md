@@ -23,6 +23,10 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
 
 ## port/config/test
 
+- `config_test.c`, added: the first-run template's `yorda_look = "off"` (`config`).
+- `sim_keys_test.c`, added: `gameplay.yorda_look` listed with the default `"off"` (19 keys of one
+  default text), its carry harmless; a state saved before the key existed is the same with it off
+  and a difference with it on (`sim_keys`).
 - `config_test.c`, added: the first-run template's `zoom_type = "hold"` and `camera_reset = "off"`
   (`config`).
 - `sim_keys_test.c`, added: `gameplay.camera_reset` listed with the default `"off"` (18 keys of
@@ -34,6 +38,20 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
 
 ## port/game/test
 
+- `yorda_look_test.c`: Look at Yorda's rules (`port/game/yorda_look.h`,
+  [GAME_FEATURES.md](GAME_FEATURES.md#look-at-yorda)), CPU only, linking the real `camera_reset.c`:
+  Off answers 0 over 2000 pseudo-random ticks (and a toggle left on is gone); Hold follows L3, not
+  without control or with her hand; Toggle on a press, held without repeat, off on the next press;
+  a toggle ends without control, with her hand taken, on a new stage and with a Camera reset (Hold
+  keeps looking; Camera reset off changes nothing), and an L3 held through each is no press; the
+  Main tick clock (a pause keeps the toggle, L3 down at the first tick back is held, a load's
+  rewind); a copy of the arms' head and camera decisions (unchanged when off; the camera with her
+  on the screen; the script's flag; her other stage); `yorda_look.state` one FRESH block of four
+  ints whose bytes copied back resume the toggle (`yorda_look`).
+- `options_test.c`, added: `yorda_look`'s default, words, setter and reload; a text scan of
+  `boyact.c` (four `ico_yorda_look(` hooks and their live tests, the look block's three Players 2
+  conditions and the European body's, the four camera tests, the four tests for her other stage)
+  and the simulation key (`options` and its six disc runs).
 - `camera_reset_test.c`: Camera reset's press and stick mute (`port/game/camera_reset.h`,
   [GAME_FEATURES.md](GAME_FEATURES.md#camera-reset)), CPU only: off passes the stick through tick
   for tick over 2000 pseudo-random ticks (no reset, no cut); a press resets once with the cut
@@ -323,6 +341,12 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   the title reading Hold; `testCameraReset` steps Camera reset the same way (Off, Right to On with
   `camera_reset = "on"` saved, Left back to Off), every disc shows it on the title reading Off
   (`settings`, `settings_extra`, `settings_discs` and their disc runs).
+- `settings_test.c`, `settings_extra_test.c`, `settings_discs_test.c`, added: Controls' eighteen
+  rows with Look at Yorda between Camera reset and Stick fix, shown from the title and the pause
+  menu; `testYordaLook` steps it (Off, Right to Hold and Toggle with the key set and its note on the
+  cursor, leaving the page saves `yorda_look = "toggle"`, Left back to Hold and Off, round from
+  Toggle to Off); every disc shows it on the title reading Off (`settings`, `settings_extra`,
+  `settings_discs` and their disc runs).
 - `pad_glyphs_test.c`: the button pictures' core (`port/ui/pad_glyphs.c`,
   [UI.md](UI.md#button-pictures)), CPU only: the 24 embedded files read, each set complete, each
   piece's aspect, fill colour and black stroke present at 96 rows, the alpha never past 0x80; the

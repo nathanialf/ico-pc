@@ -9,6 +9,7 @@
 
 #include "options.h"
 #include "video_options.h"
+#include "yorda_look.h"
 #include "zoom_toggle.h"
 #include "../platform/state_port.h"
 #include "../platform/state_registry.h"
@@ -76,6 +77,7 @@ int ico_cam_reset(int r3, int live, float *sx, float *sz)
         s_cr.mute = 1;
         s_count++;
         ico_zoom_drop();
+        ico_yorda_look_drop();
         ico_video_camera_cut();
         if (s_count <= 8 || s_count % 100 == 0) {
             fprintf(stderr, "camera: reset to the boy (%lu this run)\n", s_count);

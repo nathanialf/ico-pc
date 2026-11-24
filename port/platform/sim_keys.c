@@ -39,6 +39,7 @@ const char *const ICO_SIM_KEYS[] = {
     "variants.chain_swing_damping",
     "gameplay.zoom_type",    /* Controls > Zoom type: the camera's zoom latch (zoom_toggle.h) */
     "gameplay.camera_reset", /* Controls > Camera reset: R3 rests the look-around (camera_reset.h) */
+    "gameplay.yorda_look",   /* Controls > Look at Yorda: L3 looks at her (yorda_look.h) */
     NULL,
 };
 
@@ -104,6 +105,7 @@ static const char *const kDefaults[] = {
     "4",        /* variants.chain_swing_damping */
     "hold",     /* gameplay.zoom_type */
     "off",      /* gameplay.camera_reset */
+    "off",      /* gameplay.yorda_look */
     NULL,
 };
 
@@ -166,6 +168,10 @@ static const IcoSimKeyCarry kCarry[] = {
     /* gameplay.camera_reset: the mute clears on the first tick after the
        load (camera_reset.c: a call that does not follow the last by one
        tick) and when the row is off */
+    ICO_SIM_CARRY_HARMLESS,
+    /* gameplay.yorda_look: the toggle's block clears itself on the first
+       tick of Off or Hold (yorda_look.c ico_yorda_look) and a state of Off
+       or Hold carries none */
     ICO_SIM_CARRY_HARMLESS,
 };
 

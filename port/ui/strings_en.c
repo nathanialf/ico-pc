@@ -415,6 +415,9 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_CAMERA_RESET] = "Camera reset",
     [UI_STR_CAMERA_RESET_NOTE] =
         "On: click the right stick (R3) to bring the camera straight back to Ico.",
+    [UI_STR_OPT_YORDA_LOOK] = "Look at Yorda",
+    [UI_STR_YORDA_LOOK_NOTE] =
+        "Ico and the camera turn to Yorda without calling her. Hold: while you hold L3. Toggle: L3 starts and stops it.",
     [UI_STR_OPT_BUTTON_PICTURES] = "Button pictures",
     [UI_STR_BUTTON_PICTURES_NOTE] =
         "The buttons shown in menus and photo mode. Auto follows the controller you used last.",

@@ -67,6 +67,9 @@
  *                          "off"  "on": a press of R3 puts the player's
  *                                 look-around back on the boy at once
  *                                 (camera_reset.h); a pad-recording key
+ *   [gameplay] yorda_look  "off"  "hold" or "toggle": L3 turns the boy's head and
+ *                                 the camera to Yorda without calling her
+ *                                 (yorda_look.h); a pad-recording key
  *   [gameplay] developer_mode
  *                          false  the development build's debug menu and
  *                                 debug options
@@ -442,6 +445,20 @@ int ico_opt_camera_reset(void);
 void ico_opt_set_camera_reset(int on);
 /* the key's word: "on" or "off" */
 const char *ico_opt_camera_reset_name(int on);
+/* [gameplay] yorda_look: Look at Yorda (port/game/yorda_look.h):
+   ICO_YORDA_LOOK_OFF ("off", the default on every disc: the game as
+   shipped), ICO_YORDA_LOOK_HOLD ("hold": the look while L3 is held) or
+   ICO_YORDA_LOOK_TOGGLE ("toggle": one press starts it, the next ends it).
+   Another word reads as off, logged once; the value in force is logged
+   when it changes ("options: look at yorda <off|hold|toggle>"). */
+#define ICO_YORDA_LOOK_OFF 0
+#define ICO_YORDA_LOOK_HOLD 1
+#define ICO_YORDA_LOOK_TOGGLE 2
+int ico_opt_yorda_look(void);
+/* sets it for this run (another value reads as ICO_YORDA_LOOK_OFF) */
+void ico_opt_set_yorda_look(int type);
+/* the key's word: "off", "hold" or "toggle" */
+const char *ico_opt_yorda_look_name(int type);
 /* [input] button_pictures: whose button pictures the menus, the prompts,
    photo mode and the touch screen draw (Options > Controls > Button
    pictures; port/ui/settings_pads.c resolves it once a frame).  "auto"

@@ -893,7 +893,7 @@ be loaded is greyed and the line under the cards gives the reason:
 
 A setting never stops a state from loading. A state loads with the
 settings you have now, whatever they were when you saved it (Hold type, Zoom
-type, Camera reset, the rows on the Gameplay pages and the rest). The
+type, Camera reset, Look at Yorda, the rows on the Gameplay pages and the rest). The
 journey's difficulty comes from the state, as always. The one setting a
 state keeps is **Video mode**: a state saved in the other of 50 Hz and 60 Hz
 plays in the one it was saved in until you restart the game, and your

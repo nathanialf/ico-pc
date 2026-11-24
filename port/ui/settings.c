@@ -2038,6 +2038,10 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     }
     case UI_OPT_CAMERA_RESET:
         return onOff(ico_opt_camera_reset()); /* [gameplay] camera_reset */
+    case UI_OPT_YORDA_LOOK: {                 /* [gameplay] yorda_look: Off, Hold, Toggle */
+        static const int lookStr[3] = {UI_STR_OFF, UI_STR_VAL_ZOOM_HOLD, UI_STR_VAL_ZOOM_TOGGLE};
+        return ui_str(lookStr[ico_opt_yorda_look()]);
+    }
     case UI_OPT_ZOOM_TYPE:
         /* [gameplay] zoom_type: Hold (the game's own) or Toggle */
         return ui_str(ico_opt_zoom_type() == ICO_ZOOM_TOGGLE ? UI_STR_VAL_ZOOM_TOGGLE
@@ -2862,6 +2866,12 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
                               ico_opt_camera_reset_name(ico_opt_camera_reset()));
         s_dirtyConfig = 1;
         break;
+    case UI_OPT_YORDA_LOOK:
+        /* [gameplay] yorda_look: Off, Hold, Toggle around (port/game/yorda_look.h) */
+        ico_opt_set_yorda_look(stepIndex(ico_opt_yorda_look(), 3, dir));
+        ico_config_set_string("gameplay.yorda_look", ico_opt_yorda_look_name(ico_opt_yorda_look()));
+        s_dirtyConfig = 1;
+        break;
     case UI_OPT_ZOOM_TYPE:
         /* [gameplay] zoom_type: Hold and Toggle around (port/game/zoom_toggle.h) */
         ico_opt_set_zoom_type(ico_opt_zoom_type() == ICO_ZOOM_TOGGLE ? ICO_ZOOM_HOLD
@@ -3500,6 +3510,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_HOLD_TYPE, UI_STR_HOLD_TYPE_NOTE);
         addNote(pg, UI_OPT_ZOOM_TYPE, UI_STR_ZOOM_TYPE_NOTE);
         addNote(pg, UI_OPT_CAMERA_RESET, UI_STR_CAMERA_RESET_NOTE);
+        addNote(pg, UI_OPT_YORDA_LOOK, UI_STR_YORDA_LOOK_NOTE);
         addNote(pg, UI_OPT_BUTTON_PICTURES, UI_STR_BUTTON_PICTURES_NOTE);
         addNote(pg, UI_OPT_STICK_FIX, UI_STR_STICK_FIX_ALSO_NOTE);
         addNote(pg, UI_OPT_CIRCLE_BACK, UI_STR_CIRCLE_BACK_NOTE);
@@ -4159,34 +4170,25 @@ static void build(void)
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
     /* the game's Button configuration and Vibration after Remap, from the
-       pause menu, then Button pictures, Hold type, Zoom type and Camera reset; the Touch screen page's
+       pause menu, then Button pictures, Hold type, Zoom type, Camera reset and Look at Yorda; the Touch screen page's
        link before Back, with a touch screen; the mouse camera's rows (not on
        Android) */
     static const int ctlOpts[] = {
-        UI_OPT_LINK,         UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,    UI_OPT_BUTTON_PICTURES,
-        UI_OPT_HOLD_TYPE,    UI_OPT_ZOOM_TYPE,     UI_OPT_CAMERA_RESET, UI_OPT_STICK_FIX,
-        UI_OPT_MOUSE_CAMERA, UI_OPT_MOUSE_SENS,    UI_OPT_MOUSE_INVERT, UI_OPT_MOUSE_SPEED,
-        UI_OPT_MOUSE_RANGE,  UI_OPT_MOUSE_RETURN,  UI_OPT_CIRCLE_BACK,  UI_OPT_LINK,
-        UI_OPT_BACK};
-    static const int ctlStrs[] = {UI_STR_OPT_REMAP,
-                                  UI_STR_OPT_BUTTON_CONFIG,
-                                  UI_STR_OPT_VIBRATION,
-                                  UI_STR_OPT_BUTTON_PICTURES,
-                                  UI_STR_OPT_HOLD_TYPE,
-                                  UI_STR_OPT_ZOOM_TYPE,
-                                  UI_STR_OPT_CAMERA_RESET,
-                                  UI_STR_OPT_STICK_FIX,
-                                  UI_STR_OPT_MOUSE_CAMERA,
-                                  UI_STR_OPT_MOUSE_SENS,
-                                  UI_STR_OPT_MOUSE_INVERT,
-                                  UI_STR_OPT_MOUSE_SPEED,
-                                  UI_STR_OPT_MOUSE_RANGE,
-                                  UI_STR_OPT_MOUSE_RETURN,
-                                  UI_STR_OPT_CIRCLE_BACK,
-                                  UI_STR_SECTION_TOUCH,
-                                  UI_STR_BACK};
+        UI_OPT_LINK,        UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,    UI_OPT_BUTTON_PICTURES,
+        UI_OPT_HOLD_TYPE,   UI_OPT_ZOOM_TYPE,     UI_OPT_CAMERA_RESET, UI_OPT_YORDA_LOOK,
+        UI_OPT_STICK_FIX,   UI_OPT_MOUSE_CAMERA,  UI_OPT_MOUSE_SENS,   UI_OPT_MOUSE_INVERT,
+        UI_OPT_MOUSE_SPEED, UI_OPT_MOUSE_RANGE,   UI_OPT_MOUSE_RETURN, UI_OPT_CIRCLE_BACK,
+        UI_OPT_LINK,        UI_OPT_BACK};
+    static const int ctlStrs[] = {
+        UI_STR_OPT_REMAP,           UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_VIBRATION,
+        UI_STR_OPT_BUTTON_PICTURES, UI_STR_OPT_HOLD_TYPE,     UI_STR_OPT_ZOOM_TYPE,
+        UI_STR_OPT_CAMERA_RESET,    UI_STR_OPT_YORDA_LOOK,    UI_STR_OPT_STICK_FIX,
+        UI_STR_OPT_MOUSE_CAMERA,    UI_STR_OPT_MOUSE_SENS,    UI_STR_OPT_MOUSE_INVERT,
+        UI_STR_OPT_MOUSE_SPEED,     UI_STR_OPT_MOUSE_RANGE,   UI_STR_OPT_MOUSE_RETURN,
+        UI_STR_OPT_CIRCLE_BACK,     UI_STR_SECTION_TOUCH,     UI_STR_BACK};
     static const int ctlLinks[] = {
-        UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, UI_PAGE_TOUCH, -1};
+        UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        UI_PAGE_TOUCH, -1};
     /* Controls > Touch screen: the overlay's three rows, then the layout
        editor's (Edit layout opens UI_PAGE_TOUCH_LAYOUT) */
     static const int touchOpts[] = {
