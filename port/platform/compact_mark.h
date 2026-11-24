@@ -28,8 +28,9 @@
  * blocked always.  Its test runs before the other attempts' self-tests
  * write their marks, so the step runs first and reads theirs as the
  * previous run left them (vu_zero_mark_stage_beside): at counting or on,
- * an end while the cull, the twins, the fast pixel build or the lean
- * vertex outputs said trying, or the rate card was measuring, is theirs,
+ * an end while the cull, the twins, the fast pixel build, the lean vertex
+ * outputs or the one-pass blend said trying, or the rate card was
+ * measuring, is theirs,
  * and it is tried again.  A block holds only while the version in the mark
  * is the running one.  The line ("the previous run: index compaction:
  * ...") is logged when a mark was found; ICO_COMPACT_MARK (the file's

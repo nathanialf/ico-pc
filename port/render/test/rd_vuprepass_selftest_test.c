@@ -64,8 +64,10 @@
  * try, never a handle of the device before), its line on stderr.  The
  * discard-free twins (rd_nodiscard.h): their mark ICO_NODISCARD_MARK the
  * same way ("test: the discard-free twins' mark after the self-test: ..."),
- * and the index compaction's ICO_COMPACT_MARK ("test: the index
- * compaction's mark after the self-test: ...", rd_vu_compact.h).
+ * the index compaction's ICO_COMPACT_MARK ("test: the index compaction's mark
+ * after the self-test: ...", rd_vu_compact.h) and the one-pass blend's
+ * ICO_ONEPASS_MARK ("test: the one-pass blend's mark after the self-test:
+ * ...").
  * The log lines are matched by test/rd_vuprepass_selftest.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -316,6 +318,10 @@ int main(int argc, char **argv)
         if (nd != NULL && nd[0] != '\0') {
             (void)remove(nd); /* the discard-free twins' (rd_nodiscard.h) */
         }
+        const char *op = getenv("ICO_ONEPASS_MARK");
+        if (op != NULL && op[0] != '\0') {
+            (void)remove(op); /* the one-pass blend's (rd_onepass.h) */
+        }
     }
     RdSettings st;
     memset(&st, 0, sizeof(st));
@@ -357,6 +363,7 @@ int main(int argc, char **argv)
     markLine("ICO_NODISCARD_MARK", "discard-free twins'", "after the self-test");
     markLine("ICO_FASTPS_MARK", "fast pixel build's", "after the self-test");
     markLine("ICO_COMPACT_MARK", "index compaction's", "after the self-test");
+    markLine("ICO_ONEPASS_MARK", "one-pass blend's", "after the self-test");
     /* the rate card after the self-tests, as the window runs it after the
        start-up's (rd_ratecard.h: under ICO_RD_RATECARD=1 or a results
        file, the tests' rd_ratecard_*) */

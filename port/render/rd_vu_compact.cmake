@@ -128,7 +128,7 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
                      "-DEXTRA=rd: VU index compaction: ICO_RD_VU_COMPACT_SABOTAGE: its own test's lists never copied back .*rd: VU index compaction: not checked by its own start-up test \\(replay 1 of 6's lists were not copied back \\(a command not dispatched, or no buffer for the copy\\)\\) on SCENE [^\n]*: off for the run, nothing written as failed, tried again at the next start.*rd: VU index compaction: off after the start-up self-tests \\(its own start-up test could not check it: tried again at the next start, ${_cmp_g52}\\).*rd: VU pre-pass: on \\(self-test: [^\n]*${_cmp_rec}.*${_cmp_mark}none"
-                     "-DNOT_=${_cmp_copy}|its own start-up test passed|refused by its own start-up test|mark after the self-test: failed" -P "${_vst}")
+                     "-DNOT_=${_cmp_copy}|its own start-up test passed|refused by its own start-up test|index compaction's mark after the self-test: failed" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_compact_mali_marked
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"

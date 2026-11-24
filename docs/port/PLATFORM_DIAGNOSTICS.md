@@ -931,11 +931,26 @@ test refused it; a test that could not check removes the file) or `blocked <v>`;
 `ICO_COMPACT_BLOCK`, `ICO_COMPACT_MARK` and `ICO_COMPACT_VERSION`. Its test runs before the other
 attempts' self-tests write their marks, so its step reads their files as the previous run left them
 (`vu_zero_mark_stage_beside`: the cull's, the twins', the fast pixel build's, the lean vertex
-outputs') and the rate card's: at `counting` or `on`, a bad end while one of them was trying is
+outputs', the one-pass blend's) and the rate card's: at `counting` or `on`, a bad end while one of them was trying is
 theirs. One line where there was a mark: `ico_pc: the previous run: index compaction: was being
 tried when it ended (a lost graphics device): off on this install until the version changes
 (blocked <version>)`, `... was on, its first pictures being counted, when it ended (a crash): the
 discard-free twins were being tried then (their mark): tried again`.
+
+The one-pass blend's mark (`port/platform/onepass_mark.c`;
+[PIPELINES.md](PIPELINES.md#the-one-pass-blend)) is read last, after the fast pixel build's, by
+the same rules and table: `logs/onepass-mark.txt` holds `trying <v>` (before its device check),
+`counting <v>` (the check put a class in use), `on <v>` (250 pictures drawn with it), `failed <v>`
+(the check put nothing in use for a measured reason; a check whose arms were only "not checked"
+removes the mark instead) or `blocked <v>`; the renderer gets `ICO_ONEPASS_BLOCK`,
+`ICO_ONEPASS_MARK` and `ICO_ONEPASS_VERSION`. One line where there was a mark: `ico_pc: the
+previous run: one-pass blend: was on when it ended (a crash): off on this install until the
+version changes (blocked <version>)`, `... was refused by its device check (nothing in use: an
+arm's pictures differed, nothing checked, or the device failed): ...`. The cull's, the twins' and
+the fast build's steps read its mark before it is rewritten (a bad end while it said `trying` is
+its own: `...: the one-pass blend was being tried then (its mark): tried again` on their lines),
+and its step takes their stages as their steps read them (`fastps_mark_stage_read` the fast
+build's). The crash report's zip takes the file with the other marks.
 
 Each mark blocks only its own subject (`vu_zero_mark_blocks_beside`): the cull's step reads both
 marks before either is rewritten, so a bad end while the other attempt's mark said `trying` is that

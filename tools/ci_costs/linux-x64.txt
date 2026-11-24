@@ -268,6 +268,7 @@ no_shadows_disc_ntsc 0.00
 nodiscard_mark 0.02  # estimate: a CPU unit test with a few files, like vu_zero_mark (not run here)
 null_devices 0.01
 offset_audit 87.08
+onepass_mark 0.02  # estimate: a CPU unit test with a few files, like fastps_mark (not run here)
 options 0.14
 options_aug6 0.27
 options_cn 0.27
@@ -633,6 +634,8 @@ rd_nodiscard_ab_gl 72.10  # estimate: the round-1 estimate x 2 (four fixtures to
 rd_nodiscard_clean 41.74  # estimate: rd_nodiscard_ab (the same runs, the verdict taken as clean; not run here)
 rd_noplanes_ab 11.63
 rd_occlusion_tool 7.81
+rd_onepass 0.10  # estimate: rd_fastps x 10 (a CPU unit test whose blender table is 562,432 cases; not run here)
+rd_onepass_ab 36.63  # estimate: rd_fastps_ab x 0.68 (two fixtures under two settings, three runs each; not run here)
 rd_pace_gpu 0.02
 rd_pace_screen 0.34
 rd_pass_area_ab 280.91
@@ -946,6 +949,12 @@ rd_vuprepass_selftest_nodiscard_unchecked 5.67  # estimate: rd_vuprepass_selftes
 rd_vuprepass_selftest_nostores_fallback 1.93
 rd_vuprepass_selftest_off 0.36
 rd_vuprepass_selftest_off_gl 1.16
+rd_vuprepass_selftest_onepass 9.77  # estimate: rd_vuprepass_selftest_fastps x 1.5 (the fast build's self-test before it plus about 250 small replays of the check; not run here)
+rd_vuprepass_selftest_onepass_cut 9.77  # estimate: rd_vuprepass_selftest_onepass (not run here)
+rd_vuprepass_selftest_onepass_dynamic 9.77  # estimate: rd_vuprepass_selftest_onepass (the same check with dynamic blend state; not run here)
+rd_vuprepass_selftest_onepass_marked 6.51  # estimate: rd_vuprepass_selftest_fastps (the check not run; not run here)
+rd_vuprepass_selftest_onepass_sabotage 9.77  # estimate: rd_vuprepass_selftest_onepass (every frame drawn, no control replays; not run here)
+rd_vuprepass_selftest_onepass_unchecked 11.72  # estimate: rd_vuprepass_selftest_fastps x 1.8 (every arm replay of the check drawn again after its retry; not run here)
 rd_vuprepass_selftest_plain 2.02
 rd_vuprepass_selftest_plain_gl 3.01
 rd_vuprepass_selftest_sabotage 4.62

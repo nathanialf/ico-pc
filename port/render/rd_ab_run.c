@@ -12,6 +12,7 @@
 #include "rd_fastps.h"
 #include "rd_internal.h"
 #include "rd_nodiscard.h"
+#include "rd_onepass.h"
 #include "rd_perf_clock.h"
 #include "rd_vu_zero.h"
 
@@ -44,11 +45,12 @@ static const struct {
     {"discard-free twins", ICO_ATT_AB_NODISCARD, rd__nd_triable},          /* RD_AB_NODISCARD */
     {"fast pixel build", ICO_ATT_AB_FASTPS, rd__fps_triable},              /* RD_AB_FASTPS */
     {"discard-free twins, camera rule", ICO_ATT_AB_ND_CAMERA, camTriable}, /* RD_AB_ND_CAMERA */
+    {"one-pass blend", ICO_ATT_AB_ONEPASS, rd__op_triable},                /* RD_AB_ONEPASS */
 };
 
 #define N_SUBJ ((int)(sizeof(k_subj) / sizeof(k_subj[0])))
 _Static_assert(sizeof(k_subj) / sizeof(k_subj[0]) <= RD_AB_SUBJECTS, "the judge's registry");
-_Static_assert(RD_AB_ND_CAMERA == 3, "the rows' order is the subjects' ids");
+_Static_assert(RD_AB_ND_CAMERA == 3 && RD_AB_ONEPASS == 4, "the rows' order is the subjects' ids");
 /* each subject's ledger row: what was fired into it so far */
 static int s_ledAllowed[RD_AB_SUBJECTS], s_ledStopped[RD_AB_SUBJECTS];
 static uint32_t s_ledOn[RD_AB_SUBJECTS], s_ledOff[RD_AB_SUBJECTS], s_ledTrials[RD_AB_SUBJECTS];

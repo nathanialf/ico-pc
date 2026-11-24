@@ -11,6 +11,7 @@
 #include "../core/region.h" /* ico_region: the June 2001 demo draws its own VU programs */
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_onepass.h" /* the one-pass blend (issue 179) */
 #include "rd_passring.h"
 #include "rd_perf_hooks.h"
 #include "rd_plain_camera.h"
@@ -1251,6 +1252,12 @@ static int vuFuseVerdict(const Replay *r, const RdStateBlock *fan, const DrawSet
        vu_common.hlsli vu_dual_out_f's fused argument */
     RdDrawPass joined;
     const bool split = vuNoDualJoin(cut, nc, &joined);
+    if (split && rd__op_unfuse(cut, nc, kick, nk, s_vuAlpha.hi)) {
+        /* the one-pass blend (rd_onepass.h): the cut's pair in one pass, so
+           not fused: the cut once and the kick once, each under its own
+           state (the draws the fusion stands for) */
+        return RD_VU_FUSE_PASSES;
+    }
     if ((!split && nc != 1) || nk != 1) {
         return RD_VU_FUSE_PASSES;
     }
@@ -1348,7 +1355,13 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     }
     const uint64_t ua = rhi_limits()->uniformAlign;
     RdDrawPass dp[8];
-    const int np = vuPlan(r, s, ds, prog, vs, vcb, dp);
+    int np = vuPlan(r, s, ds, prog, vs, vcb, dp);
+    if (!g_rdSkinArm && !g_rdSkinTwin) {
+        /* the one-pass blend (rd_onepass.h): a proven pair whose class is in
+           use and whose pipeline is made drawn in one pass; not the skin
+           check's draws (their twins read keys[0]) */
+        rd__op_take(dp, &np, s_vuAlpha.hi, vcb->draw[2], count);
+    }
     rd__perf_vu_draw(np == 2 && rd__no_dual_second(dp, 1),
                      np == 1 && (dp[0].flags & ICO_DF_NODUAL_FACTOR) != 0, count / 3u, np);
     for (int i = 0; i < np; i++) {
@@ -2252,6 +2265,7 @@ void rd__vu_prepass(const RdFrame *f, int keep)
     vuVelBegin();           /* the velocity pass's replay (rd_velocity.h) */
     rd__nd_replay_begin();  /* the discard-free twins' picture count (rd_nodiscard.h) */
     rd__fps_replay_begin(); /* the fast pixel build's (rd_fastps.h) */
+    rd__op_replay_begin();  /* the one-pass blend's (rd_onepass.h) */
     if (!g_rd.vuPrepass) {
         return;
     }
@@ -4111,6 +4125,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
     rd__vu_zero_init();      /* the zero-area cull's state (rd_vu_zero.h) */
     rd__nd_init();           /* the discard-free twins' (rd_nodiscard.h) */
     rd__fps_init();          /* the fast pixel build's (rd_fastps.h) */
+    rd__op_init();           /* the one-pass blend's (rd_onepass.h) */
     rd__ab_renderer();       /* the in-play judge: a renderer made again forgets (rd_ab_run.h) */
     const char *env = getenv("ICO_RD_VU_PREPASS");
     const uint32_t bytes = lim ? lim->colorBytesPerPixel : 0u;
@@ -4423,6 +4438,7 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     /* the fused pair: the kicks under the cut's state, their pixels
      * unblended (vuFuseVerdict) */
     const int fuse = vuFuseVerdict(r, &fan, &ds, p.prog, vs, progVs, &vcb);
+    rd__op_cut_fused(fuse == VU_FUSE_YES); /* its cut draws' class (rd_onepass.h) */
     if (fuse == VU_FUSE_YES) {
         kick.draw[2] |= ICO_VU_FUSED;
     }

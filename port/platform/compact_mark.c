@@ -144,6 +144,7 @@ int compact_mark_step(const char *activityPath, const char *version, int exitRea
         {"nodiscard-mark.txt", "the discard-free twins were"},
         {"fastps-mark.txt", "the fast pixel build was"},
         {"leanvs-mark.txt", "the lean vertex outputs were"},
+        {"onepass-mark.txt", "the one-pass blend was"},
     };
 
     int beside = VU_ZERO_STAGE_NONE;

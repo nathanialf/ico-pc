@@ -29,6 +29,7 @@ target_sources(ico_platform PRIVATE
     nodiscard_mark.c
     fastps_mark.c
     compact_mark.c
+    onepass_mark.c
     ratecard_env.c
     ahead_mark.c
     log_cost.c
@@ -469,6 +470,23 @@ if(ICO_RUN_TESTS)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/compact_mark_test_files")
     add_test(NAME compact_mark COMMAND compact_mark_test
                                        "${CMAKE_CURRENT_BINARY_DIR}/compact_mark_test_files")
+endif()
+
+# The one-pass blend's mark on the install (onepass_mark.c, issue 179): the
+# zero-area cull's stages and table with its own file and words, every stage
+# at a crash (blocked for that version, the next one tries again), a close
+# from the recent apps while counting (not blocked), a device loss while
+# counting (blocked), an end while another attempt's mark said trying
+# (theirs), and the start's step on files after the other three marks' (an
+# end while it was trying its own, theirs not blocked)
+add_executable(onepass_mark_test test/onepass_mark_test.c)
+target_compile_options(onepass_mark_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(onepass_mark_test PRIVATE ico_platform ico_host_fs ico_miniz)
+if(ICO_RUN_TESTS)
+    # a folder of its own: last-run-previous.txt is written by every mark test
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/onepass_mark_test_files")
+    add_test(NAME onepass_mark COMMAND onepass_mark_test
+                                       "${CMAKE_CURRENT_BINARY_DIR}/onepass_mark_test_files")
 endif()
 
 # The next picture submitted ahead, its mark on the install (ahead_mark.c,

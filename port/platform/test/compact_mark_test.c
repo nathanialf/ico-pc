@@ -251,6 +251,16 @@ static void step(const char *dir)
     CHECK(compact_mark_step(act, "v0.11.16", -1, 0, logLine) == 0);
     CHECK(strstr(s_lines, "the lean vertex outputs were being tried then (their mark)") != NULL);
     (void)ico_remove(lv);
+    /* the one-pass blend's (its check runs after this one's test) */
+    char op[1024];
+    snprintf(op, sizeof op, "%s/onepass-mark.txt", dir);
+    writeText(op, "trying v0.11.16\n");
+    writeText(mark, "on v0.11.16\n");
+    s_lines[0] = '\0';
+    CHECK(compact_mark_step(act, "v0.11.16", -1, 0, logLine) == 0);
+    CHECK(strstr(s_lines, "the one-pass blend was being tried then (its mark): tried again") !=
+          NULL);
+    (void)ico_remove(op);
     writeText(rc, "measuring 2026-11-24 10:00\nkey Mali-G52 | 688x512 | v0.11.16\n");
     writeText(mark, "on v0.11.16\n");
     s_lines[0] = '\0';

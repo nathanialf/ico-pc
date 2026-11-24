@@ -5,6 +5,7 @@
 
 #include "rd_internal.h"  /* RD_FS_VU */
 #include "rd_nodiscard.h" /* RD_NODUAL_ON */
+#include "rd_onepass.h"   /* RD_NODUAL_ONEPASS */
 #include "shader_consts.h"
 
 int rd_fps_eligible(const RdFpsPass *p)
@@ -14,8 +15,10 @@ int rd_fps_eligible(const RdFpsPass *p)
        vu_ps_nodual_fast_nd); not a fast key already, nor vu_texa_ps, the
        planes' twins, a destination read or a device with dual-source
        blending (nodual 0) */
-    if (p->fs != RD_FS_VU ||
-        (p->nodual != RD_NODUAL_ON && p->nodual != (RD_NODUAL_ON | RD_NODUAL_NODISCARD)) ||
+    /* the one-pass blend's bit (rd_onepass.h) changes the blend state alone:
+       its colour pass takes the build as the two-pass colour pass does */
+    const uint8_t nd = (uint8_t)(p->nodual & ~RD_NODUAL_ONEPASS);
+    if (p->fs != RD_FS_VU || (nd != RD_NODUAL_ON && nd != (RD_NODUAL_ON | RD_NODUAL_NODISCARD)) ||
         p->dst != RHI_DST_READ_NONE) {
         return -1;
     }

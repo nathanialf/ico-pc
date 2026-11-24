@@ -91,6 +91,14 @@ void fastps_mark_decide_beside(const char *mark, int endKind, const char *endWor
     }
 }
 
+/* the build's stage as the last step read it (onepass_mark.c judges by it) */
+static int s_stageRead = VU_ZERO_STAGE_NONE;
+
+int fastps_mark_stage_read(void)
+{
+    return s_stageRead;
+}
+
 static void exportEnv(const char *name, const char *value)
 {
 #ifdef _WIN32
@@ -155,9 +163,21 @@ int fastps_mark_step(const char *activityPath, const char *version, int exitReas
     if (beside != VU_ZERO_STAGE_TRYING && nodiscard_mark_stage_read() == VU_ZERO_STAGE_TRYING) {
         beside = VU_ZERO_STAGE_TRYING;
         vu_zero_mark_beside_words("the discard-free twins were");
+    } else if (beside != VU_ZERO_STAGE_TRYING &&
+               vu_zero_mark_stage_beside(activityPath, "onepass-mark.txt") ==
+                   VU_ZERO_STAGE_TRYING) {
+        /* the one-pass blend's, read before its step rewrites it
+           (onepass_mark.h) */
+        beside = VU_ZERO_STAGE_TRYING;
+        vu_zero_mark_beside_words("the one-pass blend was");
     } else if (beside != VU_ZERO_STAGE_TRYING && vu_zero_mark_ratecard_measuring(activityPath)) {
         beside = VU_ZERO_STAGE_TRYING; /* the rate card's end (REV4R N3) */
         vu_zero_mark_beside_words("the rate card was");
+    }
+    {
+        char mver[64];
+        s_stageRead =
+            mark[0] != '\0' ? vu_zero_mark_parse(mark, mver, sizeof mver) : VU_ZERO_STAGE_NONE;
     }
     fastps_mark_decide_beside(mark, kind, words, version, beside, out, sizeof out, line,
                               sizeof line, &block);

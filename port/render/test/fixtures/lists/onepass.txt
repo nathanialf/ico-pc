@@ -1,0 +1,12 @@
+# Fixtures for rd_onepass_ab (port/render/test/rd_onepass_ab.cmake: the one-pass
+# blend's pairs in one pass, both classes, against every pair in two passes, byte
+# for byte): fixture names of this repository (port/render/test/fixtures/NAME.rdfix),
+# a name a line.
+#
+# issue 179's Mali-G52 frame and slow-scene capture with every VU texture
+# date_split (vu_alpha_half.rules.txt, the draw pattern gate's): the LERP As VU
+# draws' alpha proven at most 128, so their pairs, code 36's cut and kick pairs
+# drawn apart among them, go to one pass (the default rules' alpha_ramp textures
+# prove nothing)
+fx-pattern-mali-frame
+fx-pattern-mali-slow541

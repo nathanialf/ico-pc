@@ -30,9 +30,11 @@ static int fails;
 static const char kExitInfo[] = "ico-pc exit info: read at the start of 2026-11-16 20:56:01 UTC\n"
                                 "the previous run ended: it was killed (signal 9, SIGKILL) ...\n";
 static const char kTrace[] = "\x08\x01\x12\x04tomb"; /* a tombstone's protobuf bytes */
-/* two of issue 179's marks on the install (vu_zero_mark.h, ahead_mark.h) */
+/* three of issue 179's marks on the install (vu_zero_mark.h, ahead_mark.h,
+   onepass_mark.h) */
 static const char kZeroMark[] = "ico-pc vu-zero mark: stage on\n";
 static const char kAheadMark[] = "ico-pc ahead mark: on\n";
+static const char kOnepassMark[] = "counting v0.11.16\n";
 static const char kVerdict[] = "the previous run ended: it was killed (signal 9, SIGKILL) (...)";
 
 #define CHECK(cond)                                                                                \
@@ -133,6 +135,9 @@ int main(int argc, char **argv)
         (void)ico_remove(p);
         snprintf(p, sizeof p, "%s/fastps-mark.txt", dir);
         (void)ico_remove(p);
+        /* the one-pass blend's (onepass_mark.h): there, so in the zip */
+        snprintf(p, sizeof p, "%s/onepass-mark.txt", dir);
+        CHECK(put(p, kOnepassMark, sizeof kOnepassMark - 1) == 0);
     }
     ico_report_set_exit_info(kVerdict, "exit-trace-1794862215000.pb");
 
@@ -190,6 +195,8 @@ int main(int argc, char **argv)
                     &st));
         CHECK(mz_zip_reader_locate_file(&z, "nodiscard-mark.txt", NULL, 0) < 0);
         CHECK(mz_zip_reader_locate_file(&z, "fastps-mark.txt", NULL, 0) < 0);
+        CHECK(entry(&z, "onepass-mark.txt", (const unsigned char *)kOnepassMark,
+                    sizeof kOnepassMark - 1, &st));
     }
     {
         /* the verdict in report.txt's head, after the memory line */
@@ -222,6 +229,8 @@ int main(int argc, char **argv)
         snprintf(p, sizeof p, "%s/vu-zero-mark.txt", dir);
         (void)ico_remove(p);
         snprintf(p, sizeof p, "%s/ahead-mark.txt", dir);
+        (void)ico_remove(p);
+        snprintf(p, sizeof p, "%s/onepass-mark.txt", dir);
         (void)ico_remove(p);
         /* the trace stays on disc: the report takes it only when named */
     }

@@ -191,6 +191,13 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   `ICO_FASTPS_MARK`, `ICO_FASTPS_VERSION`, `ICO_FASTPS_BLOCK` exported; then the three steps in the
   start's order after a crash: the build trying and the cull and the twins counting blocks the
   build only (their lines name it), the twins trying and the build on the twins only. CPU only.
+- `onepass_mark_test.c` (`onepass_mark`): the one-pass blend's mark on the install
+  (`port/platform/onepass_mark.c`, the cull's stages and table with its own file and words): every
+  stage at a crash (blocked for that version, the next one tries again), a close from the recent
+  apps while counting and a device loss while counting, an end while another attempt's mark said
+  trying (theirs), and the start's step on files after the other three marks' (a crash while it was
+  trying: it blocked, the cull, the twins and the fast build not; a crash while the fast build was
+  trying: the build blocked, it not).
 - `nodiscard_mark_test.c` (`nodiscard_mark`): the discard-free twins' mark on the install
   (`port/platform/nodiscard_mark.c`, the cull's stages and table with its own file and words):
   every stage at a crash blocked for the version in the mark and tried again by the next version,

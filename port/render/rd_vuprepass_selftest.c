@@ -124,6 +124,7 @@
 #include "rd_vu_skin_check.h"
 #include "rd_fastps.h"
 #include "rd_nodiscard.h"
+#include "rd_onepass.h" /* the one-pass blend's check, after the fast build's */
 #include "rd_vu_zero.h"
 #include "rd_velocity.h"
 #include "shader_consts.h" /* ICO_VU_REC_W */
@@ -836,6 +837,9 @@ bool rd_vuprepass_selftest(void)
         rd__vu_zero_selftest_skip("the VU pre-pass is off"); /* rd_vu_zero.h */
         rd__nd_selftest_skip("the VU pre-pass is off");      /* rd_nodiscard.h */
         rd__fps_selftest_skip("the VU pre-pass is off");     /* rd_fastps.h */
+        /* the one-pass blend's check (rd_onepass.h): its frames drawn
+           through the programs' own entries, as play draws them here */
+        rd__op_selftest(rd__target_rec(rd_target(RD_TARGET_SCENE).id));
         rd__vu_zero_start_line();
         return true;
     }
@@ -847,6 +851,7 @@ bool rd_vuprepass_selftest(void)
         rd__vu_zero_selftest_skip("no SCENE target to run it on");
         rd__nd_selftest_skip("no SCENE target to run it on");
         rd__fps_selftest_skip("no SCENE target to run it on");
+        rd__op_selftest_skip("no SCENE target to run it on");
         rd__vu_zero_start_line();
         return true;
     }
@@ -949,6 +954,9 @@ bool rd_vuprepass_selftest(void)
         rd__nd_selftest_skip("the VU pre-pass failed its self-test");
         rd__fps_selftest_skip("the VU pre-pass failed its self-test");
     }
+    /* the one-pass blend's check (rd_onepass_selftest.c), with the pre-pass,
+       the twins and the fast build as play will have them */
+    rd__op_selftest(t);
     /* its state and the modules of it made, then the in-play judge's line,
        which knows both attempts' states */
     rd__vu_zero_start_line();
