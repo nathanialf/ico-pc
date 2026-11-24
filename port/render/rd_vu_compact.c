@@ -334,19 +334,20 @@ static int dxtDefault(void)
 /* ------------------------------------------------------------ the state */
 
 static struct {
-    bool plane;       /* the record's fourth plane (from init; dropped with a verdict of off) */
-    int cls;          /* ICO_ATT_CMP_*: the device's class */
-    uint32_t vendor;  /* RhiLimits.vendorId, for the line */
-    char name[96];    /* the Vulkan device name, for the line */
-    bool armByTests;  /* ICO_RD_VU_COMPACT_ARM=1: the Mali-G52's class on this device */
-    bool on;          /* to be tried at the start (the keep stage made) */
-    bool runs;        /* the decider's verdict (on outside the self-test's replays) */
-    bool refused;     /* the self-test refused it for the run */
-    int env;          /* ICO_RD_VU_COMPACT */
-    int selftest;     /* ICO_ATT_CMP_ST_*: -1 not run, 0 refused, 1 passed, ... */
-    bool sabotage;    /* ICO_RD_VU_COMPACT_SABOTAGE=1: every triangle a filler */
-    bool sabLists;    /* =lists: the CPU's lists not written (the Mali-G52's form) */
-    bool sabReadback; /* =readback: one filler read back as its corner 0 */
+    bool plane;        /* the record's fourth plane (from init; dropped with a verdict of off) */
+    int cls;           /* ICO_ATT_CMP_*: the device's class */
+    uint32_t vendor;   /* RhiLimits.vendorId, for the line */
+    char name[96];     /* the Vulkan device name, for the line */
+    bool armByTests;   /* ICO_RD_VU_COMPACT_ARM=1: the Mali-G52's class on this device */
+    bool on;           /* to be tried at the start (the keep stage made) */
+    bool runs;         /* the decider's verdict (on outside the self-test's replays) */
+    bool refused;      /* the self-test refused it for the run */
+    int env;           /* ICO_RD_VU_COMPACT */
+    int selftest;      /* ICO_ATT_CMP_ST_*: -1 not run, 0 refused, 1 passed, ... */
+    bool sabotage;     /* ICO_RD_VU_COMPACT_SABOTAGE=1: every triangle a filler */
+    bool sabLists;     /* =lists: the CPU's lists not written (the Mali-G52's form) */
+    bool sabReadback;  /* =readback: one filler read back as its corner 0 */
+    bool sabUnchecked; /* =unchecked: its own test's lists never copied back */
     bool far; /* the self-test's lists from the plane's middle (rd__vu_compact_selftest_far) */
     uint32_t farAt; /* the value they began at (0 none) */
     /* the Mali-G52's form: the CPU writes the lists first */
@@ -517,15 +518,18 @@ void rd__vu_compact_init(const RhiLimits *lim)
         const bool any = sb != NULL && sb[0] != '\0' && sb[0] != '0';
         s_cmp.sabLists = any && strcmp(sb, "lists") == 0;
         s_cmp.sabReadback = any && strcmp(sb, "readback") == 0;
-        s_cmp.sabotage = any && !s_cmp.sabLists && !s_cmp.sabReadback;
+        s_cmp.sabUnchecked = any && strcmp(sb, "unchecked") == 0;
+        s_cmp.sabotage = any && !s_cmp.sabLists && !s_cmp.sabReadback && !s_cmp.sabUnchecked;
         if (any) {
             rd__log("VU index compaction: ICO_RD_VU_COMPACT_SABOTAGE: %s",
                     s_cmp.sabLists ? "the lists the CPU writes first written one triangle off (the "
                                      "Mali-G52's form: its own test must refuse it)"
-                    : s_cmp.sabReadback ? "one filler of its own test's lists read back as its "
-                                          "corner 0 (the test must refuse it)"
-                                        : "every triangle written as a filler (the self-test "
-                                          "must refuse it)");
+                    : s_cmp.sabReadback  ? "one filler of its own test's lists read back as its "
+                                           "corner 0 (the test must refuse it)"
+                    : s_cmp.sabUnchecked ? "its own test's lists never copied back (the test "
+                                           "must say not checked)"
+                                         : "every triangle written as a filler (the self-test "
+                                           "must refuse it)");
         }
     }
     /* the install's mark (port/platform/compact_mark.h): its file, the
@@ -1099,6 +1103,9 @@ void rd__vu_compact_check_copy(RhiCommandList cl, RhiBuffer rec, uint32_t head, 
     for (uint32_t i = 0; i < p->calls; i++) {
         o->calls[i] = s_cmp.calls[i];
         o->src[i] = s_cmp.srcs[i];
+    }
+    if (s_cmp.sabUnchecked) {
+        return; /* the tests': nothing copied, the check cannot judge */
     }
     rhi_cmd_copy_buffer(cl, rec, ((uint64_t)head + o->from) * 4u, o->rb, 0, bytes);
     o->copied = true;

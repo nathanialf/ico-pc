@@ -288,10 +288,17 @@ static bool checkLists(RdVuCmpCheck *r, char *where, size_t whereSize, char *unc
     bool ok = true;
     for (int k = 0; k < CT_REPLAYS; k++) {
         const RdVuCmpOwnCopy *o = rd__vu_cmp_own_copy(k);
-        if (o == NULL || !o->copied || o->n != RD_VU_CMP_OWN_DRAWS || !o->rb.id) {
+        if (o == NULL || o->n != RD_VU_CMP_OWN_DRAWS) {
             snprintf(unchecked, uncheckedSize,
-                     "pass K did not run whole in replay %d of %d (%u draws planned of %u)", k + 1,
-                     CT_REPLAYS, o != NULL ? o->n : 0u, RD_VU_CMP_OWN_DRAWS);
+                     "pass K planned %u of its %u draws in replay %d of %d", o != NULL ? o->n : 0u,
+                     RD_VU_CMP_OWN_DRAWS, k + 1, CT_REPLAYS);
+            return false;
+        }
+        if (!o->copied || !o->rb.id) {
+            snprintf(unchecked, uncheckedSize,
+                     "replay %d of %d's lists were not copied back (a command not dispatched, or "
+                     "no buffer for the copy)",
+                     k + 1, CT_REPLAYS);
             return false;
         }
         uint32_t *m = rhi_map_buffer(o->rb);
@@ -438,17 +445,22 @@ void rd__vu_compact_own_selftest(RdTargetRec *t)
         rd__vu_cmp_own_hold(false);
         g_rd.msaaBlocked = wasBlocked;
         rhi_wait_idle();
+        /* the eight pictures read back one a frame of their own: a frame
+           holds at most 8 command lists (VKR_MAX_CMD_LISTS), and each read
+           takes one; the GPU is idle, so a new frame waits for nothing */
         bool okRead = okWith && !rhi_device_lost();
         for (int k = 0; k < CT_REFS + CT_REPLAYS && okRead; k++) {
-            okRead = rd__read_rhi_texture(s_ct.read[k], &s_ct.state[k], s_ct.rect.w, s_ct.rect.h,
+            okRead = rd__begin_own_frame(64u * 1024u) &&
+                     rd__read_rhi_texture(s_ct.read[k], &s_ct.state[k], s_ct.rect.w, s_ct.rect.h,
                                           px + (size_t)k * size, size);
         }
-        okRead = okRead && !rhi_device_lost();
         char where[256] = "";
-        if (!okRef || !okWith || !okRead) {
+        if (!okRef || !okWith || rhi_device_lost()) {
             result = 0;
             snprintf(why, sizeof why, "the device failed in its replays %s it",
                      !okRef ? "without" : "with");
+        } else if (!okRead) {
+            snprintf(unchecked, sizeof unchecked, "its pictures could not be read back");
         } else if (fallbacks != 0u) {
             snprintf(unchecked, sizeof unchecked,
                      "%u draws of its replays took the old way (not through the record)",

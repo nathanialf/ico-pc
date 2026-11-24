@@ -914,6 +914,7 @@ rd_vuprepass_selftest_compact_mali_lists 6.00  # estimate: rd_vuprepass_selftest
 rd_vuprepass_selftest_compact_mali_marked 2.50  # estimate: the record's self-test alone, like rd_vuprepass_selftest_compact_mali before its own test (not run here)
 rd_vuprepass_selftest_compact_mali_readback 6.00  # estimate: as rd_vuprepass_selftest_compact_mali_lists (not run here)
 rd_vuprepass_selftest_compact_mali_stamps 6.00  # estimate: as rd_vuprepass_selftest_compact_mali_lists (not run here)
+rd_vuprepass_selftest_compact_mali_unchecked 6.00  # estimate: as rd_vuprepass_selftest_compact_mali_lists (not run here)
 rd_vuprepass_selftest_compact_refused 3.92
 rd_vuprepass_selftest_compact_stamps 2.99
 rd_vuprepass_selftest_compact_stores 2.07

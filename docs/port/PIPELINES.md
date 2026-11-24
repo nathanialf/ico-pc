@@ -2251,9 +2251,9 @@ the install after a bad end while it was tried or on; the step runs before the o
 marks and reads theirs as the previous run left them (an end while one of them was trying is
 theirs). The loss ladder's start without the pre-pass leaves it off too. Tests' words:
 `ICO_RD_VU_COMPACT_SABOTAGE=lists` (the CPU's lists written one triangle off) and `=readback` (one filler of
-the test's read-back taken back to its corner 0); `ICO_COMPACT_BLOCK` as the mark exports it. Not
-judged in play by the A/B judge: its five subjects are taken, and the subject would have to swap
-the plan and the CPU's lists per picture.
+the test's read-back taken back to its corner 0); `ICO_COMPACT_BLOCK` as the mark exports it. `=unchecked` (its
+lists never copied back: not checked). Not judged in play by the A/B judge: a subject would have
+to swap the plan, the CPU's lists and the record's memory between pictures.
 
 #### The record stores' restart rung
 

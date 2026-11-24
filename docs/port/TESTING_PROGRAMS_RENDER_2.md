@@ -315,7 +315,9 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `_compact_mali_readback` (`=readback`: one filler of the read-back taken back to its corner 0;
   refused, 1 mixed and 1 filler write missing in replay 1's draw past the edge at triangle 0, the
   third cause named), `_compact_mali_stamps` (`ICO_RD_HEALTH_FAKE=selftest`: refused by the stamps
-  with the lists and the pictures right), `_compact_mali_marked` (`ICO_COMPACT_BLOCK`: off on this
+  with the lists and the pictures right), `_compact_mali_unchecked` (`=unchecked`: its lists never
+  copied back; not checked, off for the run, the ledger's "could not check it", the mark removed),
+  `_compact_mali_marked` (`ICO_COMPACT_BLOCK`: off on this
   install with the mark's words, no own test, no copy).
 - `rd_health.cmake`'s self-test row (`rd_vuprepass_selftest_compact_stamps`; lavapipe): with
   `ICO_RD_HEALTH_FAKE=selftest` every record collected inside the compaction's run reads as a hang,
