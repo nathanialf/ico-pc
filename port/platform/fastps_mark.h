@@ -55,6 +55,9 @@ void fastps_mark_decide_beside(const char *mark, int endKind, const char *endWor
                                const char *version, int cullStage, char *out, size_t outSize,
                                char *line, size_t lineSize, int *block);
 
+/* the build's stage as the last step read it (onepass_mark.c judges by it) */
+int fastps_mark_stage_read(void);
+
 /* The start's step on files with Android's record given (the tests): reads
    the mark beside activityPath and the previous run's last-run-previous.txt,
    writes the decision (synced), exports the environment, logs one line

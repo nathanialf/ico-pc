@@ -272,6 +272,7 @@ no_shadows_disc_ntsc 0.00
 nodiscard_mark 0.02  # estimate: a CPU unit test with a few files, like vu_zero_mark (not run here)
 null_devices 0.00
 offset_audit 100.67
+onepass_mark 0.02  # estimate: a CPU unit test with a few files, like fastps_mark (not run here)
 options 0.18
 options_aug6 0.09
 options_cn 0.10
@@ -637,6 +638,8 @@ rd_nodiscard_ab_gl 46.60  # estimate: the round-1 estimate x 2 (four fixtures to
 rd_nodiscard_clean 42.70  # estimate: rd_nodiscard_ab (the same runs, the verdict taken as clean; not run here)
 rd_noplanes_ab 14.46
 rd_occlusion_tool 7.36
+rd_onepass 0.10  # estimate: rd_fastps x 10 (a CPU unit test whose blender table is 562,432 cases; not run here)
+rd_onepass_ab 37.47  # estimate: rd_fastps_ab x 0.68 (two fixtures under two settings, three runs each; not run here)
 rd_pace_gpu 0.02
 rd_pace_screen 0.21
 rd_pass_area_ab 316.37
@@ -945,6 +948,12 @@ rd_vuprepass_selftest_nodiscard_unchecked 6.76  # estimate: rd_vuprepass_selftes
 rd_vuprepass_selftest_nostores_fallback 1.61
 rd_vuprepass_selftest_off 0.35
 rd_vuprepass_selftest_off_gl 0.73
+rd_vuprepass_selftest_onepass 11.65  # estimate: rd_vuprepass_selftest_fastps x 1.5 (the fast build's self-test before it plus about 250 small replays of the check; not run here)
+rd_vuprepass_selftest_onepass_cut 11.65  # estimate: rd_vuprepass_selftest_onepass (not run here)
+rd_vuprepass_selftest_onepass_dynamic 11.65  # estimate: rd_vuprepass_selftest_onepass (the same check with dynamic blend state; not run here)
+rd_vuprepass_selftest_onepass_marked 7.77  # estimate: rd_vuprepass_selftest_fastps (the check not run; not run here)
+rd_vuprepass_selftest_onepass_sabotage 11.65  # estimate: rd_vuprepass_selftest_onepass (every frame drawn, no control replays; not run here)
+rd_vuprepass_selftest_onepass_unchecked 13.99  # estimate: rd_vuprepass_selftest_fastps x 1.8 (every arm replay of the check drawn again after its retry; not run here)
 rd_vuprepass_selftest_plain 1.47
 rd_vuprepass_selftest_plain_gl 3.13
 rd_vuprepass_selftest_sabotage 5.14

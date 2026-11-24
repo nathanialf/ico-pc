@@ -2133,6 +2133,75 @@ twins are and kept only where it is faster. `port/render/rd_fastps.h` says it al
   it needs a key field and a dual-source self-test; one more SPIR-V, DXIL and GLSL entry. Left for a
   later release.
 
+#### The one-pass blend
+
+On a device without dual-source blending a (Cs - Cd) As + Cd VU draw whose mask has RGB and A is
+two passes ([RENDER.md](RENDER.md#destination-reads-and-blend-paths), `rd_pipeline.c` `rd__expand_no_dual`): a colour pass
+whose c0.a is the factor As/128, then an alpha pass writing As/255 with blending off. Issue 179's
+Mali-G52 draws most of its scenery that way: in the cage scene 31k of 46k triangles twice. The
+one-pass blend draws a proven pair once. `port/render/rd_onepass.h` says it all.
+
+- **The form:** the colour pass also writes A, its alpha blended as c0.a times the blend constant's
+  alpha 128/255 and nothing of Ad (`blendState`: `srcAlpha = RHI_BF_CONSTANT`; `rd__op_bind` sets
+  the constant at bind): (As/128) (128/255) = As/255, the alpha pass's byte, for every As 0..128
+  under round-to-nearest at any blender precision of 8 bits or more (`rd_op_alpha_model`, the unit
+  test's table). Vulkan does not pin the blender's rounding (14 of 78 directed-rounding models
+  differ), so the device's own check decides. The key carries it as a fourth bit of
+  `RdPipelineKey.nodual` (`RD_NODUAL_ONEPASS`, with `RD_NODUAL_ON`, composing with the twins'
+  and the fast build's bits; `rd_fps_eligible` takes such a key as the colour pass's own); the
+  same module, the blend state alone differs. Only the taken pair's colour pass changes its key;
+  every other pass, and every pair while nothing is in use, keeps today's key and bytes.
+- **Proven per pair** (`rd_op_why`, `rd_replay_vu.c` `vuDraw` right after the plan): the LERP with
+  the As factor (not FIX), no PABE, no FBA, the alpha plan's largest As at most 128, not Z GREATER
+  with Z write, an RGBA8 UNORM target, no destination read, single-sampled.
+- **Two classes:** the plain class (a draw that is not code 36's) and the cut class (a code 36 cut
+  or kick drawn apart). A fused code 36 pair cannot go to one pass: the kick's pixel carries the
+  factor 1.0 in the one output the blender reads and its stored alpha would need a second value,
+  so no fused one-pass form exists. Where the cut class is in use a code 36 command whose cut pair
+  goes to one pass is not fused (`rd__op_unfuse` in `vuFuseVerdict`): the cut draws once in one
+  pass and the kick under its own state, the draws the fusion stands for. That unfused path is
+  the leading suspect of the stretched triangles the reporter's phone drew when the form was
+  first shipped (its self-test never drew a code 36 pair), so each class is used only where its
+  own arm of the device check passed.
+- **The device check** (`rd_onepass_selftest.c`, after the fast build's self-test, on SCENE with
+  the VU record at the size play makes it at start-up, the twins and the fast build held in their
+  run states so the keys drawn are play's): the twins' clipper check's 13 cases (triangles across
+  and near the eye plane) as frames of their own, each at code 32 and 34 (ABE on), 36 with the
+  state's ABE off (fused where the device fuses: the reporter's pattern), all three untextured and
+  textured (RGBA32, MODULATE, TCC), and 36 with ABE on, every corner's alpha 9 to 124, then a
+  depth probe at GS Z 0 with Z write off. Each frame drawn today (REF) and under the arms that
+  change something on it: A one pass on the plain class; B code 36 unfused with its two passes
+  kept (the suspect alone); C both classes and the unfuse; each compared with REF byte for byte.
+  A positive control (the constant 127/255) must differ where an arm took a pair. Every frame's
+  and arm's pipelines are gathered in one gathering first; a replay that found a pipeline not made
+  is drawn again once the background queue is made, and one still without it compares nothing
+  ("not checked"), never a verdict. In use: the plain class where A passed; the cut class where C,
+  A and B passed (or nothing fused on the device). Only arms not checked: no verdict, the mark
+  removed, the check again at the next start.
+- **Never waited for:** its pipelines go through the twins' background queue: a pair whose
+  one-pass pipeline is not made yet is drawn in two passes, and a code 36 command is unfused only
+  once the cut's one-pass pipeline and the kick's own are made. With the device's dynamic blend
+  state the bit folds into the colour pass's own pipeline (`rd__key_dynamic_normalise`), its blend
+  state and constant set at each bind.
+- **The ways back** (each logged, none in the settings): the check (per arm, above); the install's
+  mark (`logs/onepass-mark.txt`, [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md)): a bad end
+  while it was tried or in use keeps it off until the version changes; the loss ladder; a pipeline
+  of it the background could not make (off for the run); the in-play judge's fifth subject,
+  "one-pass blend" (`RD_AB_ONEPASS`): at its off arm every pair is drawn in two passes and code 36
+  fused as before, kept only where it is faster. A wrong picture in play is not detected: what the
+  check did not draw is not known to be right on the device.
+- **Lines:** a line a case `rd: one-pass blend: the check, case N of 13 (its name) on SCENE ...: 32
+  A P pairs, 0 texels differ; ...; 36 fused F, B unfused U, 0 texels differ, C unfused U, P pairs, 0
+  texels differ; 36t ...; 36a C P pairs, 0 texels differ`, per
+  arm `rd: one-pass blend: the check's arm C (...) over 13 cases: the same bytes (...)`, then
+  `rd: one-pass blend: on (check: in use: ...; arms A the same bytes, B the same bytes, C the same
+  bytes, D none) on SCENE ...`, the start line `rd: one-pass blend: on (...), P of its pipelines
+  alive`, the 10 s VU line's clause `; one-pass blend (both classes): P pairs a picture in one pass
+  (Q of code 36), T triangles, U code 36 commands unfused (R pairs kept two-pass a picture: alpha
+  above 128 a, ..., not made yet u, timed without it t)`, the judge's `A/B: one-pass blend, stage
+  N: ...` and the attempt ledger's row `the one-pass blend timed in play`; `rd_replay_tool
+  --stats`: `stats: one-pass blend on (...): N pairs in one pass of M (K of code 36), ...`.
+
 #### The index compaction
 
 Of list 0's mesh triangles a picture draws, a large share draws nothing: the game's own drops

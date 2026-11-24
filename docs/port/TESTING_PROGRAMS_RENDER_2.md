@@ -582,6 +582,40 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   (`ICO_RD_VU_FASTPS_SABOTAGE=decal`) caught: the pictures differ, off for the run, released, the
   mark `failed`; the install's mark (`ICO_FASTPS_BLOCK`): off, no module made, the mark
   not written.
+- `rd_onepass_test.c` (`rd_onepass`; `rd_onepass.cmake`, CPU): the one-pass blend's pure part
+  and its run's state without a device ([PIPELINES.md](PIPELINES.md#the-one-pass-blend)): the
+  blender model (the carried alpha against the alpha pass's for every As 0..255 at 13 precisions of
+  the source, the constant and the product, rounded to nearest: equal for As 0..128, 128 above; the
+  directed-rounding models that differ printed), the proof on the planner's own pair and each
+  refusal alone (As 129, FBA, PABE, LERP FIX, Cd*FIX + Cs, Z GREATER with Z write, another format, a
+  destination read, two samples, a pass taken already), the classes (a plain draw, a cut and a kick
+  drawn apart, a fused kick, a fused command's cut) and the classes in use from the arms' verdicts
+  (C fails, A passes: A alone; A fails: nothing), the run's choice under `ICO_RD_ONEPASS=full` and
+  `=plain` and under the check's arms (the alpha pass dropped, the passes after it moved down; REF
+  and B take nothing; the unfuse under each arm; without a device the check's pipelines not made,
+  counted for its retry), the fast pixel build taking a one-pass key and the dynamic blend state
+  folding its bit, the ways back (held, `=0`, the loss ladder and the install's mark over `=full`, a
+  background fault kept off for the run), the 10 s clause's and the stats line's words.
+- `rd_onepass_ab.cmake` (`rd_onepass_ab`; `rd_onepass.cmake`): every fixture of
+  `port/render/test/fixtures/lists/onepass.txt` (the Mali-G52's two frames with every VU texture
+  `date_split`) under the Mali fakes with every state in the pipeline keys and with lavapipe's
+  dynamic blend state, every pair in two passes (`ICO_RD_ONEPASS=0`) against both classes in one
+  pass without the check (`=full`): every target byte for byte, the same traffic, pairs in one pass
+  over the list at each setting with code 36's among them (each fixture's counts printed), none on
+  the run without it; a third run with the in-play judge at its off arm on every replay
+  (`ICO_RD_AB=off`): on, no pair in one pass, nothing unfused, every pair the second run took kept
+  as "timed without it" (the judge's way back taken), every target the first run's. No device: SKIP.
+- `rd_vuprepass_selftest_onepass`, `_onepass_dynamic`, `_onepass_sabotage`, `_onepass_cut`,
+  `_onepass_unchecked`, `_onepass_marked` (`rd_onepass.cmake`, through
+  `rd_vuprepass_selftest_test` and `test/rd_vuprepass_selftest.cmake`, the Mali fakes without
+  dual-source blending, the mark in a file of each test's own): the device check with every state
+  in the pipeline keys and with dynamic blend state: a code 32 frame with pairs in one pass under
+  A, a code 36 frame fused today and unfused under B and C with pairs in one pass (the reporter's
+  pattern drawn), every arm measured over the 13 cases (lavapipe's blender decides between "the
+  same bytes" and "differs"), arm D none, the verdict and the mark `counting` or `failed`; the
+  constant 127/255 in A and C caught: nothing in use, the mark `failed`; 127/255 in C alone: the
+  plain class alone in use; every one-pass pipeline not made: A and C not checked, no verdict, the
+  mark removed; the install's mark (`ICO_ONEPASS_BLOCK`): off, no check, the mark not written.
 - `rd_nodiscard_test.c` (`rd_nodiscard`; `rd_nodiscard.cmake`, CPU): the discard-free twins' pure
   part ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)): the eligibility of a VU pass (a vu_ps
   or vu_texa_ps pass through its *_nodual build given its twin; every refusal reason and the order

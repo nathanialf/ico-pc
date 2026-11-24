@@ -3518,6 +3518,7 @@ include(rd_vu_zero.cmake) # the zero-area cull in the pre-pass rule stage (issue
 include(rd_ab.cmake) # the in-play A/B judge of the zero-area cull (issue 179)
 include(rd_nodiscard.cmake) # the discard-free twins (issue 179)
 include(rd_fastps.cmake) # the fast pixel build (issue 179)
+include(rd_onepass.cmake) # the one-pass blend (issue 179)
 include(rd_vu_audit.cmake) # the VU record path's bounds audit (issue 179, tests)
 include(rd_subpass_probe.cmake) # the subpass read's first-start probe
 include(rd_ratecard.cmake) # the rate card: the device's unit costs at start-up (issue 179)

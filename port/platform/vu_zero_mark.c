@@ -418,6 +418,12 @@ int vu_zero_mark_step(const char *activityPath, const char *version, int exitRea
         vu_zero_mark_stage_beside(activityPath, "fastps-mark.txt") == VU_ZERO_STAGE_TRYING) {
         twinStage = VU_ZERO_STAGE_TRYING;
         vu_zero_mark_beside_words("the fast pixel build was");
+    } else if (twinStage != VU_ZERO_STAGE_TRYING &&
+               vu_zero_mark_stage_beside(activityPath, "onepass-mark.txt") ==
+                   VU_ZERO_STAGE_TRYING) {
+        /* the one-pass blend's (onepass_mark.h), read before its step */
+        twinStage = VU_ZERO_STAGE_TRYING;
+        vu_zero_mark_beside_words("the one-pass blend was");
     } else if (twinStage != VU_ZERO_STAGE_TRYING && vu_zero_mark_ratecard_measuring(activityPath)) {
         /* the rate card's measuring (it runs after every attempt's
            self-test): the end is the card's */

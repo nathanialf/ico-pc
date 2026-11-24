@@ -486,6 +486,12 @@ static void test_classes(void)
         CHECK(ico_attempt_state_of(ICO_ATT_AB_ND_CAMERA) == ICO_ATT_NA);
         ico_attempt_decide_timed(ICO_ATT_AB_ND_CAMERA, 0, 1, 0);
         CHECK(ico_attempt_state_of(ICO_ATT_AB_ND_CAMERA) == ICO_ATT_ON);
+        /* the one-pass blend timed in play (rd_ab_run.c), its own row: not
+           applicable where its device check put nothing in use */
+        ico_attempt_decide_timed(ICO_ATT_AB_ONEPASS, 0, 0, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_AB_ONEPASS) == ICO_ATT_NA);
+        ico_attempt_decide_timed(ICO_ATT_AB_ONEPASS, 0, 1, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_AB_ONEPASS) == ICO_ATT_ON);
         /* the whole start line, its last row included, in the window's 4 KB
            parts (window_perf_rank.c ledger_lines, ico_attempt_start_part):
            one part, or two since the v0.11.7 rows, each whole rows */
@@ -1202,6 +1208,15 @@ static void test_timed(void)
     (void)ico_attempt_block_text(b, sizeof b, -1);
     CHECK(text_is(b, "attempts: the discard-free twins' camera rule class timed in play on 1 "
                      "verdicts with them so far (0 without them; 2 trials run)"));
+    /* the one-pass blend's: its own row, its words, the run's totals */
+    ico_attempt_reset();
+    ico_attempt_decide_timed(ICO_ATT_AB_ONEPASS, 0, 1, 0);
+    ico_attempt_fire(ICO_ATT_AB_ONEPASS, 2u);
+    ico_attempt_fire2(ICO_ATT_AB_ONEPASS, 1u);
+    ico_attempt_fire3(ICO_ATT_AB_ONEPASS, 3u);
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: the one-pass blend timed in play on 2 verdicts with it so far (1 "
+                     "without it; 3 trials run)"));
     ico_attempt_reset();
     CHECK(ico_attempt_state_of(ICO_ATT_AB_ZERO) == ICO_ATT_NOT_SET);
 }
