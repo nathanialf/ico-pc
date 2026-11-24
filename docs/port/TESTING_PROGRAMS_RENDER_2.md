@@ -619,7 +619,7 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   least its list line's `clean_min` of that class. No device: SKIP.
 - `rd_vuprepass_selftest_nodiscard`, `_nodiscard_clipper`, `_nodiscard_empty`,
   `_nodiscard_clean`, `_nodiscard_sabotage`, `_nodiscard_marked`, `_nodiscard_dual`,
-  `_nodiscard_fallback` (the clipper check: `_nodiscard` requires that it ran (cases 1 and 13's
+  `_nodiscard_fallback`, `_nodiscard_nodynamic`, `_nodiscard_unchecked` (the clipper check: `_nodiscard` requires that it ran (cases 1 and 13's
   lines, its cost line), no frame undrawn (a frame counts as drawn through either entry), the
   trace (case 1's code 32 draw under the camera rule with a facing table, its code 36 draw the
   scissor), and either well-formed verdict with its consequence in the run's state (`clean`: the
@@ -634,7 +634,17 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   1's line with 1 texel differing at code 32, `not clean (... case 1 differs at 32 ...)`, clip
   mode none alone, the mark `counting`, never `failed`; `_nodiscard_clean` the verdict taken as
   clean, `ICO_RD_VU_NODISCARD_CLIPPER=clean`, logged as the tests' fake: the camera rule's class
-  on, whatever was measured)
+  on, whatever was measured; `_nodiscard_nodynamic` the same check with every state in the
+  pipeline keys, `ICO_VK_FAKE_NO_DYNAMIC=1` (`rd: pipelines: dynamic state: none`, as on every
+  Android GPU): its cost line with above 0 twin pipelines made for it and 0 frames still without
+  one, either measured verdict with its consequence, never `no pipeline of its twin` or `not
+  checked` (the code before the one gathering around all frames said `not clean (case 1 at 36:
+  no pipeline of its twin)` there and had no made count); `_nodiscard_unchecked` the third
+  outcome, `ICO_RD_VU_NODISCARD_SABOTAGE=unmade`: all 52 frames drawn again and still without
+  their twin, each logged `not checked`, case 1's line with 0 through the twins and 0 differing,
+  the verdict `not checked (no pipeline of their twin after a retry: ...)` with clip mode none
+  alone, never `not clean` or `a property of this device`, the camera rule's class off, the mark
+  `counting`)
   (`rd_nodiscard.cmake`, through `rd_vuprepass_selftest_test` and
   `test/rd_vuprepass_selftest.cmake`; the Arm fakes without dual-source blending): the twins'
   start-up self-test after the cull's (the pre-pass still on), each run's start line saying what

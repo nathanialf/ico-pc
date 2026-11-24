@@ -36,7 +36,7 @@
 enum { N_HELD, N_ON, N_OFF };
 
 /* ICO_RD_VU_NODISCARD_SABOTAGE (tests) */
-enum { NS_NONE, NS_ALPHA, NS_MODULE, NS_CLIPPER, NS_EMPTY };
+enum { NS_NONE, NS_ALPHA, NS_MODULE, NS_CLIPPER, NS_EMPTY, NS_UNMADE };
 
 static struct {
     int state;
@@ -190,6 +190,8 @@ void rd__nd_init(void)
         s_n.sabotage = NS_CLIPPER;
     } else if (sb != NULL && strcmp(sb, "empty") == 0) {
         s_n.sabotage = NS_EMPTY;
+    } else if (sb != NULL && strcmp(sb, "unmade") == 0) {
+        s_n.sabotage = NS_UNMADE;
     }
     if (s_n.sabotage != NS_NONE) {
         rd__log("discard-free twins: ICO_RD_VU_NODISCARD_SABOTAGE: %s",
@@ -200,8 +202,11 @@ void rd__nd_init(void)
                 : s_n.sabotage == NS_CLIPPER
                     ? "the clipper check's picture through the twins changed in one byte for "
                       "its first case (the check must say not clean)"
-                    : "the clipper check's first case moved off the frame, so it draws "
-                      "nothing (the check must say not clean: not tested)");
+                : s_n.sabotage == NS_EMPTY
+                    ? "the clipper check's first case moved off the frame, so it draws "
+                      "nothing (the check must say not clean: not tested)"
+                    : "every twin the clipper check's frames ask for taken as not made, after "
+                      "the retry too (the check must say not checked, never not clean)");
     }
     const char *env = getenv("ICO_RD_VU_NODISCARD");
     const char *row = getenv("ICO_LOSS_ROW");
@@ -416,7 +421,9 @@ void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint
     RdPipeKeyInt t = *key;
     t.gs.nodual = (uint8_t)(t.gs.nodual | RD_NODUAL_NODISCARD);
     const RhiPipeline tp = rd__pipeline_twin(&t); /* made, or asked for in the background */
-    const int w = !tp.id || gathering                        ? RD_ND_UNMADE
+    /* (the tests' =unmade: every twin of the clipper check's frames) */
+    const bool unmade = !tp.id || gathering || (s_n.sabotage == NS_UNMADE && s_n.clipCheck);
+    const int w = unmade                                     ? RD_ND_UNMADE
                   : rd__ab_off(RD_AB_NODISCARD) && !s_n.held ? RD_ND_TRIAL
                                                              : RD_ND_TWIN;
     if (!s_n.held) {
@@ -474,6 +481,11 @@ void rd__nd_fault(const char *what)
     char why[384];
     snprintf(why, sizeof(why), "for the run: %.360s", what);
     setRunOff(why);
+    if (s_n.held) {
+        /* inside the self-test (its clipper check makes the twins' queue,
+           rd__pipeline_twin_tick): its hold's end keeps them off */
+        s_n.heldState = N_OFF;
+    }
     rd__log("discard-free twins: off %s (the mark is not changed: a background compile that "
             "failed once is this run's; the next start tests them again)",
             s_n.why);
@@ -578,18 +590,35 @@ void rd__nd_clipper_check(bool on)
     s_n.clipCheck = on;
 }
 
-void rd__nd_clipper_verdict(bool clean, const char *why)
+/* the verdict (RD_ND_CLIP_*) and its words, the tests' fake over it */
+static void clipperSet(int verdict, const char *why)
 {
-    s_n.clipper = clean ? RD_ND_CLIP_CLEAN : RD_ND_CLIP_DIRTY;
+    s_n.clipper = verdict;
     snprintf(s_n.clipWhy, sizeof(s_n.clipWhy), "%s", why != NULL ? why : "");
     if (s_n.clipFake >= 0 && s_n.clipFake != s_n.clipper) {
         char measured[320];
         snprintf(measured, sizeof(measured), "%s", s_n.clipWhy);
         s_n.clipper = s_n.clipFake;
         snprintf(s_n.clipWhy, sizeof(s_n.clipWhy),
-                 "ICO_RD_VU_NODISCARD_CLIPPER; measured %s%s%.200s", clean ? "clean" : "not clean",
+                 "ICO_RD_VU_NODISCARD_CLIPPER; measured %s%s%.200s",
+                 verdict == RD_ND_CLIP_CLEAN   ? "clean"
+                 : verdict == RD_ND_CLIP_DIRTY ? "not clean"
+                                               : "not checked",
                  measured[0] ? ": " : "", measured);
     }
+}
+
+void rd__nd_clipper_verdict(bool clean, const char *why)
+{
+    clipperSet(clean ? RD_ND_CLIP_CLEAN : RD_ND_CLIP_DIRTY, why);
+}
+
+void rd__nd_clipper_unchecked(const char *why)
+{
+    /* nothing measured for a frame: no verdict (the mark's second line is
+       not written for it, rd_nodiscard_run.c writeMark), clip mode none
+       alone, as for not clean */
+    clipperSet(RD_ND_CLIP_UNKNOWN, why);
 }
 
 int rd__nd_clipper(void)

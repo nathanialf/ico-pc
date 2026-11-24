@@ -647,6 +647,30 @@ static size_t appendf(char *out, size_t size, size_t at, const char *fmt, ...)
     return at + (size_t)n < size ? at + (size_t)n : size - 1u;
 }
 
+/* the frames sel names appended after head as " case N at 32, 36t; case M
+   at ..." (the forms of a case together), the new end */
+static size_t appendFrames(char *out, size_t size, size_t at, const char *head, const bool *sel)
+{
+    at = appendf(out, size, at, "%s%s", at ? "; " : "", head);
+    bool any = false;
+    for (int c = 0; c < NC_CASES; c++) {
+        bool named = false;
+        for (int x = 0; x < 4; x++) {
+            if (!sel[c * 4 + x]) {
+                continue;
+            }
+            if (!named) {
+                at = appendf(out, size, at, "%scase %d at %s", any ? "; " : " ", c + 1,
+                             kFormWords[x]);
+            } else {
+                at = appendf(out, size, at, ", %s", kFormWords[x]);
+            }
+            named = any = true;
+        }
+    }
+    return at;
+}
+
 /* ------------------------------------------- the clipper check's trace */
 
 typedef struct NcTrace {
@@ -755,9 +779,15 @@ static bool plainRead(RdFrame *f, RdTargetRec *t, uint8_t *px, size_t size)
    frame's pictures differ by with the twins.  True when every frame drew
    and none differs; else *why names every frame that drew nothing ("not
    tested") and the first that differs.  Only a frame whose case drew
-   counts its passes. */
-static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, RdTex tex, char *why,
-                         size_t whySize, uint64_t *clipDraws)
+   counts its passes.  A frame whose pass finds its twin's pipeline not
+   made is drawn again once the twins' queue is made; still without it the
+   frame compared nothing and counts nothing.  The verdict: RD_ND_CLIP_CLEAN,
+   RD_ND_CLIP_DIRTY (a difference or an undrawn frame measured, the device
+   failing, no pass of the class through a twin) or RD_ND_CLIP_UNKNOWN (only
+   frames that compared nothing besides equal ones, or a twin's pipeline the
+   device could not make: "not checked") */
+static int clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, RdTex tex, char *why,
+                        size_t whySize, uint64_t *clipDraws)
 {
     static const uint8_t kCodes[2] = {32, 36};
     static const RdTex kNone = {0};
@@ -816,22 +846,27 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
                 "untextured or TEXA 7F/81 AEM, then the probe at GS Z 0 with Z write off",
                 t->w, t->h, t->tw, t->th);
     }
-    /* the pipelines first, every frame's, through the twins and not */
+    /* the pipelines first, every frame's, through the twins and not, in ONE
+       gathering around all the frames: rd__pipeline_gather(true) empties
+       the gathered list, so v0.11.15's gathering per frame made only the
+       last frame's keys, and on a device with every state in the pipeline
+       keys (issue 179's Mali-G52) code 36's twins were never made */
+    const uint32_t twins0 = rd__pipeline_count_twins();
     rd__nd_hold(true);
     rd__nd_clipper_check(true);
+    rd__replay_set_window(UINT32_MAX, 0);
+    rd__pipeline_gather(true);
     for (int k = 0; clean && k < NC_FRAMES; k++) {
         RdFrame f;
         if (clipFrame(&f, scene, t->w, t->h, mesh[NC_CASE(k)], kCodes[NC_CODE(k)], probe,
                       NC_TEXA(k) ? tex : kNone, true)) {
-            rd__replay_set_window(UINT32_MAX, 0);
-            rd__pipeline_gather(true);
             replays++;
             (void)rd__replay_frame(&f, 0, false);
-            rd__pipeline_gather(false);
-            rd__replay_set_window(0, 0);
         }
         rd__frame_free(&f);
     }
+    rd__pipeline_gather(false);
+    rd__replay_set_window(0, 0);
     rhi_wait_idle();
     if (clean && !rhi_device_lost()) {
         bool stopped = false;
@@ -883,10 +918,13 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
     memset(drawn, 0, sizeof(drawn));
     memset(differ, 0, sizeof(differ));
     memset(bare, 0, sizeof(bare));
-    bool device = clean, empty = false, differs = false, unmade = false;
+    bool device = clean, empty = false, differs = false, faulted = false;
+    bool unchecked[NC_FRAMES], undrawn[NC_FRAMES];
+    memset(unchecked, 0, sizeof(unchecked));
+    memset(undrawn, 0, sizeof(undrawn));
+    uint32_t retried = 0, nUnchecked = 0; /* frames drawn again; of them still unmade */
     NcTrace tr[2]; /* codes 32 and 36, untextured: the case's draw and the culler */
     memset(tr, 0, sizeof(tr));
-    char unmadeWhy[64] = "";
     for (int k = 0; device && k < NC_FRAMES; k++) {
         RdFrame f;
         if (!clipFrame(&f, scene, t->w, t->h, mesh[NC_CASE(k)], kCodes[NC_CODE(k)], probe,
@@ -899,14 +937,43 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
         rd__nd_hold(true);
         rd__nd_clipper_check(true);
         replays += 2u; /* with the twins, then without */
-        const bool okA = replayRead(&f, t, a, size);
-        const uint64_t frameClip = rd__nd_take_clip();
+        bool okA = replayRead(&f, t, a, size);
+        uint64_t frameClip = rd__nd_take_clip();
         rd__nd_take_entries_clip(ent);
         rd__nd_take(&tw, rf);
-        if (rf[RD_ND_UNMADE] != 0u && !unmade) {
-            snprintf(unmadeWhy, sizeof(unmadeWhy), "case %d at %s: no pipeline of its twin",
-                     NC_CASE(k) + 1, kFormWords[k % 4]);
-            unmade = true;
+        if (okA && rf[RD_ND_UNMADE] != 0u) {
+            /* a pass found its twin's pipeline not made (that replay queued
+               the key, rd__pipeline_twin): the twins' queue made now and
+               waited for (rd__nd_on: the hold's), then the frame once more */
+            retried++;
+            rhi_wait_idle();
+            rd__pipeline_twin_tick(true);
+            if (!rd__nd_on()) {
+                /* a twin's pipeline the device could not make: rd__nd_fault
+                   turned them off for the run (and logged it) */
+                snprintf(why, whySize,
+                         "a twin's pipeline could not be made for case %d at %s: off for the run",
+                         NC_CASE(k) + 1, kFormWords[k % 4]);
+                rd__frame_free(&f);
+                faulted = true;
+                device = false;
+                break;
+            }
+            replays++;
+            okA = replayRead(&f, t, a, size);
+            frameClip = rd__nd_take_clip();
+            rd__nd_take_entries_clip(ent);
+            rd__nd_take(&tw, rf);
+            if (okA && rf[RD_ND_UNMADE] != 0u) {
+                /* still without it: the frame compares nothing (left out of
+                   every count below), never a difference of the device's */
+                unchecked[k] = true;
+                nUnchecked++;
+                rd__log("discard-free twins: the clipper check, case %d at %s: not checked (%llu "
+                        "passes found no pipeline of their twin after the twins' queue was made "
+                        "and the frame drawn again): the frame compares nothing",
+                        NC_CASE(k) + 1, kFormWords[k % 4], (unsigned long long)rf[RD_ND_UNMADE]);
+            }
         }
         rd__nd_clipper_check(false);
         rd__vu_trace(trace);
@@ -930,8 +997,10 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
            nothing through both is not tested */
         const uint8_t *only = NC_TEXA(k) && aloneTex != NULL ? aloneTex : alone;
         drawn[k] = texelsDiffer(b, only, size, NULL);
-        drawnTwin[k] = texelsDiffer(a, only, size, NULL);
-        differ[k] = texelsDiffer(a, b, size, &first);
+        /* an unchecked frame: both pictures through the ordinary build, so
+           no twin's texel, no difference, no draw of the class counted */
+        drawnTwin[k] = unchecked[k] ? 0u : texelsDiffer(a, only, size, NULL);
+        differ[k] = unchecked[k] ? 0u : texelsDiffer(a, b, size, &first);
         firstAt[k] = (uint32_t)(first / 4u);
         if (differ[k] != 0u && (k % 4 == 0 || differ[k - 1] == 0u) &&
             (k % 4 < 2 || differ[k - 2] == 0u) && (k % 4 < 3 || differ[k - 3] == 0u)) {
@@ -943,9 +1012,10 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
                     (unsigned)(firstAt[k] / t->tw), b[first], b[first + 1], b[first + 2],
                     b[first + 3], a[first], a[first + 1], a[first + 2], a[first + 3]);
         }
-        empty = empty || (drawn[k] == 0u && drawnTwin[k] == 0u);
+        undrawn[k] = !unchecked[k] && drawn[k] == 0u && drawnTwin[k] == 0u;
+        empty = empty || undrawn[k];
         differs = differs || differ[k] != 0u;
-        if (drawn[k] != 0u || drawnTwin[k] != 0u) {
+        if (!unchecked[k] && (drawn[k] != 0u || drawnTwin[k] != 0u)) {
             /* the passes of a frame whose case drew (the probe, code 34,
                is not of this class) */
             *clipDraws += frameClip;
@@ -964,12 +1034,25 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
             } else {
                 rd__frame_free(&g);
             }
+            /* its frames that compared nothing (no twin's pipeline after
+               the retry), said on the case's line too */
+            char notChecked[64] = "";
+            size_t nc = 0;
+            for (int x = 0; x < 4; x++) {
+                if (unchecked[c * 4 + x]) {
+                    nc = appendf(notChecked, sizeof(notChecked), nc, "%s%s",
+                                 nc ? ", " : "; not checked at ", kFormWords[x]);
+                }
+            }
+            if (nc) {
+                (void)appendf(notChecked, sizeof(notChecked), nc, " (no twin's pipeline)");
+            }
             rd__log("discard-free twins: the clipper check, case %d of %d (%s) on SCENE %ux%u at "
                     "%ux%u texels: expected about %llu texels at code 32 and %llu at code 36; "
                     "drawn %llu, %llu, %llu, %llu through the ordinary entry and %llu, %llu, "
                     "%llu, %llu through the twins (codes 32, 32 textured, 36, 36 textured, "
                     "against the probe alone), %llu without the probe or a facing table (code "
-                    "32, against the clear); differing with the twins %llu, %llu, %llu, %llu",
+                    "32, against the clear); differing with the twins %llu, %llu, %llu, %llu%s",
                     c + 1, NC_CASES, kClip[c].name, t->w, t->h, t->tw, t->th,
                     (unsigned long long)expect[c][0], (unsigned long long)expect[c][1],
                     (unsigned long long)drawn[k - 3], (unsigned long long)drawn[k - 2],
@@ -978,35 +1061,21 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
                     (unsigned long long)drawnTwin[k - 1], (unsigned long long)drawnTwin[k],
                     (unsigned long long)bare[c], (unsigned long long)differ[k - 3],
                     (unsigned long long)differ[k - 2], (unsigned long long)differ[k - 1],
-                    (unsigned long long)differ[k]);
+                    (unsigned long long)differ[k], notChecked);
             if (trace) {
                 traceCase(c, (const float (*)[3])corner[c], tr);
             }
         }
     }
-    if (device && (empty || differs || unmade)) {
-        /* every frame that drew nothing through either entry, then every
-           case that differs (its forms, its first texel) */
+    int verdict = RD_ND_CLIP_CLEAN;
+    if (device && (empty || differs)) {
+        /* measured: every frame that drew nothing through either entry,
+           then every case that differs (its forms, its first texel), then
+           the frames that compared nothing */
         size_t at = 0;
         why[0] = '\0';
         if (empty) {
-            at = appendf(why, whySize, at, "drew nothing (not tested):");
-            bool any = false;
-            for (int c = 0; c < NC_CASES; c++) {
-                bool named = false;
-                for (int x = 0; x < 4; x++) {
-                    if (drawn[c * 4 + x] != 0u || drawnTwin[c * 4 + x] != 0u) {
-                        continue;
-                    }
-                    if (!named) {
-                        at = appendf(why, whySize, at, "%scase %d at %s", any ? "; " : " ", c + 1,
-                                     kFormWords[x]);
-                    } else {
-                        at = appendf(why, whySize, at, ", %s", kFormWords[x]);
-                    }
-                    named = any = true;
-                }
-            }
+            at = appendFrames(why, whySize, at, "drew nothing (not tested):", undrawn);
         }
         for (int c = 0; differs && c < NC_CASES; c++) {
             int firstK = -1;
@@ -1029,27 +1098,48 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
                              (unsigned)(firstAt[firstK] / t->tw));
             }
         }
-        if (unmade) {
-            at = appendf(why, whySize, at, "%s%s", at ? "; " : "", unmadeWhy);
+        if (nUnchecked != 0u) {
+            at = appendFrames(why, whySize, at,
+                              "not checked (no pipeline of their twin after a retry):", unchecked);
         }
-        clean = false;
+        verdict = RD_ND_CLIP_DIRTY;
+    } else if (faulted) {
+        verdict = RD_ND_CLIP_UNKNOWN; /* why said it: nothing measured past it */
     } else if (!device) {
-        clean = false;
-    }
-    if (clean && *clipDraws == 0u) {
+        verdict = RD_ND_CLIP_DIRTY;
+    } else if (nUnchecked != 0u) {
+        /* nothing measured against the twins but frames that compared
+           nothing: no verdict, never a property of the device */
+        why[0] = '\0';
+        (void)appendFrames(why, whySize, 0, "no pipeline of their twin after a retry:", unchecked);
+        verdict = RD_ND_CLIP_UNKNOWN;
+    } else if (*clipDraws == 0u) {
         snprintf(why, whySize, "no camera rule pass of its frames drew through a twin");
-        clean = false;
-    } else if (clean && (entAll[0] == 0u || entAll[1] == 0u)) {
+        verdict = RD_ND_CLIP_DIRTY;
+    } else if (entAll[0] == 0u || entAll[1] == 0u) {
         snprintf(why, whySize, "no case of its frames drew through %s",
                  entAll[0] == 0u ? "vu_ps_nodual_nd" : "vu_texa_ps_nodual_nd");
-        clean = false;
+        verdict = RD_ND_CLIP_DIRTY;
     }
     rd__nd_clipper_check(false);
     rd__vu_trace(false);
+    /* the twins' pipelines the check made (its gathering's and its
+       retries'; released with the self-test's others), and its own
+       background batches kept out of play's first 10 s line */
+    const uint32_t twins1 = rd__pipeline_count_twins();
+    {
+        uint32_t bm = 0, bf = 0, bb = 0;
+        double bms = 0.0;
+        rd__pipeline_twins_take(&bm, &bf, &bb, &bms);
+    }
     rd__log("discard-free twins: the clipper check's cost: %u replays (%d frames gathered, each "
             "through the twins and without them, each case's without the probe, the probe's and "
-            "the clear's alone) on SCENE %ux%u at %ux%u texels in %.1f ms",
-            (unsigned)replays, NC_FRAMES, t->w, t->h, t->tw, t->th, rd__now_ms() - t0);
+            "the clear's alone) on SCENE %ux%u at %ux%u texels in %.1f ms; %u twin pipelines "
+            "made for it, %u frames drawn again once the twins' queue was made, %u of them still "
+            "without a twin's pipeline (not checked)",
+            (unsigned)replays, NC_FRAMES, t->w, t->h, t->tw, t->th, rd__now_ms() - t0,
+            (unsigned)(twins1 > twins0 ? twins1 - twins0 : 0u), (unsigned)retried,
+            (unsigned)nUnchecked);
     free(alone);
     free(aloneTex);
     for (int k = 0; k < NC_CASES; k++) {
@@ -1064,7 +1154,7 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
         rd_destroy_vu_mesh(probe);
     }
     t->clearPending = 1;
-    return clean;
+    return verdict;
 }
 
 static void meshesFree(RdMesh *mesh)
@@ -1219,6 +1309,7 @@ void rd__nd_selftest(RdTargetRec *t)
     char clipWhy[400] = "";
     uint64_t clipDraws = 0;
     bool clipClean = false;
+    int clipMeasured = RD_ND_CLIP_UNKNOWN;
     if (pass) {
         /* each entry's twin is used in play only if its own case drew
            through it here (vu_ps: the plain case, vu_texa_ps: the textured
@@ -1231,10 +1322,22 @@ void rd__nd_selftest(RdTargetRec *t)
             }
         }
         rd__nd_floor_passed();
-        clipClean = clipperCheck(t, a, b, size, tex, clipWhy, sizeof(clipWhy), &clipDraws);
-        rd__nd_clipper_verdict(clipClean, clipClean ? "" : clipWhy);
+        clipMeasured = clipperCheck(t, a, b, size, tex, clipWhy, sizeof(clipWhy), &clipDraws);
+        clipClean = clipMeasured == RD_ND_CLIP_CLEAN;
+        if (clipMeasured == RD_ND_CLIP_UNKNOWN) {
+            rd__nd_clipper_unchecked(clipWhy);
+        } else {
+            rd__nd_clipper_verdict(clipClean, clipClean ? "" : clipWhy);
+        }
     }
     rd__nd_hold_end();
+    if (pass && strcmp(rd__nd_state_text(), "off") == 0) {
+        /* a twin's pipeline the device could not make in the clipper check
+           (rd__nd_fault, logged): off for the run, the mark unchanged as in
+           play */
+        snprintf(why, sizeof(why), "a twin's pipeline could not be made in the clipper check");
+        pass = false;
+    }
     const uint32_t released = rd__pipeline_forget_since(pipeMark);
     rd__frame_free(&f);
     meshesFree(mesh);
@@ -1255,7 +1358,8 @@ void rd__nd_selftest(RdTargetRec *t)
                 (unsigned long long)refused[RD_ND_ALPHA], (unsigned long long)refused[RD_ND_PLANE],
                 (unsigned long long)refused[RD_ND_CLIPPED], (unsigned)released, t->w, t->h, t->tw,
                 t->th, rd__now_ms() - t0);
-        const bool clean = rd__nd_clipper() == RD_ND_CLIP_CLEAN;
+        const int verdict = rd__nd_clipper();
+        const bool clean = verdict == RD_ND_CLIP_CLEAN;
         if (clean && clipClean) {
             rd__log("discard-free twins: the clipper check: clean (%d cases crossing the eye "
                     "plane at codes 32 and 36, untextured and textured under TEXA, %llu passes "
@@ -1265,7 +1369,12 @@ void rd__nd_selftest(RdTargetRec *t)
                     NC_CASES, (unsigned long long)clipDraws);
         } else if (clean) {
             rd__log("discard-free twins: the clipper check: clean (ICO_RD_VU_NODISCARD_CLIPPER; "
-                    "measured not clean: %s): the camera rule's passes take them too",
+                    "measured %s: %s): the camera rule's passes take them too",
+                    clipMeasured == RD_ND_CLIP_UNKNOWN ? "not checked" : "not clean", clipWhy);
+        } else if (verdict == RD_ND_CLIP_UNKNOWN) {
+            rd__log("discard-free twins: the clipper check: not checked (%s): clip mode none alone "
+                    "takes them (no verdict: nothing kept on the mark, nothing written as failed; "
+                    "the check runs again at the next start)",
                     clipWhy);
         } else {
             rd__log("discard-free twins: the clipper check: not clean (%s): clip mode none alone "

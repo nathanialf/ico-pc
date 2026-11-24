@@ -125,7 +125,8 @@
  * tests (rd_vuprepass_selftest_nodiscard_clean, rd_nodiscard_clean); ICO_RD_VU_NODISCARD_SABOTAGE=clipper changes the check's first
  * case's picture through the twins in one byte, =empty moves its first
  * case off the frame (its positive controls: the check must say not
- * clean).  The "clean" lavapipe measured on 2026-11-22 was an earlier case
+ * clean), =unmade takes every twin its frames ask for as not made (the
+ * check must say not checked).  The "clean" lavapipe measured on 2026-11-22 was an earlier case
  * set in model units, five of whose cases covered no pixel; the next set's
  * first case, an edge 0.25 model units off the centre view ray, drew
  * nothing on lavapipe at 912 x 512 where the CPU expected about 47 texels.
@@ -139,6 +140,27 @@
  * lose a whole case to the NaN).  Code 32's expectation is uncut where
  * every corner passes the region test (it does not test Z: EXACT, as the
  * PS2 draws it), code 36's cut at GS Z 0 (the scissor flags it).
+ * The check's pipelines (issue 179, the v0.11.15 log).  Every frame's keys
+ * are gathered in ONE gathering around all 52 frames and made on the
+ * workers before the measured replays (rd__pipeline_gather(true) empties
+ * the gathered list: a gathering per frame made only the last frame's
+ * keys).  On a device with every state in the pipeline keys (no dynamic
+ * blend or depth state: every Android GPU, the reporter's Mali-G52) code
+ * 36's cut pass (ABE forced on) and the probe (Z write off) have twin keys
+ * of their own, which v0.11.15 never made: those frames drew through the
+ * ordinary build on both sides, "0 differing" compared a build with
+ * itself, and the missing pipeline was folded into "not clean".  A measured
+ * frame whose pass still finds its twin's pipeline not made has the twins'
+ * queue made and waited for (rd__pipeline_twin_tick(true), the twins on
+ * under rd__nd_hold(true)) and is drawn once more; still without it, the
+ * frame compared nothing: it is left out of every count (drawn through the
+ * twins, differing, the class's draws), logged on a line of its own, and
+ * with nothing measured against the twins elsewhere the verdict is "not
+ * checked" (no verdict: clip mode none alone, nothing written), never "not
+ * clean".  A difference or an undrawn frame measured elsewhere still makes
+ * it not clean.  The cost line counts the twin pipelines the check made
+ * and the frames drawn again (ICO_VK_FAKE_NO_DYNAMIC=1 on lavapipe is the
+ * reporter's key set: rd_vuprepass_selftest_nodiscard_nodynamic).
  * The twins' pipelines are made in the background between pictures
  * (rd_pipeline.c rd__pipeline_twin, rd__pipeline_twin_tick: a batch on the
  * workers at low priority, as the start-up set's background finisher, or
@@ -407,7 +429,9 @@ bool rd_nd_use_counts(const RdNdUse *u);
 /* the tests' sabotage =alpha, =clipper (the clipper check's first case's
    picture through the twins changed in one byte: its positive control),
    =empty (the clipper check's first case moved off the frame: a case that
-   draws nothing must make the verdict not clean) */
+   draws nothing must make the verdict not clean), =unmade (rd__nd_pass: every
+   twin the clipper check's frames ask for taken as not made, the retry's
+   too: the verdict must be not checked) */
 bool rd__nd_sabotage_alpha(void);
 bool rd__nd_sabotage_clipper(void);
 bool rd__nd_sabotage_empty(void);
@@ -420,9 +444,14 @@ uint64_t rd__nd_take_front(void);
 /* the clipper check's frames running (their camera rule passes taken as a
    clean clipper's would be), and its verdict (clean, or the first differing
    case's words; the tests' ICO_RD_VU_NODISCARD_CLIPPER=clean replaces
-   it, saying what was measured); the verdict (RD_ND_CLIP_*) and its words */
+   it, saying what was measured); no verdict ("not checked",
+   RD_ND_CLIP_UNKNOWN: a frame whose twin's pipeline was still not made
+   after its retry compared nothing, why names it; clip mode none alone, the
+   mark's second line not written); the verdict (RD_ND_CLIP_*) and its
+   words */
 void rd__nd_clipper_check(bool on);
 void rd__nd_clipper_verdict(bool clean, const char *why);
+void rd__nd_clipper_unchecked(const char *why);
 int rd__nd_clipper(void);
 const char *rd__nd_clipper_text(void);
 

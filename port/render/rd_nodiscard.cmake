@@ -220,13 +220,47 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
                      "-DLINE=${_vst_on}"
                      "-DEXTRA=rd: discard-free twins: off for the run \\(self-test not run: not applicable here: the device blends with two outputs, so no pass draws through a \\*_nodual build\\)${_ndnone}.*test: the discard-free twins' mark after the self-test: none"
                      "-DNOT_=rd: discard-free twins: (on|trying)" -P "${_vst}")
+    # every state in the pipeline keys (ICO_VK_FAKE_NO_DYNAMIC=1: no
+    # dynamic depth or blend state, as on every Android GPU and the issue 179
+    # reporter's Mali-G52), so code 36's cut pass (ABE forced on) and the
+    # probe (Z write off) have twin keys of their own: the check makes them
+    # (above 0 made for it), no frame is left without its twin, and the
+    # device's verdict is either measured one with its consequence, never
+    # "no pipeline of its twin" (v0.11.15's code: its gathering per frame
+    # made only the last frame's keys, so this run said "not clean (case 1 at
+    # 36: no pipeline of its twin)" and its cost line had no made count)
+    add_test(NAME rd_vuprepass_selftest_nodiscard_nodynamic
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}"
+                     "-DEXTRA=rd: pipelines: dynamic state: none \\(every state in the pipeline keys\\).*rd: discard-free twins: the clipper check, case 1 of 13 .*rd: discard-free twins: the clipper check, case 13 of 13 .*${_ndcost}[^\n]*texels in [0-9.]+ ms, [1-9][0-9]* twin pipelines made for it, [0-9]+ frames drawn again once the twins' queue was made, 0 of them still without a twin's pipeline \\(not checked\\).*${_ndon}.*(${_ndvclean}.*${_ndstart}.*${_ndcount}.*${_ndclass}clean, the camera rule's class on|${_ndvnot}.*${_ndstart}.*${_ndcount}.*${_ndclass}not clean, the camera rule's class off)"
+                     "-DNOT_=rd: discard-free twins: (off|vu_[a-z_]+_nd drew nothing|the clipper check: not clean \\(drew nothing|the clipper check: not checked|the clipper check, case [0-9]+ at [0-9t]+: not checked)|no pipeline of (its|their) twin" -P "${_vst}")
+    # the third outcome (ICO_RD_VU_NODISCARD_SABOTAGE=unmade: every twin the
+    # check's frames ask for taken as not made, the retry's too; every frame
+    # holds the probe, a clip mode none pass that asks for one): each frame
+    # drawn again once and still without it, each logged "not checked", left
+    # out of every count (case 1's line: 0 through the twins, 0 differing),
+    # the verdict "not checked" naming the frames, never "not clean" or "a
+    # property of this device"; the camera rule's class off, the twins on
+    # with clip mode none, the mark "counting v0.0.0" (nothing written as
+    # failed)
+    add_test(NAME rd_vuprepass_selftest_nodiscard_unchecked
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}"
+                     "-DEXTRA=rd: discard-free twins: ICO_RD_VU_NODISCARD_SABOTAGE: every twin the clipper check's frames ask for taken as not made.*rd: discard-free twins: the clipper check, case 1 at 32: not checked \\([1-9][0-9]* passes found no pipeline of their twin after the twins' queue was made and the frame drawn again\\): the frame compares nothing.*rd: discard-free twins: the clipper check, case 1 of 13 [^\n]* through the ordinary entry and 0, 0, 0, 0 through the twins [^\n]*differing with the twins 0, 0, 0, 0, not checked at 32, 32t, 36, 36t \\(no twin's pipeline\\).*rd: discard-free twins: the clipper check, case 13 at 36t: not checked .*${_ndcost}[^\n]*texels in [0-9.]+ ms, [0-9]+ twin pipelines made for it, 52 frames drawn again once the twins' queue was made, 52 of them still without a twin's pipeline \\(not checked\\).*${_ndon}.*rd: discard-free twins: the clipper check: not checked \\(no pipeline of their twin after a retry: case 1 at 32, 32t, 36, 36t, case 2 at [^\n]*\\): clip mode none alone takes them \\(no verdict: nothing kept on the mark, nothing written as failed, the check runs again at the next start\\).*${_ndstart}.*${_ndcount}.*${_ndclass}not checked, the camera rule's class off"
+                     "-DNOT_=rd: discard-free twins: (off|the clipper check: (clean|not clean))|a property of this device" -P "${_vst}")
     set_tests_properties(rd_vuprepass_selftest_nodiscard rd_vuprepass_selftest_nodiscard_clipper
                          rd_vuprepass_selftest_nodiscard_clean
                          rd_vuprepass_selftest_nodiscard_sabotage
                          rd_vuprepass_selftest_nodiscard_marked rd_vuprepass_selftest_nodiscard_dual
                          rd_vuprepass_selftest_nodiscard_fallback
                          rd_vuprepass_selftest_nodiscard_empty
+                         rd_vuprepass_selftest_nodiscard_nodynamic
+                         rd_vuprepass_selftest_nodiscard_unchecked
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+    set_tests_properties(rd_vuprepass_selftest_nodiscard_nodynamic
+                         PROPERTIES ENVIRONMENT "${_ndenv};ICO_VK_FAKE_NO_DYNAMIC=1;${_ndmark}_nodynamic.txt")
+    set_tests_properties(rd_vuprepass_selftest_nodiscard_unchecked
+                         PROPERTIES ENVIRONMENT "${_ndenv};ICO_RD_VU_NODISCARD_SABOTAGE=unmade;${_ndmark}_unchecked.txt")
     set_tests_properties(rd_vuprepass_selftest_nodiscard_fallback
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_BLEND_SABOTAGE=fixed;${_ndmark}_fallback.txt")
     set_tests_properties(rd_vuprepass_selftest_nodiscard_empty
