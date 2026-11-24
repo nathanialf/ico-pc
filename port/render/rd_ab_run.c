@@ -24,11 +24,34 @@ static int32_t s_stage = -1; /* the replays' stage */
 static bool s_open;          /* a replay's record is being made */
 static uint8_t s_off;        /* its subjects at their off arm */
 static uint8_t s_allowed;    /* the subjects that may be tried now */
-/* each subject's ledger row and what was fired into it so far */
-#define N_SUBJ 3
-static const int k_row[N_SUBJ] = {ICO_ATT_AB_ZERO, ICO_ATT_AB_NODISCARD, ICO_ATT_AB_FASTPS};
-static int s_ledAllowed[N_SUBJ] = {-1, -1, -1}, s_ledStopped[N_SUBJ] = {-1, -1, -1};
-static uint32_t s_ledOn[N_SUBJ], s_ledOff[N_SUBJ], s_ledTrials[N_SUBJ];
+
+/* the subjects in their registration order (rd_ab_run.h RD_AB_*, the row's
+   place its id): the judge's name, the ledger row, whether it may be tried
+   now (its own self-test, mark and run-time checks); the next attempt is
+   one more row (up to RD_AB_SUBJECTS) */
+static bool camTriable(void)
+{
+    /* the twins on, and their clipper check clean on this device */
+    return rd__nd_triable() && rd__nd_class_on();
+}
+
+static const struct {
+    const char *name;
+    int row;
+    bool (*triable)(void);
+} k_subj[] = {
+    {"zero-area cull", ICO_ATT_AB_ZERO, rd__vu_zero_triable},              /* RD_AB_ZERO */
+    {"discard-free twins", ICO_ATT_AB_NODISCARD, rd__nd_triable},          /* RD_AB_NODISCARD */
+    {"fast pixel build", ICO_ATT_AB_FASTPS, rd__fps_triable},              /* RD_AB_FASTPS */
+    {"discard-free twins, camera rule", ICO_ATT_AB_ND_CAMERA, camTriable}, /* RD_AB_ND_CAMERA */
+};
+
+#define N_SUBJ ((int)(sizeof(k_subj) / sizeof(k_subj[0])))
+_Static_assert(sizeof(k_subj) / sizeof(k_subj[0]) <= RD_AB_SUBJECTS, "the judge's registry");
+_Static_assert(RD_AB_ND_CAMERA == 3, "the rows' order is the subjects' ids");
+/* each subject's ledger row: what was fired into it so far */
+static int s_ledAllowed[RD_AB_SUBJECTS], s_ledStopped[RD_AB_SUBJECTS];
+static uint32_t s_ledOn[RD_AB_SUBJECTS], s_ledOff[RD_AB_SUBJECTS], s_ledTrials[RD_AB_SUBJECTS];
 static long s_fakeLoss;    /* ICO_RD_AB_FAKE_LOSS: the replay N */
 static uint32_t s_replays; /* begun this run */
 static int s_scenery;      /* __atomic: the game shows scenery now (rd_ab_scenery) */
@@ -41,9 +64,10 @@ static void made(void)
     }
     s_made = true;
     rd_ab_init(&s_ab, rd_ab_mode_of(getenv("ICO_RD_AB")));
-    (void)rd_ab_subject(&s_ab, "zero-area cull");     /* RD_AB_ZERO */
-    (void)rd_ab_subject(&s_ab, "discard-free twins"); /* RD_AB_NODISCARD */
-    (void)rd_ab_subject(&s_ab, "fast pixel build");   /* RD_AB_FASTPS */
+    for (int i = 0; i < N_SUBJ; i++) {
+        (void)rd_ab_subject(&s_ab, k_subj[i].name);
+        s_ledAllowed[i] = s_ledStopped[i] = -1; /* the row's state not decided yet */
+    }
     const char *fl = getenv("ICO_RD_AB_FAKE_LOSS");
     s_fakeLoss = fl != NULL ? strtol(fl, NULL, 10) : 0;
 }
@@ -64,12 +88,12 @@ static void ledger(void)
         if (allowed != s_ledAllowed[i] || (int)s_ab.stopped != s_ledStopped[i]) {
             s_ledAllowed[i] = allowed;
             s_ledStopped[i] = s_ab.stopped;
-            ico_attempt_decide_timed(k_row[i], s_ab.mode, allowed, s_ab.stopped);
+            ico_attempt_decide_timed(k_subj[i].row, s_ab.mode, allowed, s_ab.stopped);
         }
         const RdAbSubject *z = &s_ab.subj[i];
-        ico_attempt_fire(k_row[i], z->stagesOn - s_ledOn[i]);
-        ico_attempt_fire2(k_row[i], z->stagesOff - s_ledOff[i]);
-        ico_attempt_fire3(k_row[i], z->trials - s_ledTrials[i]);
+        ico_attempt_fire(k_subj[i].row, z->stagesOn - s_ledOn[i]);
+        ico_attempt_fire2(k_subj[i].row, z->stagesOff - s_ledOff[i]);
+        ico_attempt_fire3(k_subj[i].row, z->trials - s_ledTrials[i]);
         s_ledOn[i] = z->stagesOn;
         s_ledOff[i] = z->stagesOff;
         s_ledTrials[i] = z->trials;
@@ -77,17 +101,17 @@ static void ledger(void)
 }
 
 /* the subjects that may be tried now (their own self-tests, marks and
-   run-time checks: rd__vu_zero_triable, rd__nd_triable, rd__fps_triable),
-   told to the judge */
+   run-time checks: k_subj's triable), told to the judge */
 static void allow(void)
 {
-    const bool zero = rd__vu_zero_triable(), nd = rd__nd_triable(), fps = rd__fps_triable();
-    rd_ab_allow(&s_ab, RD_AB_ZERO, zero);
-    rd_ab_allow(&s_ab, RD_AB_NODISCARD, nd);
-    rd_ab_allow(&s_ab, RD_AB_FASTPS, fps);
+    uint8_t allowed = 0;
+    for (int i = 0; i < N_SUBJ; i++) {
+        const bool on = k_subj[i].triable();
+        rd_ab_allow(&s_ab, i, on);
+        allowed |= on ? (uint8_t)(1u << i) : 0u;
+    }
     rd_ab_set_scenery(&s_ab, __atomic_load_n(&s_scenery, __ATOMIC_ACQUIRE) != 0);
-    s_allowed = (uint8_t)((zero ? 1u << RD_AB_ZERO : 0u) | (nd ? 1u << RD_AB_NODISCARD : 0u) |
-                          (fps ? 1u << RD_AB_FASTPS : 0u));
+    s_allowed = allowed;
 }
 
 void rd__ab_scene(int stage, uint32_t first)
@@ -200,7 +224,7 @@ void rd__ab_start_line(void)
 {
     made();
     allow();
-    char l[1024];
+    char l[1536]; /* about 1 KB with four or five subjects named */
     (void)rd_ab_start_text(&s_ab, l, sizeof(l));
     rd__log("%s", l);
     ledger();

@@ -109,6 +109,13 @@ set(ndRe "stats: discard-free twins (on|off|held)[^:]*: ([0-9]+) draws through t
 # the verdict "clean", every target byte for byte, and per fixture and
 # profile at least the clean_min=N of its list line of that class's draws
 # (a floor below what was measured).
+# the in-play judge's line (rd_ab.c rd_ab_stats_text): the twins' camera
+# rule class is a subject of its own (rd_ab_run.h RD_AB_ND_CAMERA), counted
+# at its arms only while it may be tried: the twins on and the clipper
+# verdict clean.  The replay tool has no stage, so no trial and no off arm:
+# with the verdict taken as clean every replay from the twins' modules on
+# counts with it, without one none
+set(camRe "discard-free twins, camera rule: ([0-9]+) replays with it, ([0-9]+) without")
 set(extraOn "")
 if(MODE STREQUAL "clean")
   set(extraOn ICO_RD_VU_NODISCARD_CLIPPER=clean)
@@ -143,6 +150,14 @@ function(ndRun dump p s value dir)
     set(refused "${CMAKE_MATCH_7}")
     set(made "${CMAKE_MATCH_8}")
   endif()
+  set(camWith -1)
+  set(camWithout -1)
+  if(flat MATCHES "${camRe}")
+    set(camWith "${CMAKE_MATCH_1}")
+    set(camWithout "${CMAKE_MATCH_2}")
+  endif()
+  set(r_camWith "${camWith}" PARENT_SCOPE)
+  set(r_camWithout "${camWithout}" PARENT_SCOPE)
   set(boxRefused 0)
   if(refused MATCHES "box ([0-9]+)")
     set(boxRefused "${CMAKE_MATCH_1}")
@@ -232,6 +247,16 @@ foreach(e IN LISTS entries)
               message(SEND_ERROR "${dump} ${p} ${s}: the verdict was not taken as clean (${r_clipper}):\n${r_flat}")
               math(EXPR failures "${failures} + 1")
             endif()
+            # the judge may try the camera rule class: its own subject, at
+            # its on arm on every replay here (no stage: no trial) once the
+            # twins' modules are made (the first replay that drew a VU pass
+            # makes them: a frame whose passes drew through a twin counts
+            # its second replay at least)
+            if(r_camWith LESS 0 OR NOT r_camWithout EQUAL 0 OR
+               (r_draws GREATER 0 AND NOT r_camWith GREATER 0))
+              message(SEND_ERROR "${dump} ${p} ${s}: the judge's camera rule class not at its own arm on a clean verdict (${r_camWith} replays with it, ${r_camWithout} without):\n${r_flat}")
+              math(EXPR failures "${failures} + 1")
+            endif()
             # the camera rule's class: by the clipper check, or proven in
             # front of the eye where the proof holds first (EYEBOX)
             math(EXPR fxTwins "${fxTwins} + ${r_clip} + ${r_front}")
@@ -243,6 +268,11 @@ foreach(e IN LISTS entries)
             # same on lavapipe, which is not clean (below)
             if(NOT r_clip EQUAL 0 OR NOT r_clipper STREQUAL "not checked")
               message(SEND_ERROR "${dump} ${p} ${s}: a camera rule pass took a twin by a clipper verdict without one (${r_clip}, ${r_clipper}):\n${r_flat}")
+              math(EXPR failures "${failures} + 1")
+            endif()
+            # without a clean verdict the judge never may try the class
+            if(NOT r_camWith EQUAL 0 OR NOT r_camWithout EQUAL 0)
+              message(SEND_ERROR "${dump} ${p} ${s}: the judge counted the camera rule class without a clean verdict (${r_camWith} replays with it, ${r_camWithout} without):\n${r_flat}")
               math(EXPR failures "${failures} + 1")
             endif()
             math(EXPR fxTwins "${fxTwins} + ${r_draws}")

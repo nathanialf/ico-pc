@@ -1653,9 +1653,12 @@ without it, and a culling entry's draws give up the shared vertices' list. Once 
 (its self-test passed, its mark allows it), the game times it once a session, early in play, and
 keeps the faster arm for the whole session (`port/render/rd_ab.c` the judge, pure;
 `rd_ab_run.c` the renderer's side; `rd_ab.h` and `rd_ab_run.h` say it all). The judge takes
-subjects: the cull is the first (`RD_AB_ZERO`), the discard-free twins the second
-(`RD_AB_NODISCARD`, [below](#the-discard-free-twins)); one is on trial at a time, the other at its
-verdict (or with it, before its own).
+subjects: the cull is the first (`RD_AB_ZERO`), the discard-free twins' proven classes the
+second (`RD_AB_NODISCARD`, [below](#the-discard-free-twins)), the fast pixel build the third
+(`RD_AB_FASTPS`), the twins' camera rule class the fourth (`RD_AB_ND_CAMERA`, below); one is on
+trial at a time, the others at their verdict (or with it, before their own). The registry has
+room for five (`RD_AB_SUBJECTS`); a subject is one row of `rd_ab_run.c` `k_subj` (its name, its
+ledger row, whether it may be tried) and its value in `rd_ab_run.h`.
 
 - **Two arms, both paths the device already runs.** With the cull (the arm "on", the default) or
   without it ("off"): a replay at the off arm gives no entry a lattice word (refused for the
@@ -1676,7 +1679,12 @@ verdict (or with it, before its own).
   line's words): `play` or `scene` (a cutscene's layout; a movie, also `scene`, has no work for
   either subject), passed by `window_perf_rank_step` through `rd_ab_scenery` into the pure judge
   (`rd_ab_set_scenery`); the title, the logo (`other`), the pause and options menus and the memory
-  card's pages never time. On a new game the first timed stage is the opening's cutscene (stage
+  card's pages never time. The boot logo and title's stage (`region.h` `stage_title`, the stage
+  the perf lines name `logo`) never times whatever its layout (`rd_ab_scenery_of`): with Skip the
+  opening on it sits on the scene layout for about 2 s, and issue 179's report showed the cull
+  timed there. When the scenery ends during a trial (a menu, a movie, back to the title) the trial
+  ends with no verdict, whatever its pairs, and no mark for the stage; the subject is timed again
+  2 s into the next stretch of scenery (the same stage too) while trials are left. On a new game the first timed stage is the opening's cutscene (stage
   41, `scene (op2)` in issue 179's report, about 46 s long), so the answer is in before the boat
   (stage 42); on a loaded save it is the save's stage once it plays (stage 11 `play (st04a ...)`
   in the owner's Pixel log). The twins have work only in some scenery: their one trial is
@@ -1749,7 +1757,8 @@ The lines (`rd: ` before each):
   way: the early verdict)` for the early one), or `A/B: zero-area cull, stage 42: no verdict (600
   replays, 11 pairs; 30 dropped by a long picture, 4 by unequal work, 120 replays not measured):
   with it until it is timed again in another stage` (`the stage ended`, `the attempt was turned
-  off`: `... in the next stage of play`).
+  off`: `... in the next stage of play`; `the scenery ended`: `... in the next stretch of play or
+  a cutscene`).
 - `A/B: every trial stopped for the run (the graphics device was lost): each attempt at its off
   arm from here (zero-area cull)`; `A/B: 12 trials run, the most a run: an attempt not timed yet
   stays with it`.
@@ -2027,6 +2036,20 @@ The lines (`rd: ` before each):
   is this run's; the next start tests them again)`.
 - The judge's lines and the attempt ledger's row `the discard-free twins timed in play` as the
   cull's (above); at the next start `the previous run: discard-free twins: ...`.
+- **The camera rule class is timed on its own.** The judge's twins subject (`RD_AB_NODISCARD`)
+  times the proven classes alone (clip mode none, proven in front of the eye); the passes taken on
+  the device's clean clipper check (`RD_ND_BY_CLIPPER`, the bulk of the boat and the cage) are a
+  subject of their own (`RD_AB_ND_CAMERA`, `discard-free twins, camera rule`): its "used" bit is
+  set only by those passes (`rd__nd_pass`, its own `RdNdUse`), its off arm and its verdict turn
+  only that class to the `*_nodual` builds, and the twins' verdict turns only the proven classes.
+  So a verdict taken where one class has little work does not decide for the other. It may be
+  tried where the twins may and the clipper check was clean (`rd__nd_triable` and
+  `rd__nd_class_on`), first in the first stage of scenery where those passes drew; its way back
+  after a bad end is the twins' own mark, which keeps every class of them off. The 10 s clause's
+  `timed without them t` adds `(c of them the camera rule's)` when that class's off arm ran; the
+  attempt ledger's row `the discard-free twins' camera rule class timed in play on N verdicts
+  with them so far (M without them; T trials run)`; the judge's lines `A/B: discard-free twins,
+  camera rule, stage 42: ...`.
 - `rd_replay_tool --stats`: `stats: discard-free twins on|held|off (why): N draws through them (P
   proven by clip mode none, F proven in front of the eye, C by the clipper check (verdict));
   refused: plane p, DATE d, band b, alpha a, clipped c, form f, box x, not made yet u, timed without them t, entry not tested e; M modules of them made, P of their pipelines alive` (with `(not applicable here: ...)` on a device
