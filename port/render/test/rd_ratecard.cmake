@@ -79,10 +79,10 @@ if(MODE STREQUAL "measure")
           "a fragment hidden by depth, vu_ps(_nodual)? with its discard: ${num} ns"
           "a vertex \\(a corner drawn off the target, the VU pre-pass (on|off)\\): ${num} ns"
           "a triangle binned \\([^\n]*\\): ${num} ns"
-          "the 2x2-quad factor \\([^\n]*\\): ${num} x"
+          "the 2x2-quad factor \\([^\n]*\\): (${num} x|not measured \\(its divisor not above 0\\))"
           "a pass with nothing drawn \\([^\n]*\\): ${num} ms"
           "a blended fragment \\(LERP As, the (two-pass|dual-source) blend\\): ${num} ns"
-          "the blended fragment over the opaque one: ${num} x"
+          "the blended fragment over the opaque one: (${num} x|not measured \\(its divisor not above 0\\))"
           "a shaded fragment, vu_ps(_nodual)? on the fast build's form \\(RGBA32\\): ${num} ns"
           "a MB loaded or stored: not measured \\(")
     need("${t1}" "rd: rate card: ${re}" "an item")
