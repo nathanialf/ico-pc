@@ -553,7 +553,8 @@ once at the top of the look block into a local) into that path's condition, and 
 call) and into the R1 test of the branch for her other stage (`girlGObj == 0`: the helper object at
 layout 4 placed along `GetOtherStageGirlOrient`, as R1 does there; never the weapon look, which
 needs R1). `live` is `IsAbleBoyControl() != 0 && ico_free_movement() == 0`, and on the European
-body also `privInsCam.on == 0` (its own cut to her capture); `hand` is `ACTGame_FLAG_TETSUNAGI()`.
+body also `boyPrivInsCamOff()` (its own cut to her capture is not running; a helper at the file's end,
+because naming `privInsCam` inside `subBoyCollision` moved it in the Android build's game data); `hand` is `ACTGame_FLAG_TETSUNAGI()`.
 The module answers: Off, 0; not live or holding her hand, 0 (a toggle ends); Hold, the L3 level;
 Toggle, a latch a press (the level against the tick before) turns on and the next turns off. A
 toggle also ends on a new stage number and when Camera reset fires (`ico_yorda_look_drop`,

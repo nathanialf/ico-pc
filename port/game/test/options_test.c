@@ -2903,7 +2903,12 @@ static void test_yorda_look(const char *dir)
            in its own cut to her capture (privInsCam) */
         CHECK(count_of(src, "IsAbleBoyControl() != 0 && ico_free_movement() == 0,\n") == 3);
         CHECK(count_of(src, "IsAbleBoyControl() != 0 && ico_free_movement() == 0 &&\n"
-                            "                                      privInsCam.on == 0,\n") == 1);
+                            "                                      boyPrivInsCamOff(),\n") == 1);
+        /* privInsCam named only through the helper at the file's end: a
+           mention inside subBoyCollision moved it in the Android build's
+           game data (v0.11.16-rc3's layout gate) */
+        CHECK(count_of(src, "static int boyPrivInsCamOff(void)") == 2);
+        CHECK(count_of(src, "    return privInsCam.on == 0;\n}\n") == 1);
         CHECK(count_of(src, "ACTGame_FLAG_TETSUNAGI() != 0, stage_no);") == 4);
         /* the look block: the second player's R1 or the look (three twins),
            the European body's call, her R1 or the look */
