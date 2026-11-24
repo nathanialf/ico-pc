@@ -479,6 +479,13 @@ static void test_classes(void)
         CHECK(ico_attempt_state_of(ICO_ATT_AB_FASTPS) == ICO_ATT_NA);
         ico_attempt_decide_timed(ICO_ATT_AB_FASTPS, 0, 1, 0);
         CHECK(ico_attempt_state_of(ICO_ATT_AB_FASTPS) == ICO_ATT_ON);
+        /* the twins' camera rule class timed in play (rd_ab_run.c), its own
+           row: not applicable where the clipper check was not clean, on
+           where it was (the classes are not told: on) */
+        ico_attempt_decide_timed(ICO_ATT_AB_ND_CAMERA, 0, 0, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_AB_ND_CAMERA) == ICO_ATT_NA);
+        ico_attempt_decide_timed(ICO_ATT_AB_ND_CAMERA, 0, 1, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_AB_ND_CAMERA) == ICO_ATT_ON);
         /* the whole start line, its last row included, in the window's 4 KB
            parts (window_perf_rank.c ledger_lines, ico_attempt_start_part):
            one part, or two since the v0.11.7 rows, each whole rows */
@@ -1186,6 +1193,15 @@ static void test_timed(void)
     (void)ico_attempt_block_text(b, sizeof b, -1);
     CHECK(strstr(b, "the skin check's own pipelines left out on a phone on 2 box checks not "
                     "drawn (5 twins not drawn); ") != NULL);
+    /* the twins' camera rule class: its own row, its words, its counts the
+       run's totals as the other judged rows' */
+    ico_attempt_reset();
+    ico_attempt_decide_timed(ICO_ATT_AB_ND_CAMERA, 0, 1, 0);
+    ico_attempt_fire(ICO_ATT_AB_ND_CAMERA, 1u);
+    ico_attempt_fire3(ICO_ATT_AB_ND_CAMERA, 2u);
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: the discard-free twins' camera rule class timed in play on 1 "
+                     "verdicts with them so far (0 without them; 2 trials run)"));
     ico_attempt_reset();
     CHECK(ico_attempt_state_of(ICO_ATT_AB_ZERO) == ICO_ATT_NOT_SET);
 }
@@ -1354,10 +1370,14 @@ int main(void)
         ico_attempt_state(ICO_ATT_AB_ZERO, ICO_ATT_OFF_DEFAULT, "the test");
         /* the third judged row too (REV4R S2: it was left out while not on) */
         ico_attempt_state(ICO_ATT_AB_FASTPS, ICO_ATT_OFF_DEFAULT, "the test");
+        /* and the fourth (the twins' camera rule class), not applicable */
+        ico_attempt_state(ICO_ATT_AB_ND_CAMERA, ICO_ATT_NA, "the test");
         ico_attempt_state(ICO_ATT_EMPTY_SKIP, ICO_ATT_OFF_DEFAULT, "the test"); /* not on: out */
         CHECK(ico_attempt_on_text(w, sizeof w) == strlen(w));
         if (strcmp(w, "one DATE set-up on 5/2; the zero-area cull timed in play off by default "
-                      "0/0/0; the fast pixel build timed in play off by default 0/0/0") != 0) {
+                      "0/0/0; the fast pixel build timed in play off by default 0/0/0; the "
+                      "discard-free twins' camera rule class timed in play not applicable here "
+                      "0/0/0") != 0) {
             printf("on text: %s\n", w);
             failures++;
         }

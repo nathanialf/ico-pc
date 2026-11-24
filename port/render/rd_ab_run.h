@@ -23,9 +23,13 @@
  * A subject's own self-test, mark and run-time checks still decide whether
  * it is used at all: one that is off is never put on trial (rd_ab_allow).
  * The attempt ledger's rows (attempt_ledger.h ICO_ATT_AB_ZERO,
- * ICO_ATT_AB_NODISCARD, ICO_ATT_AB_FASTPS).  The judge tries one subject at a
- * time in their registration order (the cull, the twins, the fast pixel
- * build), each timed once a run. */
+ * ICO_ATT_AB_NODISCARD, ICO_ATT_AB_FASTPS, ICO_ATT_AB_ND_CAMERA).  The judge
+ * tries one subject at a time in their registration order (the cull, the
+ * twins, the fast pixel build, the twins' camera rule class), each timed
+ * once a run.  The camera rule class may be tried where the twins may and
+ * the device's clipper check was clean (rd__nd_class_on); its way back
+ * after a bad end is the twins' own mark (nodiscard_mark.h), which keeps
+ * every class of them off. */
 #ifndef PORT_RENDER_RD_AB_RUN_H
 #define PORT_RENDER_RD_AB_RUN_H
 
@@ -33,11 +37,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* the subjects, in their registration order (rd_ab_run.c) */
+/* the subjects, in their registration order (rd_ab_run.c k_subj: one row
+   each; the fifth, RD_AB_SUBJECTS - 1, is free for the next attempt: its
+   value here and its row there) */
 enum {
     RD_AB_ZERO = 0,      /* the zero-area cull (rd_vu_zero.h) */
-    RD_AB_NODISCARD = 1, /* the discard-free twins (rd_nodiscard.h) */
-    RD_AB_FASTPS = 2     /* the fast pixel build (rd_fastps.h) */
+    RD_AB_NODISCARD = 1, /* the discard-free twins' proven classes (rd_nodiscard.h: clip
+                            mode none, proven in front of the eye) */
+    RD_AB_FASTPS = 2,    /* the fast pixel build (rd_fastps.h) */
+    RD_AB_ND_CAMERA = 3  /* the discard-free twins' camera rule class (rd_nodiscard.h: taken on
+                            the device's clean clipper check, RD_ND_BY_CLIPPER), its own
+                            subject: the twins' verdict, taken where the class may barely
+                            appear, does not decide for it, nor its for the proven classes */
 };
 
 struct RdPerfRecord;
@@ -51,11 +62,12 @@ void rd__ab_begin(struct RdPerfRecord *r);
    the judge learnt forgotten (rd_ab_forget), logged */
 void rd__ab_renderer(void);
 /* whether the game shows scenery now (any thread: the window's step,
-   port/platform/window_perf_rank.c, from its layout's kind: play or a
-   cutscene's scene layout, not the title, the logo, a menu, the memory
-   card's pages; a movie has no work for any attempt): a trial starts only
-   then (rd_ab.h rd_ab_set_scenery); 0 until said (the replay tool, which
-   has no stage either) */
+   port/platform/window_perf_rank.c, rd_ab.h rd_ab_scenery_of: play or a
+   cutscene's scene layout in a stage that is not the boot logo and
+   title's, not the title, a menu, the memory card's pages; a movie has no
+   work for any attempt): a trial starts only then, and one running ends
+   with no verdict when it stops (rd_ab.h rd_ab_set_scenery); 0 until said
+   (the replay tool, which has no stage either) */
 void rd_ab_scenery(int scenery);
 /* the replay's record ends (rd__perf_end): no arm read after it */
 void rd__ab_end(void);

@@ -19,6 +19,13 @@
  *   - the modes on, off and alt (on, off, off, on from the first);
  *   - once a run, in scenery: no trial on the title or the logo, the first
  *     scenery stage's trial, its verdict for every later stage;
+ *   - the boot logo and title's stage is never scenery, on the scene layout
+ *     too (rd_ab_scenery_of; issue 179's v0.11.15 log: the cull judged
+ *     there); the scenery ending mid-trial ends it with no verdict, timed
+ *     again 2 s into the next stretch of scenery;
+ *   - the twins' camera rule class, a subject of its own: tried only where
+ *     its own passes had work, its verdict independent of the twins' (each
+ *     stops its own class);
  *   - the rate requirement: a GPU-bound stream at a 40 ms tick for 60 s,
  *     pictures of 33, 37.5, 48 and 60 ms, a subject saving or costing 3, 5
  *     and 10 %, in one stage, four, and four flipping the effect's sign:
@@ -605,6 +612,12 @@ static void rateRun(RateRun *rr, int mode, double baseMs, const double *eff, int
     rd_ab_init(&s_a, mode);
     (void)rd_ab_subject(&s_a, "zero-area cull");
     rd_ab_allow(&s_a, 0, true);
+    /* the registry full, as the renderer's (rd_ab_run.c): the others may be
+       tried but have no work in this stream */
+    for (int i = 1; i < RD_AB_SUBJECTS; i++) {
+        CHECK(rd_ab_subject(&s_a, "another") == i, "subject %d", i);
+        rd_ab_allow(&s_a, i, true);
+    }
     Pend q[4];
     int qn = 0;
     double end = 0.0;
@@ -929,8 +942,182 @@ static void testForget(void)
     CHECK(strstr(s_last, ": off for the rest of the run, every stage") != NULL, "%s", s_last);
 }
 
+/* the boot logo and title's stage (region.h stage_title, 1 on every disc):
+   never scenery, whatever its layout.  Issue 179's v0.11.15 log: with Skip
+   the opening on, stage 1 sat on the scene layout (55) for about 2.07 s and
+   the cull was judged there (its line 630).  The renderer's word for that
+   stretch, as window_perf_rank.c computes it, keeps every trial out; the
+   stream of that stretch with the word the window gave before (the scene
+   layout alone: scenery) starts one, which is the case refused */
+static void testTitleStage(void)
+{
+    printf("the boot logo and title's stage:\n");
+    CHECK(!rd_ab_scenery_of(true, 1, 1), "the title stage's scene layout taken as scenery");
+    CHECK(!rd_ab_scenery_of(false, 1, 1), "the title stage's title layout taken as scenery");
+    CHECK(rd_ab_scenery_of(true, 41, 1) && rd_ab_scenery_of(true, 42, 1),
+          "the opening or the boat not scenery");
+    CHECK(!rd_ab_scenery_of(false, 42, 1), "a menu in play taken as scenery");
+    CHECK(!rd_ab_scenery_of(true, -1, 1), "no stage yet taken as scenery");
+    CHECK(rd_ab_scenery_of(true, 1, 2) && !rd_ab_scenery_of(true, 2, 2),
+          "the title stage not read from its argument");
+    for (int before = 0; before < 2; before++) {
+        rd_ab_init(&s_a, RD_AB_AUTO);
+        (void)rd_ab_subject(&s_a, "zero-area cull");
+        rd_ab_allow(&s_a, 0, true);
+        /* stage 1 on the scene layout: 4 s (past the log's 2.07 s) */
+        rd_ab_set_scenery(&s_a, before ? true : rd_ab_scenery_of(true, 1, 1));
+        Stream s = {0};
+        s.lag = 2;
+        s.stepMs = 40.0;
+        s.effect = 0.05;
+        s.stage = 1;
+        s.replays = 100;
+        (void)run(&s_a, &s, 0.0, 1u);
+        if (before) {
+            /* the word the window gave before: the trial starts there */
+            CHECK(s_a.trials == 1u, "the old word started no trial (%u): the case is not the log's",
+                  (unsigned)s_a.trials);
+        } else {
+            CHECK(s_a.trials == 0u && s_a.offTrial == 0u &&
+                      rd_ab_verdict(&s_a, 0, 1) == RD_AB_V_NONE,
+                  "a trial on the title stage: %u trials, %llu replays without it",
+                  (unsigned)s_a.trials, (unsigned long long)s_a.offTrial);
+        }
+    }
+}
+
+/* the scenery ends mid-trial (a menu, a movie, the title): the trial ends
+   with no verdict however many pairs it had, no mark for the stage, its
+   line said; it is timed again 2 s into the next stretch of scenery (the
+   same stage here), and gives its verdict there */
+static void testSceneryEnd(void)
+{
+    printf("the scenery ends mid-trial:\n");
+    rd_ab_init(&s_a, RD_AB_AUTO);
+    (void)rd_ab_subject(&s_a, "zero-area cull");
+    rd_ab_allow(&s_a, 0, true);
+    rd_ab_set_scenery(&s_a, true);
+    /* the cull costs nothing either way: no early verdict, 20 pairs */
+    Stream s = {0};
+    s.lag = 2;
+    s.stepMs = 40.0;
+    s.noise = 0.01;
+    s.stage = 42;
+    s.replays = 50 + 44;
+    double t = run(&s_a, &s, 0.0, 1u);
+    CHECK(s_a.t.active && s_a.t.pairs >= RD_AB_PAIRS_MIN, "no trial past 16 pairs (%u)",
+          (unsigned)s_a.t.pairs);
+    /* the pause menu: no scenery */
+    rd_ab_set_scenery(&s_a, false);
+    s.replays = 100;
+    t = run(&s_a, &s, t, 1u);
+    CHECK(!s_a.t.active && s_a.trials == 1u && rd_ab_verdict(&s_a, 0, 42) == RD_AB_V_NONE &&
+              s_a.subj[0].stagesOn == 0u && s_a.subj[0].stagesOff == 0u,
+          "the scenery ended: running %d, %u trials, verdict %d", (int)s_a.t.active,
+          (unsigned)s_a.trials, rd_ab_verdict(&s_a, 0, 42));
+    CHECK(strstr(s_last, "A/B: zero-area cull, stage 42: no verdict (the scenery ended, ") ==
+                  s_last &&
+              strstr(s_last, "with it until it is timed again in the next stretch of play or a "
+                             "cutscene") != NULL,
+          "%s", s_last);
+    /* back in play: no trial in its first 2 s, then the trial and its
+       verdict (the cull 5 % dearer here) */
+    rd_ab_set_scenery(&s_a, true);
+    s.noise = 0.0;
+    s.effect = 0.05;
+    s.replays = 45;
+    t = run(&s_a, &s, t, 1u);
+    CHECK(s_a.trials == 1u, "a trial before 2 s of scenery again (%u)", (unsigned)s_a.trials);
+    s.replays = 200;
+    (void)run(&s_a, &s, t, 1u);
+    CHECK(s_a.trials == 2u && rd_ab_verdict(&s_a, 0, 42) == RD_AB_V_OFF,
+          "not timed again after the scenery came back: %u trials, verdict %d",
+          (unsigned)s_a.trials, rd_ab_verdict(&s_a, 0, 42));
+}
+
+/* the subjects as the renderer registers them (rd_ab_run.c k_subj): the
+   cull, the twins' proven classes, the fast pixel build, the twins' camera
+   rule class.  The camera class has no work in the opening (stage 41): it
+   is not tried there; in the boat (stage 42) its passes had work: its own
+   trial.  Its verdict and the twins' are independent: twins on and camera
+   off leaves only the camera's bit at the off arm, and the other way round */
+static void testCamera(void)
+{
+    enum { ZERO, ND, FPS, CAM };
+
+    for (int flip = 0; flip < 2; flip++) {
+        printf("the twins' camera rule class (%s):\n",
+               flip ? "twins dearer, camera cheaper" : "twins cheaper, camera dearer");
+        rd_ab_init(&s_a, RD_AB_AUTO);
+        CHECK(rd_ab_subject(&s_a, "zero-area cull") == ZERO, "id 0");
+        CHECK(rd_ab_subject(&s_a, "discard-free twins") == ND, "id 1");
+        CHECK(rd_ab_subject(&s_a, "fast pixel build") == FPS, "id 2");
+        CHECK(rd_ab_subject(&s_a, "discard-free twins, camera rule") == CAM, "id 3");
+        CHECK(RD_AB_SUBJECTS == 5 && rd_ab_subject(&s_a, "the fifth") == 4,
+              "the registry's fifth place (RD_AB_SUBJECTS %d)", RD_AB_SUBJECTS);
+        for (int i = 0; i < 4; i++) {
+            rd_ab_allow(&s_a, i, true);
+        }
+        rd_ab_set_scenery(&s_a, true);
+        const double eff[4] = {0.0, flip ? 0.05 : -0.05, 0.0, flip ? -0.05 : 0.05};
+        double t = 0.0;
+        Pend q[4];
+        int qn = 0;
+        for (int stage = 41; stage <= 42; stage++) {
+            /* the opening: the twins' proven classes only; the boat: both */
+            const uint8_t used =
+                stage == 41 ? (uint8_t)(1u << ND) : (uint8_t)(1u << ND | 1u << CAM);
+            for (int i = 0; i < 600; i++) {
+                if (qn >= 2) {
+                    const RdAbIn in = {q[0].tag, used, false, true, q[0].work, q[0].ms};
+                    rd_ab_collect(&s_a, &in);
+                    memmove(q, q + 1, (size_t)(qn - 1) * sizeof(q[0]));
+                    qn--;
+                }
+                const RdAbTag tag = rd_ab_begin(&s_a, stage, t, false);
+                if (stage == 41) {
+                    CHECK(!(s_a.t.active && s_a.t.subject == CAM),
+                          "the camera class tried where it had no work");
+                }
+                double ms = 40.0;
+                for (int k = 0; k < 4; k++) {
+                    /* a class with no work in the stage costs nothing there */
+                    if (used & (1u << k)) {
+                        ms *= (tag.off & (1u << k)) ? 1.0 : 1.0 + eff[k];
+                    }
+                }
+                q[qn++] = (Pend){tag, 50000.0, ms, false};
+                t += 40.0;
+                lines(&s_a);
+            }
+            if (stage == 41) {
+                CHECK(s_a.subj[CAM].trials == 0u && s_a.subj[CAM].carry == RD_AB_V_NONE,
+                      "the camera class judged in the opening");
+                CHECK(s_a.subj[ND].carry == (flip ? RD_AB_V_OFF : RD_AB_V_ON),
+                      "the twins' verdict in the opening: %d", s_a.subj[ND].carry);
+            }
+            t += 10000.0;
+        }
+        CHECK(s_a.subj[CAM].trials == 1u &&
+                  s_a.subj[CAM].carry == (flip ? RD_AB_V_ON : RD_AB_V_OFF) &&
+                  s_a.subj[ND].carry == (flip ? RD_AB_V_OFF : RD_AB_V_ON),
+              "the verdicts: camera %d (%u trials), twins %d", s_a.subj[CAM].carry,
+              (unsigned)s_a.subj[CAM].trials, s_a.subj[ND].carry);
+        CHECK(strstr(s_last, "A/B: discard-free twins, camera rule, stage 42: ") == s_last,
+              "the camera class's line: %s", s_last);
+        /* every later replay: each class at its own verdict's arm */
+        const RdAbTag tag = rd_ab_begin(&s_a, 43, t, false);
+        const uint8_t want = flip ? (uint8_t)(1u << ND) : (uint8_t)(1u << CAM);
+        CHECK(tag.off == want && tag.trial == 0u, "after both verdicts: off %x (want %x)", tag.off,
+              want);
+    }
+}
+
 int main(void)
 {
+    testTitleStage();
+    testSceneryEnd();
+    testCamera();
     testMeasure();
     testForget();
     testVerdicts();

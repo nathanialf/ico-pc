@@ -60,7 +60,8 @@ static struct {
     uint64_t tookEntry[2];                     /* of took, by entry (vu_ps, vu_texa_ps) */
     uint64_t tookEntryClip[2];                 /* of tookClip, by entry */
     bool entryOk[2]; /* the entry's twin drew in the self-test's floor (play uses it then) */
-    RdNdUse use;     /* the replay being made, for the in-play judge */
+    RdNdUse use;     /* the replay being made, for the in-play judge: the proven classes */
+    RdNdUse useCam;  /* and the camera rule class (RD_AB_ND_CAMERA, its own subject) */
     /* the device's clipper (rd_nodiscard.h "The clipper check"): RD_ND_CLIP_*,
        its first differing case's words, the check running (its frames take
        the camera rule's passes as a clean clipper would), the tests' fake */
@@ -81,6 +82,7 @@ typedef struct NCounts {
     uint64_t draws, refused[RD_ND_REASONS];
     uint64_t drawsClip;  /* of draws, by the device's clean clipper check */
     uint64_t drawsFront; /* of draws, proven in front of the eye (EYEBOX) */
+    uint64_t trialCam;   /* of refused[RD_ND_TRIAL], the camera rule class's (its subject) */
 } NCounts;
 
 static NCounts s_block, s_run;
@@ -423,18 +425,27 @@ void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint
     const RhiPipeline tp = rd__pipeline_twin(&t); /* made, or asked for in the background */
     /* (the tests' =unmade: every twin of the clipper check's frames) */
     const bool unmade = !tp.id || gathering || (s_n.sabotage == NS_UNMADE && s_n.clipCheck);
-    const int w = unmade                                     ? RD_ND_UNMADE
-                  : rd__ab_off(RD_AB_NODISCARD) && !s_n.held ? RD_ND_TRIAL
-                                                             : RD_ND_TWIN;
+    /* the class (clip mode none, proven in front of the eye, or taken on
+       the device's clean clipper check) and the judge's subject that times
+       it: the camera rule class its own (rd_ab_run.h RD_AB_ND_CAMERA), so
+       each verdict stops its own class alone */
+    const int cls = rd_nd_twin_class(&in);
+    const bool cam = cls == RD_ND_BY_CLIPPER;
+    const int subject = cam ? RD_AB_ND_CAMERA : RD_AB_NODISCARD;
+    const int w = unmade                             ? RD_ND_UNMADE
+                  : rd__ab_off(subject) && !s_n.held ? RD_ND_TRIAL
+                                                     : RD_ND_TWIN;
     if (!s_n.held) {
-        /* the in-play judge (rd_ab_run.h): a replay is timed for the twins
+        /* the in-play judge (rd_ab_run.h): a replay is timed for a class
            only when every eligible pass of it had its twin (one found not
-           made yet takes the replay out: the share would be partial) */
-        rd_nd_use_note(&s_n.use, w);
-        if (rd_nd_use_counts(&s_n.use)) {
-            rd__ab_used(RD_AB_NODISCARD);
+           made yet takes the replay out: the share would be partial); a
+           class's "used" bit is set by its own passes alone */
+        RdNdUse *use = cam ? &s_n.useCam : &s_n.use;
+        rd_nd_use_note(use, w);
+        if (rd_nd_use_counts(use)) {
+            rd__ab_used(subject);
         } else {
-            rd__ab_unused(RD_AB_NODISCARD);
+            rd__ab_unused(subject);
         }
         if (w == RD_ND_UNMADE) {
             rd__ab_unmade(); /* no subject is timed on this replay (REV4R S1) */
@@ -442,19 +453,23 @@ void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint
     }
     if (w != RD_ND_TWIN) {
         count(w, RD_ND_BY_NONE, 0);
+        if (w == RD_ND_TRIAL && cam) {
+            add(&s_block.trialCam, &s_run.trialCam, 1u);
+        }
         return;
     }
     *key = t;
     *pipe = tp;
     /* the class: clip mode none (proven on every device) or another, taken
        on the device's clipper check */
-    count(RD_ND_TWIN, rd_nd_twin_class(&in), entry);
+    count(RD_ND_TWIN, cls, entry);
     s_n.drewNow = true;
 }
 
 void rd__nd_replay_begin(void)
 {
     memset(&s_n.use, 0, sizeof(s_n.use)); /* the judge's use: this replay's own */
+    memset(&s_n.useCam, 0, sizeof(s_n.useCam));
     if (s_n.drewNow) {
         s_n.drewNow = false;
         if (s_n.state == N_ON && !s_n.held && !s_n.markedOn && ++s_n.pictures >= RD_ND_PROBATION) {
@@ -707,6 +722,7 @@ size_t rd_nd_text(char *out, size_t cap, unsigned n)
     c.draws = takeN(&s_block.draws);
     c.drawsClip = takeN(&s_block.drawsClip);
     c.drawsFront = takeN(&s_block.drawsFront);
+    c.trialCam = takeN(&s_block.trialCam);
     uint64_t refused = 0;
     for (int i = 0; i < RD_ND_REASONS; i++) {
         c.refused[i] = takeN(&s_block.refused[i]);
@@ -734,6 +750,12 @@ size_t rd_nd_text(char *out, size_t cap, unsigned n)
     for (int i = 1; i < RD_ND_REASONS && at > 0 && (size_t)at < cap; i++) {
         at += snprintf(out + at, cap - (size_t)at, "%s %s %.0f", i > 1 ? "," : "",
                        rd_nd_reason_name(i), (double)c.refused[i] / d);
+        if (i == RD_ND_TRIAL && c.trialCam != 0u && at > 0 && (size_t)at < cap) {
+            /* the camera rule class's off arm, its own subject (rd_ab_run.h
+               RD_AB_ND_CAMERA): said only when it ran */
+            at += snprintf(out + at, cap - (size_t)at, " (%.0f of them the camera rule's)",
+                           (double)c.trialCam / d);
+        }
     }
     if (at > 0 && (size_t)at < cap) {
         at += snprintf(out + at, cap - (size_t)at, ")");

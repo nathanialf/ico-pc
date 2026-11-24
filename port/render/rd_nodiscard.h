@@ -198,8 +198,10 @@
  *   - the judge times only replays whose every eligible pass had its twin
  *     (rd_nd_use_counts: one found "not made yet" takes the replay out), so
  *     no verdict rests on a partial share;
- *   - the in-play judge (rd_ab_run.h RD_AB_NODISCARD): a stage judged
- *     without them draws through the *_nodual builds.
+ *   - the in-play judge (rd_ab_run.h RD_AB_NODISCARD for the proven
+ *     classes, RD_AB_ND_CAMERA for the camera rule class taken on the
+ *     clean clipper check, each its own subject and verdict): a class
+ *     judged without them draws through the *_nodual builds.
  * Until the self-test passes nothing of them exists on the device: with
  * them off every shader and pipeline is the build's without them.
  *

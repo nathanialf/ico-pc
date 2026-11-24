@@ -493,7 +493,18 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
     arm would be faster, on the run's arm with no trial; a second subject with work only in a later
     stage: its one trial there, then both judged, no trial running and none after; a renderer made
     again: both verdicts forgotten, both timed once more and judged again;
-  - the rate requirement, 72 cases: a GPU-bound stream at a 40 ms tick for 60 s, pictures of 33,
+  - the boot logo and title's stage (`rd_ab_scenery_of`): never scenery on any layout, the
+    opening and the boat scenery, a menu not; 4 s of that stage on the scene layout start no trial
+    with the renderer's word, and do start one with the layout's word alone (the case of issue
+    179's report, which the test refuses);
+  - the scenery ending mid-trial: a trial past 16 pairs ends with no verdict and its line word
+    for word, no verdict kept for the stage; back in scenery none before 2 s, then the trial and
+    its verdict in the same stage;
+  - the twins' camera rule class (`RD_AB_ND_CAMERA`) beside the twins: the four subjects in the
+    renderer's order and a fifth place; no trial of the class in a stage where it had no work, its
+    own trial where it had; its verdict and the twins' independent both ways (twins on, class off
+    and the reverse), each later replay with only the class judged off at its off arm;
+  - the rate requirement, 72 cases (the registry full, five subjects, the others without work): a GPU-bound stream at a 40 ms tick for 60 s, pictures of 33,
     37.5, 48 and 60 ms, the attempt saving or costing 3, 5 and 10 %, in one stage, in four stages
     of that effect and in four stages whose effect changes sign each stage; each case beside its
     two fixed-arm runs, restated for one verdict a run: the target is the arm faster in the first
@@ -616,7 +627,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   clean), so the camera rule's passes of the checked forms take a twin: every target byte for byte (these
   fixtures hold no eye-crossing triangle whose pixels differ under Mesa 25.0.7, measured; another
   rasteriser may differ, and the test then names the target), and per fixture and profile at
-  least its list line's `clean_min` of that class. No device: SKIP.
+  least its list line's `clean_min` of that class, and the judge's stats line counting the camera
+  rule class (its own subject, `discard-free twins, camera rule`) at its on arm on every replay;
+  without the clean verdict (`rd_nodiscard_ab`) that subject counts no replay at either arm. No
+  device: SKIP.
 - `rd_vuprepass_selftest_nodiscard`, `_nodiscard_clipper`, `_nodiscard_empty`,
   `_nodiscard_clean`, `_nodiscard_sabotage`, `_nodiscard_marked`, `_nodiscard_dual`,
   `_nodiscard_fallback`, `_nodiscard_nodynamic`, `_nodiscard_unchecked` (the clipper check: `_nodiscard` requires that it ran (cases 1 and 13's

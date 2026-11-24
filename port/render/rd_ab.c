@@ -199,8 +199,10 @@ static void capCheck(RdAb *a)
     }
 }
 
-/* the trial ended: judged (verdict, early or on its n pairs) or not (why) */
-static void trialEnd(RdAb *a, const char *why, bool keptOn, bool judgeable)
+/* the trial ended: judged (verdict, early or on its n pairs) or not (why);
+   again: where a trial with no verdict is tried next (NULL: the next stage
+   of play, or another stage when keptOn) */
+static void trialEndAgain(RdAb *a, const char *why, bool keptOn, bool judgeable, const char *again)
 {
     RdAbTrial *t = &a->t;
     if (!t->active) {
@@ -252,10 +254,17 @@ static void trialEnd(RdAb *a, const char *why, bool keptOn, bool judgeable)
              "work, %u replays not measured): with it until it is timed again in %s",
              s->name, st, why != NULL ? why : "?", (unsigned)n, (unsigned)t->dropLong,
              (unsigned)t->dropWork, (unsigned)t->notMeasured,
-             keptOn ? "another stage" : "the next stage of play");
+             again != NULL ? again
+             : keptOn      ? "another stage"
+                           : "the next stage of play");
     }
     t->active = false;
     capCheck(a);
+}
+
+static void trialEnd(RdAb *a, const char *why, bool keptOn, bool judgeable)
+{
+    trialEndAgain(a, why, keptOn, judgeable, NULL);
 }
 
 static void trialStart(RdAb *a, int id)
@@ -344,6 +353,12 @@ RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep)
         trialEnd(a, why, true, true);
     }
     if (!a->scenery) {
+        /* the scenery ended (a menu, the title, a movie): a trial running
+           ends with no verdict and no mark for the stage (its pairs are not
+           judged, however many), and is tried again once there is scenery
+           again, 2 s into it (the cap counts it) */
+        trialEndAgain(a, "the scenery ended", false, false,
+                      "the next stretch of play or a cutscene");
         a->stageMs = nowMs; /* the 2 s count from the stage's scenery on */
     }
     /* a trial: game scenery (play or a cutscene, not the title, the logo,
@@ -451,6 +466,15 @@ void rd_ab_collect(RdAb *a, const RdAbIn *in)
 void rd_ab_set_scenery(RdAb *a, bool scenery)
 {
     a->scenery = scenery;
+}
+
+bool rd_ab_scenery_of(bool playOrScene, int stage, int titleStage)
+{
+    /* the boot logo and title's stage (region.h stage_title: the stage the
+       perf lines name "logo") is never scenery, whatever its layout: with
+       Skip the opening on it sits on the scene layout past 2 s (issue 179's
+       v0.11.15 log, its line 630: the cull judged there) */
+    return playOrScene && stage >= 0 && stage != titleStage;
 }
 
 void rd_ab_forget(RdAb *a, const char *why)
@@ -563,7 +587,8 @@ size_t rd_ab_start_text(const RdAb *a, char *out, size_t cap)
             "all one way by %.0f %% or more, else at %u: on with a median %.0f %% or more cheaper "
             "with it and %u of %u cheaper with it, else off; no verdict under %u pairs in %u "
             "replays; the verdict kept for every stage for the rest of the run; with it until "
-            "then, and timed again in the next stage after a trial with no verdict",
+            "then, and timed again in the next stage after a trial with no verdict; never in the "
+            "boot logo and title's stage; a trial ends with no verdict when the scenery ends",
             RD_AB_START_MS / 1000.0, (unsigned)RD_AB_TRIALS, RD_AB_WORK_TOL * 100.0, RD_AB_LONG,
             (unsigned)RD_AB_MEDIAN_MIN, (unsigned)RD_AB_EARLY, RD_AB_GAIN * 100.0,
             (unsigned)RD_AB_PAIRS, RD_AB_GAIN * 100.0, (unsigned)RD_AB_FAVOUR,
