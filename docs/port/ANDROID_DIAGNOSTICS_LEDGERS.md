@@ -396,30 +396,35 @@ allowed most lowered), and did the stalls fall in those seconds?
 | `where: attempts: submit ahead on; <the rows on with their counts N/N2/N3>` | the attempts in the block (`ico_attempt_on_text`: nothing taken from the attempts line) |
 | `where: phone: thermal (...) 1/0.67/46.5/1200:1800; battery -812 mA; memory 1173 MB available, pressure not readable; stalls: 12 in 11 replays, most in list 0 (8)` | the phone's state and the block's stalls |
 | `where: largest: GPU list 0 49.0 ms (47 % of the GPU span); CPU walk 8.0 ms (8 % of the time between presents)` | the single largest GPU piece and CPU piece (the game step counts as one) |
-| `where: explained by the rate card (vertices and triangles; fragments not counted): list 0 81.7 of 49.0 ms (vertices at most 32.3 ms: 273.3k corners x 118.29 ns; triangles at most 49.4 ms: 91.1k x 541.76 ns, of them 31.0k drawn again by a later pass, 0.0k the shadow volumes'; passes 0.0 ms: 1.0 x 0.003 ms); list 3 ...` | per list that drew VU or shadow volume triangles: how many of its GPU ms a picture the start-up rate card's units account for |
+| `where: explained by the rate card, upper bounds, not a split (fragments, loads and stores not counted): list 0 49.0 ms measured: its triangles at most 49.4 ms (91.1k x 541.76 ns, each with its three corners and one 2x2 quad of fragments; 31.0k of them drawn again by a later pass, 0.0k the shadow volumes'), its corners alone at most 32.3 ms (273.3k x 118.29 ns: the card's corner also holds one pre-pass vertex), passes 0.0 ms (1.0 x 0.003 ms, an empty SCENE pass each); list 3 15.0 ms measured: ..., so at least 8.4 ms of it is not vertices or triangles by the card: fragments, loads and stores, or a stall` | per list that drew VU or shadow volume triangles: its measured GPU ms a picture and the start-up rate card's bounds, each on its own |
 
 **The rate card's line.** On a tile-based GPU the timestamps cannot split a pass's time by draw, so
-the last line multiplies the block's counts a picture by the rate card's units
+the last line sets the block's counts a picture against the rate card's units
 ([RENDER_PERF.md](RENDER_PERF.md#the-rate-card), `rd_rate_card_get`, read through
-`rd_perf_where_rates_of`). Per list, `X of Y ms`: Y the list's GPU ms a picture (the GPU line's),
-X the sum of the terms the card has a figure for:
+`rd_perf_where_rates_of`). Per list the measured GPU ms a picture (the GPU line's), then each term
+on its own. The terms are never summed: the card's triangle holds its three corners, so a sum
+would count the corners twice.
 
-| Term | Count a picture | Card unit | Bound |
+| Term | Count a picture | Card unit | Reads as |
 | --- | --- | --- | --- |
-| vertices | the list's VU corners: 3 a triangle, each pass (its triangles and those a draw's later passes draw again) | `a vertex`, ns a corner drawn off the target (`(V - E)` over 3 x 2048 x 8 corners) | with the VU pre-pass on, `at most`: the card's corner holds its pre-pass vertex, which play times apart (`pre-pass` on the GPU line), and the index compaction's and the shared vertices' savings are not taken off the count; with the pre-pass off on both, the count and the unit are the same kind (3 of the programs' own invocations a corner) |
-| triangles | the list's VU triangles, those drawn again and the shadow volumes' | `a triangle binned`, ns (`(S - B)` over 2046 x 8: a small visible triangle less a large one, its three corners and its 2x2 quad of fragments inside) | always `at most` |
-| passes | the list's render passes a timed picture | `a pass with nothing drawn`, ms (a cleared SCENE pass, a replay's span) | none |
+| triangles | the list's VU triangles, those a draw's later passes draw again and the shadow volumes' | `a triangle binned`, ns (`(S - B)` over 2046 x 8: a small visible triangle less a large one, its three corners and its 2x2 quad of fragments inside) | with the VU pre-pass on for the card and the block, `at most`: an upper bound of the list's vertex and triangle work (play's programs' own work is in the pre-pass, timed apart; every corner runs the same main shader) |
+| corners alone | 3 a triangle, each pass | `a vertex`, ns a corner drawn off the target (`(V - E)` over 3 x 2048 x 8) | `at most`, a bound of the corners' part inside the triangles' bound: the card's corner also holds one pre-pass vertex, timed apart in play, and the index compaction's and shared vertices' savings are not taken off the count |
+| passes | the list's render passes a timed picture | `a pass with nothing drawn`, ms (a cleared SCENE pass, a replay's span) | the passes' fixed cost at that size |
 
-The fragments (shaded, hidden by depth, blended) and the bytes loaded and stored are not counted,
-so X is neither a bound of Y nor its share; a list whose X is far above Y says the card's units do
-not hold in play (the upper bounds), one far below says the time is in what is not counted. A
-term the card has no figure for prints `<term>: no rate card figure (<why>)`, never a number: the
-item not measured (its reason), its median at or below 0, another unit than ns (ms for a pass),
-the card's vertex timed with the other VU pre-pass state than the block's, the list's first pass
-not SCENE at the card's size, the list not timed pass by pass. No card this run, or a card whose
-device text names another graphics API than the block's (a switch after which the card was not
-measured again), prints `no rate card figure (<why>)` for the whole line; a block with no timed
-picture `no picture timed`; one with no VU or shadow volume triangles says so.
+With the pre-pass off on both, the two are `about`, not bounds: play's programs are not the card's
+prelit one. The corner term is not made net of play's own pre-pass cost (the pre-pass piece over
+its vertices): that figure carries the pre-pass's fixed work and play's programs, not the card's
+prelit vertex, so the rest would bound nothing. Where the triangles' bound is below the measured
+time, and only then, the list ends `so at least D ms of it is not vertices or triangles by the
+card: fragments, loads and stores, or a stall`: the useful case, a time the vertex side cannot
+hold. A term the card has no figure for prints `: no rate card figure (<why>)`, never a number:
+the item not measured (its reason, `a difference not above 0` among them), its median not above
+0, another unit than ns (ms for a pass), the card timed with the other VU pre-pass state than the
+block's (both corner and triangle), the list's first pass not SCENE at the card's size, the list
+not timed pass by pass. No card this run, or a card whose device text names another graphics API
+than the block's (a switch after which the card was not measured again), prints `no rate card
+figure (<why>)` for the whole line; a block with no timed picture `no picture timed`; one with no
+VU or shadow volume triangles says so.
 
 ### The present latency line
 

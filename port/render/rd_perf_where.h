@@ -33,39 +33,52 @@
  * the per-picture GPU span; no new measurement.  A piece of 0 ms is left
  * out.  The effects sit inside their lists' times.
  *
- *   where: explained by the rate card (vertices and triangles; fragments
- *     not counted): list 0 76.8 of 16.0 ms (vertices at most 30.4 ms:
- *     257.1k corners x 118.29 ns; triangles at most 46.4 ms: 85.7k x
- *     541.76 ns, of them 31.0k drawn again by a later pass, 0.0k the
- *     shadow volumes'; passes 0.0 ms: 1.0 x 0.003 ms); list 3 ...
+ *   where: explained by the rate card, upper bounds, not a split
+ *     (fragments, loads and stores not counted): list 0 49.0 ms measured:
+ *     its triangles at most 49.4 ms (91.1k x 541.76 ns, each with its three
+ *     corners and one 2x2 quad of fragments; 31.0k of them drawn again by a
+ *     later pass, 0.0k the shadow volumes'), its corners alone at most 32.3
+ *     ms (273.3k x 118.29 ns: the card's corner also holds one pre-pass
+ *     vertex), passes 0.0 ms (1.0 x 0.003 ms, an empty SCENE pass each);
+ *     list 3 15.0 ms measured: its triangles at most 6.6 ms (...), ..., so
+ *     at least 8.4 ms of it is not vertices or triangles by the card:
+ *     fragments, loads and stores, or a stall
  *
- * The last line multiplies the block's counts a picture by the rate card's
+ * The last line puts the block's counts a picture against the rate card's
  * units (rd_ratecard.h, measured at start-up; issue 179: on a tiler the
  * timestamps cannot split a pass by draw), per list that drew VU or
- * shadow volume triangles (the others left out):
- *   vertices   the list's VU corners, 3 a triangle each pass (its
- *              triangles and those drawn again by a draw's later passes),
- *              times the card's "a vertex" (ns a corner drawn off the
- *              target: (V - E) over 3 x 2048 x 8 corners, the draws'
- *              vertex shader with, the VU pre-pass on, its pre-pass vertex
- *              and the record's load inside it, and a third of an
- *              off-target triangle's clipping).  With the pre-pass on an
- *              upper bound ("at most"): play times the pre-pass apart
- *              ("pre-pass" above) and the index compaction's and the
- *              shared vertices' savings are not taken off.  No figure when
- *              the card's pre-pass state is not the block's;
- *   triangles  the list's VU triangles, those drawn again and the shadow
- *              volumes', times the card's "a triangle binned" (ns: a small
- *              visible triangle less a large one, its corners and its 2x2
- *              quad of fragments inside): always an upper bound;
+ * shadow volume triangles (the others left out), each term on its own and
+ * never summed (the triangle's unit holds its corners: a sum would count
+ * them twice):
+ *   triangles  the list's VU triangles, those drawn again by a draw's
+ *              later passes and the shadow volumes', times the card's "a
+ *              triangle binned" (ns: a small visible triangle less a large
+ *              one, its three corners and its 2x2 quad of fragments
+ *              inside): with the VU pre-pass on (card and block) an upper
+ *              bound of the list's vertex and triangle work, as play's
+ *              programs' own work is then in the pre-pass, timed apart,
+ *              and every corner runs the same main shader;
+ *   corners    3 a triangle each pass, times the card's "a vertex" (ns a
+ *              corner drawn off the target, (V - E) over 3 x 2048 x 8: the
+ *              draws' main shader, one pre-pass vertex and the record's
+ *              load, a third of an off-target triangle's clipping): an
+ *              upper bound of the corners' share inside the triangles'
+ *              (the pre-pass vertex in it is timed apart in play; the index
+ *              compaction's and shared vertices' savings are not taken
+ *              off).  Taking play's own ns a pre-pass vertex (the pre-pass
+ *              piece over its vertices) off it is not sound: that figure
+ *              carries the pre-pass's fixed work and play's programs, not
+ *              the card's prelit vertex, so the rest would bound nothing;
  *   passes     the list's render passes a timed picture times the card's
  *              "a pass with nothing drawn" (ms: SCENE cleared, a replay's
  *              span); no figure where the list's first pass is not SCENE
  *              at the card's size, or the list was not timed pass by pass.
- * X is the sum of the terms that have a figure; the fragments (shaded,
- * hidden, blended) and the bytes loaded and stored are not in it, so X is
- * neither a bound of the list's time nor its share.  A term the card has
- * no figure for (not measured, at or below 0, another unit) says "no rate
+ * With the pre-pass off (card and block) the two are "about", not bounds:
+ * play's programs are not the card's prelit one.  Where the triangles'
+ * bound is below the measured time the line says how much at least is
+ * something else (fragments, loads and stores, a stall); only then.  A
+ * term the card has no figure for (not measured, a difference not above 0,
+ * another unit, the card's pre-pass state not the block's) says "no rate
  * card figure (why)", never a number; no card this run (or one of another
  * graphics API) says so for the whole line.
  *
@@ -107,15 +120,18 @@ typedef struct RdPerfWhereRates {
    checked): a card whose device text names another has none at all */
 void rd_perf_where_rates_of(const struct RdRateCard *c, const char *backend, RdPerfWhereRates *out);
 
-/* One list's terms a picture (the last line's) */
+/* One list's terms a picture (the last line's): bounds, never summed */
 typedef struct RdPerfWhereExplained {
     double ms;                      /* the list's GPU ms a picture (the GPU line's) */
     double tris, again, shadow;     /* its VU triangles, drawn again, shadow volumes' */
     double corners, passes;         /* 3 (tris + again); render passes a timed picture */
     double vertexMs, triMs, passMs; /* each term, < 0 no figure */
-    bool vertexAtMost;              /* the vertex term an upper bound (the pre-pass on) */
+    bool bound;                     /* the corner and triangle terms upper bounds (the VU
+                                       pre-pass on, for the card and the block); else
+                                       "about" */
+    double gapMs;                   /* bound: ms - triMs where the triangles' bound is below
+                                       the measured time, else < 0 */
     char vertexWhy[224], triWhy[224], passWhy[224]; /* no figure: why */
-    double sum;                                     /* the terms with a figure, < 0 none has one */
 } RdPerfWhereExplained;
 
 /* list (0 .. RD_LIST_COUNT - 1) of the block under the rates (r->have);
