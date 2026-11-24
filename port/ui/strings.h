@@ -535,6 +535,11 @@ typedef enum UiStrId {
        label and its note (the values are On and Off) */
     UI_STR_OPT_CAMERA_RESET,
     UI_STR_CAMERA_RESET_NOTE,
+    /* Controls > Look at Yorda ([gameplay] yorda_look), after Camera reset:
+       its label and its note (the values are Off and Zoom type's Hold and
+       Toggle) */
+    UI_STR_OPT_YORDA_LOOK,
+    UI_STR_YORDA_LOOK_NOTE,
     /* Controls > Button pictures and its note (the values are names, not
        translated: settings_pads.c) */
     UI_STR_OPT_BUTTON_PICTURES,
@@ -970,7 +975,6 @@ typedef enum UiStrId {
     UI_STR_STATES_PAUSE_FIRST,
     UI_STR_STATES_REFUSED_BUILD,
     UI_STR_STATES_REFUSED_DISC,
-    UI_STR_STATES_REFUSED_SETTINGS,
     UI_STR_STATES_REFUSED_BUSY,
     UI_STR_STATES_REFUSED_CHECK,
     UI_STR_STATES_OFF,

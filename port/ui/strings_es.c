@@ -422,6 +422,9 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_OPT_CAMERA_RESET] = "Restablecer cámara",
         [UI_STR_CAMERA_RESET_NOTE] =
             "Activado: pulsa el stick derecho (R3) para devolver la cámara a Ico al instante.",
+        [UI_STR_OPT_YORDA_LOOK] = "Mirar a Yorda",
+        [UI_STR_YORDA_LOOK_NOTE] =
+            "Ico y la cámara miran a Yorda sin llamarla. Mantener: mientras pulsas L3. Alternar: L3 lo activa y lo desactiva.",
         [UI_STR_OPT_BUTTON_PICTURES] = "Imágenes de los botones",
         [UI_STR_BUTTON_PICTURES_NOTE] =
             "Los botones que se muestran en los menús y el modo foto. Automático sigue al último mando usado.",
@@ -810,7 +813,6 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Pausa el juego para cargar este estado",
         [UI_STR_STATES_REFUSED_BUILD] = "Guardado por otra versión del juego",
         [UI_STR_STATES_REFUSED_DISC] = "Guardado desde otro disco",
-        [UI_STR_STATES_REFUSED_SETTINGS] = "Un ajuste de juego es distinto: %s",
         [UI_STR_STATES_REFUSED_BUSY] = "Ahora no: el juego está cargando o guardando",
         [UI_STR_STATES_REFUSED_CHECK] = "No se pudo cargar; el juego continúa",
         [UI_STR_STATES_OFF] = "Los estados guardados están desactivados en esta versión",

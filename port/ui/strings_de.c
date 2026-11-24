@@ -421,6 +421,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_CAMERA_RESET] = "Kamera zurücksetzen",
     [UI_STR_CAMERA_RESET_NOTE] =
         "Ein: Den rechten Stick drücken (R3), um die Kamera sofort wieder auf Ico zu richten.",
+    [UI_STR_OPT_YORDA_LOOK] = "Zu Yorda schauen",
+    [UI_STR_YORDA_LOOK_NOTE] =
+        "Ico und die Kamera wenden sich Yorda zu, ohne sie zu rufen. Halten: solange L3 gedrückt bleibt. Umschalten: L3 startet und beendet es.",
     [UI_STR_OPT_BUTTON_PICTURES] = "Tastenbilder",
     [UI_STR_BUTTON_PICTURES_NOTE] =
         "Die Tasten in Menüs und im Fotomodus. Automatisch folgt dem zuletzt benutzten Controller.",
@@ -812,7 +815,6 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Pausiere das Spiel, um diesen Zustand zu laden",
     [UI_STR_STATES_REFUSED_BUILD] = "Von einer anderen Version des Spiels gespeichert",
     [UI_STR_STATES_REFUSED_DISC] = "Von einer anderen Disc gespeichert",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "Eine Spieleinstellung weicht ab: %s",
     [UI_STR_STATES_REFUSED_BUSY] = "Jetzt nicht: Das Spiel lädt oder speichert gerade",
     [UI_STR_STATES_REFUSED_CHECK] = "Laden nicht möglich; das Spiel läuft weiter",
     [UI_STR_STATES_OFF] = "Spielzustände sind in dieser Version aus",

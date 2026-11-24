@@ -38,10 +38,12 @@ typedef struct RdRcStat {
 RdRcStat rd_rc_stat(const double *ms, uint32_t n);
 
 /* a unit cost: the medians' difference over count units, times scale (ms
- * to ns: 1e6), its spread from the extremes ((a.min - b.max) .. (a.max -
- * b.min), over count, times scale); not ok (why set) when either has fewer
- * than RD_RC_SAMPLES times, count is not above 0 or a number is not finite.
- * b.n 0: a alone (no difference) */
+ * to ns: 1e6), its spread a's extremes against b's median ((a.min - b.med)
+ * .. (a.max - b.med), over count, times scale: one slow replay of b does
+ * not widen it); not ok (why set) when either has fewer than RD_RC_SAMPLES
+ * times, count is not above 0, a number is not finite or the medians'
+ * difference is not above 0 ("a difference not above 0").  b.n 0: a alone
+ * (no difference) */
 typedef struct RdRcUnit {
     bool ok;
     double med, lo, hi;
@@ -49,13 +51,18 @@ typedef struct RdRcUnit {
 } RdRcUnit;
 
 RdRcUnit rd_rc_unit(RdRcStat a, RdRcStat b, double count, double scale);
-/* the ratio of two units (med over med; the spread the extremes' ratios);
- * not ok when either is not, or the divisor's median is not above 0 */
+/* the ratio of two units (med over med; the spread a's least and largest
+ * over b's median); not ok when either is not, or the divisor's median is
+ * not above 0 */
 RdRcUnit rd_rc_ratio(RdRcUnit a, RdRcUnit b);
 /* not measured, for why */
 RdRcUnit rd_rc_none(const char *why);
 
-/* the card's items, in the printed order */
+/* the card's items, in the printed order.  A new item: its enum here
+ * (before RD_RC_ITEMS), its label, unit and figure in rd_ratecard_run.c
+ * measure(), its line in rd_ratecard_test.c's sample (a static assert
+ * there counts them) and golden text; the ctests' item count follows this
+ * enum (rd_ratecard.cmake reads it) */
 enum {
     RD_RC_SHADE,         /* a shaded fragment, the ordinary build (vu_ps or its _nodual) */
     RD_RC_SHADE_TEXA,    /* a shaded fragment, the textured build under TEXA */
@@ -65,7 +72,8 @@ enum {
     RD_RC_SHADE_FAST,    /* the same through the fast pixel build (rd_fastps.h) */
     RD_RC_SHADE_FAST_ND, /* the same through its discard-free form, the twins' hold on */
     RD_RC_HIDDEN,        /* a fragment hidden by depth, the ordinary build (with discard) */
-    RD_RC_HIDDEN_TWIN,   /* a fragment hidden by depth, through the twin */
+    RD_RC_HIDDEN_TWIN,   /* a fragment hidden by depth, through the twin (against one layer
+                            through the twin) */
     RD_RC_VERTEX,        /* a vertex: a corner drawn off the target */
     RD_RC_TRIANGLE,      /* a triangle binned: small against large, the same coverage */
     RD_RC_QUAD,          /* the 2x2-quad factor: the small layer's cost over the large's */

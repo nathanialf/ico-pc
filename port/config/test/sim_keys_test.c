@@ -29,9 +29,15 @@
  *               older state's text that lists them at any value is equal;
  *               through the save state's own header check (state_file.h,
  *               the two functions state_host.c sets): a v0.11.2 state's
- *               text with the fifteen at any value loads, its damaged hash
- *               or a still-listed key that differs (gameplay.door_fix)
- *               refuses, and the fifteen are named for the log
+ *               text loads whatever it holds (the fifteen at any value, a
+ *               damaged hash, a still-listed key that differs), and the
+ *               load's difference list (ico_state_keys_diff) passes over
+ *               the fifteen and names gameplay.door_fix
+ *   carry       every key declares what a load does when the state's value
+ *               is not this run's (kCarry, the size rule), the fix-up keys
+ *               and the one kept (video.video_mode) as sim_keys.c's table
+ *               says, a key not in the list -1; a saved text's value read
+ *               back (ico_sim_keys_value)
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -99,6 +105,10 @@ static void test_list(void)
     /* Controls > Camera reset changes the look-around: off, the game's own */
     CHECK(listed("gameplay.camera_reset") &&
           strcmp(ico_sim_key_default("gameplay.camera_reset"), "off") == 0);
+    /* Controls > Look at Yorda changes the boy's look and the camera: off,
+       the game's own */
+    CHECK(listed("gameplay.yorda_look") &&
+          strcmp(ico_sim_key_default("gameplay.yorda_look"), "off") == 0);
     CHECK(listed("video.video_mode"));
 }
 
@@ -284,6 +294,18 @@ static void test_defaults(const char *dir)
     CHECK(k != NULL && strcmp(k, "gameplay.camera_reset") == 0 &&
           strcmp(out, "gameplay.camera_reset=(absent) (now on)") == 0);
     CHECK(ico_config_set_string("gameplay.camera_reset", "") == 0);
+    /* a state saved before gameplay.yorda_look existed: the same with it off,
+       a difference with it on */
+    drop_line(t, "gameplay.yorda_look", older, sizeof older);
+    CHECK(strstr(older, "gameplay.yorda_look=") == NULL && strlen(older) < strlen(t));
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
+    CHECK(ico_config_set_string("gameplay.yorda_look", "off") == 0);
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
+    CHECK(ico_config_set_string("gameplay.yorda_look", "toggle") == 0);
+    k = ico_sim_keys_first_diff(older, out, sizeof out);
+    CHECK(k != NULL && strcmp(k, "gameplay.yorda_look") == 0 &&
+          strcmp(out, "gameplay.yorda_look=(absent) (now toggle)") == 0);
+    CHECK(ico_config_set_string("gameplay.yorda_look", "") == 0);
     /* a key without one fixed default, absent, set now: differs */
     drop_line(t, "dev.start_stage", older, sizeof older);
     CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
@@ -377,16 +399,17 @@ static void test_retired(void)
         sv.settings_hash = xxh3_64(sv.keys, strlen(sv.keys));
         ico_state_set_key_default(ico_sim_key_is_default);
         ico_state_set_key_retired(NULL);
-        CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS);
-        CHECK(strcmp(detail, "gameplay.yorda_safe=7 (now absent)") == 0);
+        CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OK);
+        CHECK(ico_state_keys_diff(sv.keys, nw.keys, names, sizeof names) == 15);
+        CHECK(strncmp(names,
+                      "gameplay.yorda_safe=7 (now absent), gameplay.pit_time=true (now absent)",
+                      71) == 0);
         ico_state_set_key_retired(ico_sim_key_retired);
         CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OK);
         CHECK(ico_state_header_check_other_build(&sv, &nw, detail, sizeof detail) == ICO_STATE_OK);
-        CHECK(ico_state_keys_retired(sv.keys, nw.keys, names, sizeof names) == 15);
-        CHECK(strncmp(names, "gameplay.yorda_safe=7, gameplay.pit_time=true", 45) == 0);
+        CHECK(ico_state_keys_diff(sv.keys, nw.keys, names, sizeof names) == 0 && names[0] == '\0');
         sv.settings_hash ^= 1;
-        CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS);
-        CHECK(strcmp(detail, "the settings differ") == 0);
+        CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OK);
         /* a key still listed that differs: the door fix on in the state */
         memcpy(sv.keys, nw.keys, sizeof sv.keys);
         {
@@ -400,8 +423,9 @@ static void test_retired(void)
             }
         }
         sv.settings_hash = xxh3_64(sv.keys, strlen(sv.keys));
-        CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS);
-        CHECK(strcmp(detail, "gameplay.door_fix=true (now )") == 0);
+        CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OK);
+        CHECK(ico_state_keys_diff(sv.keys, nw.keys, names, sizeof names) == 1);
+        CHECK(strcmp(names, "gameplay.door_fix=true (now )") == 0);
         ico_state_set_key_retired(NULL);
         ico_state_set_key_default(NULL);
     }
@@ -409,9 +433,12 @@ static void test_retired(void)
     CHECK(ico_config_set_string("variants.one_hit", "") == 0);
 }
 
-/* a state's header check as state_host.c sets it up: saved with the keys
-   text `saved` (its own hash), now this run's config */
-static IcoStateResult check_saved(const char *saved, char *detail, size_t n, int hash_ok)
+/* a state's load as state_host.c sets it up: saved with the keys text
+   `saved` (its own hash, or a damaged one), now this run's config.  The
+   header check is OK whatever the keys (a state is never refused for a
+   setting: a failure counts otherwise); the load's differences
+   (ico_state_keys_diff) into detail, their count returned */
+static int check_saved(const char *saved, char *detail, size_t n, int hash_ok)
 {
     static IcoStateHeader sv, nw;
 
@@ -421,7 +448,8 @@ static IcoStateResult check_saved(const char *saved, char *detail, size_t n, int
     sv = nw;
     snprintf(sv.keys, sizeof sv.keys, "%s", saved);
     sv.settings_hash = xxh3_64(sv.keys, strlen(sv.keys)) ^ (hash_ok ? 0u : 1u);
-    return ico_state_header_check(&sv, &nw, detail, n);
+    CHECK(ico_state_header_check(&sv, &nw, NULL, 0) == ICO_STATE_OK);
+    return ico_state_keys_diff(sv.keys, nw.keys, detail, n);
 }
 
 /* issue 218: a key unset when the state was saved and written at its
@@ -431,7 +459,7 @@ static IcoStateResult check_saved(const char *saved, char *detail, size_t n, int
 static void test_unset_is_default(void)
 {
     static char unset[4096], t[4096];
-    char out[160], detail[160], names[256];
+    char out[160], detail[160];
     const char *k;
     int i, n_fixed = 0;
 
@@ -444,24 +472,19 @@ static void test_unset_is_default(void)
     CHECK(ico_config_set_bool("gameplay.developer_mode", 0) == 0);
     CHECK(strcmp(ico_config_get_string("gameplay.developer_mode", ""), "false") == 0);
     CHECK(ico_sim_keys_first_diff(unset, out, sizeof out) == NULL && out[0] == '\0');
-    CHECK(check_saved(unset, detail, sizeof detail, 1) == ICO_STATE_OK);
-    (void)ico_sim_keys_hash(t, sizeof t);
-    CHECK(ico_state_keys_defaulted(unset, t, names, sizeof names) == 1);
-    CHECK(strcmp(names, "gameplay.developer_mode") == 0);
-    /* the saved text not the whole of what its hash covered: refused */
-    CHECK(check_saved(unset, detail, sizeof detail, 0) == ICO_STATE_OTHER_SETTINGS);
-    CHECK(strcmp(detail, "the settings differ") == 0);
-    /* without the key-default function (tools, tests) it still differs */
+    CHECK(check_saved(unset, detail, sizeof detail, 1) == 0 && detail[0] == '\0');
+    /* a damaged hash changes nothing: the text alone is read */
+    CHECK(check_saved(unset, detail, sizeof detail, 0) == 0);
+    /* without the key-default function (tools, tests) it is a difference */
     ico_state_set_key_default(NULL);
-    CHECK(check_saved(unset, detail, sizeof detail, 1) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(check_saved(unset, detail, sizeof detail, 1) == 1);
     CHECK(strcmp(detail, "gameplay.developer_mode= (now false)") == 0);
-    CHECK(ico_state_keys_defaulted(unset, t, names, sizeof names) == 0);
     ico_state_set_key_default(ico_sim_key_is_default);
     CHECK(ico_config_set_bool("gameplay.developer_mode", 1) == 0);
     k = ico_sim_keys_first_diff(unset, out, sizeof out);
     CHECK(k != NULL && strcmp(k, "gameplay.developer_mode") == 0 &&
           strcmp(out, "gameplay.developer_mode= (now true)") == 0);
-    CHECK(check_saved(unset, detail, sizeof detail, 1) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(check_saved(unset, detail, sizeof detail, 1) == 1);
     CHECK(strcmp(detail, "gameplay.developer_mode= (now true)") == 0);
 
     /* the reverse: saved "false", unset now */
@@ -469,7 +492,7 @@ static void test_unset_is_default(void)
     (void)ico_sim_keys_hash(t, sizeof t);
     CHECK(ico_config_set_string("gameplay.developer_mode", "") == 0);
     CHECK(ico_sim_keys_first_diff(t, out, sizeof out) == NULL);
-    CHECK(check_saved(t, detail, sizeof detail, 1) == ICO_STATE_OK);
+    CHECK(check_saved(t, detail, sizeof detail, 1) == 0);
 
     /* every key with one default text: unset saved, the default now */
     for (i = 0; ICO_SIM_KEYS[i] != NULL; i++) {
@@ -481,32 +504,95 @@ static void test_unset_is_default(void)
         n_fixed++;
         CHECK(ico_config_set_string(ICO_SIM_KEYS[i], d) == 0);
         if (ico_sim_keys_first_diff(unset, out, sizeof out) != NULL ||
-            check_saved(unset, detail, sizeof detail, 1) != ICO_STATE_OK) {
-            printf("  %s unset in the state and %s now: refused (%s)\n", ICO_SIM_KEYS[i], d,
+            check_saved(unset, detail, sizeof detail, 1) != 0) {
+            printf("  %s unset in the state and %s now: a difference (%s)\n", ICO_SIM_KEYS[i], d,
                    detail);
             CHECK(0);
         }
         CHECK(ico_config_set_string(ICO_SIM_KEYS[i], "") == 0);
     }
-    CHECK(n_fixed == 18); /* the list's 20 keys less the two without one text */
+    CHECK(n_fixed == 19); /* the list's 21 keys less the two without one text */
 
     /* a key without one default text: unset is the disc's own choice, so
        unset and a value still differ */
     CHECK(ico_config_set_string("video.video_mode", "pal") == 0);
     k = ico_sim_keys_first_diff(unset, out, sizeof out);
     CHECK(k != NULL && strcmp(k, "video.video_mode") == 0);
-    CHECK(check_saved(unset, detail, sizeof detail, 1) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(check_saved(unset, detail, sizeof detail, 1) == 1);
     CHECK(strcmp(detail, "video.video_mode= (now pal)") == 0);
     CHECK(ico_config_set_string("video.video_mode", "") == 0);
     /* two values neither of which is the default: differ */
     CHECK(ico_config_set_string("variants.weapon", "mace") == 0);
     (void)ico_sim_keys_hash(t, sizeof t);
     CHECK(ico_config_set_string("variants.weapon", "sword") == 0);
-    CHECK(check_saved(t, detail, sizeof detail, 1) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(check_saved(t, detail, sizeof detail, 1) == 1);
     CHECK(strcmp(detail, "variants.weapon=mace (now sword)") == 0);
     CHECK(ico_config_set_string("variants.weapon", "") == 0);
     ico_state_set_key_retired(NULL);
     ico_state_set_key_default(NULL);
+}
+
+/* what a load does about each key (sim_keys.h IcoSimKeyCarry): every key
+   declares one; the ones the load puts back, the one a state keeps */
+static void test_carry(void)
+{
+    static const char *const kFixup[] = {"game.language",
+                                         "gameplay.developer_mode",
+                                         "gameplay.door_fix",
+                                         "gameplay.hold_type",
+                                         "gameplay.hold_type_chosen",
+                                         "variants.no_cutscene_look",
+                                         "variants.ignore_cutscene_cameras",
+                                         "variants.chain_swing_speed",
+                                         "variants.chain_swing_damping"};
+    char v[16];
+    int i, n = 0, fixups = 0, kept = 0;
+
+    for (i = 0; ICO_SIM_KEYS[i] != NULL; i++) {
+        const int c = ico_sim_key_carry(ICO_SIM_KEYS[i]);
+        size_t j;
+        int listed_fixup = 0;
+
+        n++;
+        CHECK(c == ICO_SIM_CARRY_HARMLESS || c == ICO_SIM_CARRY_FIXUP || c == ICO_SIM_CARRY_KEPT);
+        CHECK(strcmp(ico_sim_key_carry_name(c), "?") != 0);
+        for (j = 0; j < sizeof kFixup / sizeof kFixup[0]; j++) {
+            listed_fixup |= strcmp(kFixup[j], ICO_SIM_KEYS[i]) == 0;
+        }
+        if (c == ICO_SIM_CARRY_FIXUP) {
+            fixups++;
+        }
+        if (c == ICO_SIM_CARRY_KEPT) {
+            kept++;
+            CHECK(strcmp(ICO_SIM_KEYS[i], "video.video_mode") == 0);
+        }
+        if (listed_fixup != (c == ICO_SIM_CARRY_FIXUP)) {
+            printf("  %s: carry %s\n", ICO_SIM_KEYS[i], ico_sim_key_carry_name(c));
+            CHECK(0);
+        }
+    }
+    CHECK(n >= 21);
+    CHECK(fixups == (int)(sizeof kFixup / sizeof kFixup[0]));
+    CHECK(kept == 1);
+    CHECK(ico_sim_key_carry("gameplay.mirror") == ICO_SIM_CARRY_HARMLESS);
+    CHECK(ico_sim_key_carry("gameplay.zoom_type") == ICO_SIM_CARRY_HARMLESS &&
+          ico_sim_key_carry("gameplay.camera_reset") == ICO_SIM_CARRY_HARMLESS &&
+          ico_sim_key_carry("gameplay.yorda_look") == ICO_SIM_CARRY_HARMLESS);
+    CHECK(ico_sim_key_carry("gameplay.pit_time") == -1); /* retired */
+    CHECK(ico_sim_key_carry("no.such") == -1 && ico_sim_key_carry(NULL) == -1);
+    CHECK(strcmp(ico_sim_key_carry_name(ICO_SIM_CARRY_FIXUP), "fix-up") == 0 &&
+          strcmp(ico_sim_key_carry_name(ICO_SIM_CARRY_KEPT), "kept") == 0 &&
+          strcmp(ico_sim_key_carry_name(ICO_SIM_CARRY_HARMLESS), "harmless") == 0 &&
+          strcmp(ico_sim_key_carry_name(7), "?") == 0);
+    /* a saved text's value */
+    CHECK(ico_sim_keys_value("a=1\ngameplay.developer_mode=true\nb=\n", "gameplay.developer_mode",
+                             v, sizeof v) == 1 &&
+          strcmp(v, "true") == 0);
+    CHECK(ico_sim_keys_value("a=1\nb=\n", "b", v, sizeof v) == 1 && v[0] == '\0');
+    CHECK(ico_sim_keys_value("a=1\nb=\n", "c", v, sizeof v) == 0 && v[0] == '\0');
+    CHECK(ico_sim_keys_value("xa=1\n", "a", v, sizeof v) == 0);
+    CHECK(ico_sim_keys_value("a=12345\n", "a", v, 3) == 1 && strcmp(v, "12") == 0);
+    CHECK(ico_sim_keys_value(NULL, "a", v, sizeof v) == 0 && v[0] == '\0');
 }
 
 int main(int argc, char **argv)
@@ -521,6 +607,7 @@ int main(int argc, char **argv)
     test_defaults(argc > 1 ? argv[1] : ".");
     test_retired();
     test_unset_is_default();
+    test_carry();
     if (fails != 0) {
         printf("sim_keys_test: %d failure(s)\n", fails);
         return 1;

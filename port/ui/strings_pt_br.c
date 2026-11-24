@@ -767,7 +767,6 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST] = "Pause o jogo para criar um save state",
     [UI_STR_STATES_REFUSED_BUILD] = "Salvo em outra versão do jogo",
     [UI_STR_STATES_REFUSED_DISC] = "Salvo a partir de outro disco",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "Uma configuração de jogo é diferente: %s",
     [UI_STR_STATES_REFUSED_BUSY] = "Aguarde: o jogo está carregando ou salvando",
     [UI_STR_STATES_REFUSED_CHECK] = "Não foi possível restaurar o save state. O jogo continua",
     [UI_STR_STATES_OFF] = "Save states desativados nesta versão",
@@ -916,4 +915,8 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_CAMERA_RESET] = NULL, /* "Camera reset" */
     /* "On: click the right stick (R3) to bring the camera straight back to Ico." */
     [UI_STR_CAMERA_RESET_NOTE] = NULL,
+    /* ---- new since v0.11.15: English until translated ---- */
+    [UI_STR_OPT_YORDA_LOOK] = NULL, /* "Look at Yorda" */
+    /* "Ico and the camera turn to Yorda without calling her. Hold: while you hold L3. Toggle: L3 starts and stops it." */
+    [UI_STR_YORDA_LOOK_NOTE] = NULL,
 };

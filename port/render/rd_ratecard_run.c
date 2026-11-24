@@ -20,13 +20,15 @@
  *          centre in 2 x 2 cells (2048 triangles), or in 2 triangles
  * Each frame once untimed (its pipelines gathered and made on the workers,
  * the twins' with them), then RD_RC_SAMPLES timed replays; the twin frames
- * (L2 and H2 again) under the twins' hold (rd__nd_hold(true): only where the
+ * (L2, L1 and H2 again) under the twins' hold (rd__nd_hold(true): only where the
  * twins are on), the others with it off.  The times: each replay's GPU time
  * (rd__perf_gpu_ms_of: its first timestamp to its last), read once
  * RHI_FRAMES_IN_FLIGHT more replays of E brought them in.  The units:
  *   a shaded fragment         (L2 - E) / (2 A), A = SCENE's texels
  *   through the twin          the same, L2 under the hold
- *   a hidden fragment         (H2 - L1) / A, with the hold off and on
+ *   a hidden fragment         (H2 - L1) / A, with the hold off and on (H2 and
+ *                             L1 both through the twin: the visible layer
+ *                             subtracted costs what H2's own does)
  *   a vertex                  (V - E) / (3 RC_TRIS RC_REPEAT)
  *   a triangle binned         (S - B) / ((2048 - 2) RC_REPEAT)
  *   the 2x2-quad factor       (S - E) / (B - E)
@@ -76,6 +78,7 @@ enum {
     F_S,
     F_B,
     F_L2_TWIN,
+    F_L1_TWIN, /* the twin hidden fragment's baseline: L1 under the twins' hold */
     F_H2_TWIN,
     F_L2R,        /* two layers on the fast build's form (RGBA32, MODULATE, TCC), its hold off */
     F_L2R_FAST,   /* the same, the fast pixel build's hold on */
@@ -93,12 +96,25 @@ static const char *const kFrameWords[F_COUNT] = {"the clear",
                                                  "small triangles",
                                                  "large triangles",
                                                  "two layers through the twin",
+                                                 "one layer through the twin",
                                                  "near then far through the twin",
                                                  "two RGBA32 layers",
                                                  "two RGBA32 layers through the fast build",
                                                  "two RGBA32 layers through its discard-free form"};
 
 static RdRateCard s_card;
+
+/* a frame drawn under the twins' hold (only where the twins are on) */
+static bool twinFrameOf(int k)
+{
+    return k == F_L2_TWIN || k == F_L1_TWIN || k == F_H2_TWIN || k == F_L2R_FASTND;
+}
+
+/* a frame drawn under the fast pixel build's hold (only where it is on) */
+static bool fastFrameOf(int k)
+{
+    return k == F_L2R_FAST || k == F_L2R_FASTND;
+}
 
 bool rd_rate_card_get(RdRateCard *out)
 {
@@ -377,6 +393,7 @@ static bool buildFrame(RdFrame *f, int k, uint32_t scene, uint32_t w, uint32_t h
              pushMesh(f, m->nearL, 1, 2u) && rd__st_push(f, 0, RDC_TEXTURE_OFF);
         break;
     case F_L1:
+    case F_L1_TWIN:
         ok = ok && pushMesh(f, m->nearL, 1, 1u);
         break;
     case F_L2R:
@@ -584,8 +601,8 @@ static void measure(RdRateCard *c, RdTargetRec *t, double budgetMs)
     const double tm0 = rd__now_ms();
     uint32_t madeFrames = 0;
     for (int k = 0; stop == NULL && k < F_COUNT; k++) {
-        const bool fastFrame = k == F_L2R_FAST || k == F_L2R_FASTND;
-        const bool twinFrame = k == F_L2_TWIN || k == F_H2_TWIN || k == F_L2R_FASTND;
+        const bool fastFrame = fastFrameOf(k);
+        const bool twinFrame = twinFrameOf(k);
         if ((twinFrame && !twins) || (fastFrame && !fast)) {
             continue;
         }
@@ -625,8 +642,8 @@ static void measure(RdRateCard *c, RdTargetRec *t, double budgetMs)
             (unsigned)madeFrames, tb - tm0, budgetMs, (unsigned)RD_RC_SAMPLES,
             (unsigned)RHI_FRAMES_IN_FLIGHT);
     for (int k = 0; stop == NULL && k < F_COUNT; k++) {
-        const bool fastFrame = k == F_L2R_FAST || k == F_L2R_FASTND;
-        const bool twinFrame = k == F_L2_TWIN || k == F_H2_TWIN || k == F_L2R_FASTND;
+        const bool fastFrame = fastFrameOf(k);
+        const bool twinFrame = twinFrameOf(k);
         if ((twinFrame && !twins) || (fastFrame && !fast)) {
             continue;
         }
@@ -750,8 +767,15 @@ static void measure(RdRateCard *c, RdTargetRec *t, double budgetMs)
         it[RD_RC_SHADE_TWIN].u = twinOk[F_L2_TWIN]
                                      ? rd_rc_unit(st[F_L2_TWIN], st[F_E], 2.0 * a, 1.0e6)
                                      : rd_rc_none("its layers did not draw through the twin");
-        it[RD_RC_HIDDEN_TWIN].u = twinOk[F_H2_TWIN]
-                                      ? rd_rc_unit(st[F_H2_TWIN], st[F_L1], a, 1.0e6)
+        /* against one layer through the twin, not the ordinary build's: the
+           visible layer subtracted must cost what H2_TWIN's own did (the
+           reporter's v0.11.15 card subtracted vu_ps_nodual's 3.76 ns layer
+           from the twin's 1.58 ns one and printed -0.94); a frame not reached
+           (the budget) says so below, not "did not draw through the twin" */
+        const bool hOk = twinOk[F_H2_TWIN] || got[F_H2_TWIN] == 0u;
+        const bool lOk = twinOk[F_L1_TWIN] || got[F_L1_TWIN] == 0u;
+        it[RD_RC_HIDDEN_TWIN].u = hOk && lOk
+                                      ? rd_rc_unit(st[F_H2_TWIN], st[F_L1_TWIN], a, 1.0e6)
                                       : rd_rc_none("its layers did not draw through the twin");
     }
     it[RD_RC_VERTEX].u = rd_rc_unit(st[F_V], st[F_E], 3.0 * RC_TRIS * RC_REPEAT, 1.0e6);

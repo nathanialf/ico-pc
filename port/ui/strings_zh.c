@@ -414,6 +414,9 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "按住：按住 R2 期間拉近鏡頭。切換：按一下 R2 拉近鏡頭，再按一下恢復。",
     [UI_STR_OPT_CAMERA_RESET] = "視角重設",
     [UI_STR_CAMERA_RESET_NOTE] = "開：按下右搖桿（R3）即可讓視角立刻回到 Ico 身上。",
+    [UI_STR_OPT_YORDA_LOOK] = "看向 Yorda",
+    [UI_STR_YORDA_LOOK_NOTE] =
+        "Ico 與視角轉向 Yorda，但不呼喚她。按住：按住 L3 期間。切換：每按一下 L3 開始或結束。",
     [UI_STR_OPT_BUTTON_PICTURES] = "按鈕圖示",
     [UI_STR_BUTTON_PICTURES_NOTE] = "選單與照相模式中顯示的按鈕圖示。自動會依照最後使用的控制器。",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "「遊戲」中也有此項。",
@@ -778,7 +781,6 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST_LOAD] = "請先暫停遊戲再讀取這個狀態",
     [UI_STR_STATES_REFUSED_BUILD] = "由其他版本的遊戲儲存",
     [UI_STR_STATES_REFUSED_DISC] = "從其他光碟儲存",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "有一項遊戲設定不同：%s",
     [UI_STR_STATES_REFUSED_BUSY] = "現在無法執行：遊戲正在讀取或儲存",
     [UI_STR_STATES_REFUSED_CHECK] = "無法讀取，遊戲繼續進行",
     [UI_STR_STATES_OFF] = "這個版本已關閉存檔狀態",

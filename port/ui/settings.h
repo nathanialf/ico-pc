@@ -507,6 +507,19 @@ int ui_settings_states_prompt_layout(void);
 /* After a load: the menu closes its page and puts the cursor on the pause
    menu's Save states row (the restored game is on the pause layout). */
 void ui_settings_sync_after_state_load(void);
+/* After a load, before ui_settings_sync_after_state_load (state_host.c
+   perform_load, never on the checkpoint's way): the state loads under this
+   run's settings, so what the restore put back of the game's own settings
+   is set to this run's again, each change logged ("settings: after the
+   load ..."): the hold type (optionControlType, as the Hold type row sets
+   it), the game's language on a disc that has one (as the Language row
+   sets it), and the Debug menu closed (debug.c debug_Menu_off) when
+   developer mode is off now and saved_keys (the state header's keys text,
+   sim_keys.h) say it was on.  What changed: UI_REAPPLY_* bits. */
+#define UI_REAPPLY_HOLD_TYPE 1
+#define UI_REAPPLY_LANGUAGE 2
+#define UI_REAPPLY_DEBUG_MENU 4
+int ui_settings_reapply_after_state_load(const char *saved_keys);
 /* A state continued from its checkpoint instead (the stage is changing): in
    play as after a load, from the title the page closes on the game's empty
    layout. */
@@ -748,6 +761,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_HOLD_TYPE,    /* [gameplay] hold_type: A (hold) or B (toggle) */
     UI_OPT_ZOOM_TYPE,    /* [gameplay] zoom_type: Hold or Toggle (port/game/zoom_toggle.h) */
     UI_OPT_CAMERA_RESET, /* [gameplay] camera_reset: Off/On (port/game/camera_reset.h) */
+    UI_OPT_YORDA_LOOK,   /* [gameplay] yorda_look: Off/Hold/Toggle (port/game/yorda_look.h) */
     /* [input] button_pictures: Auto, PlayStation, Xbox, Nintendo, Wii Classic
        Controller (settings_pads.h), after Vibration */
     UI_OPT_BUTTON_PICTURES,

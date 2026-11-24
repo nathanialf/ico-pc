@@ -20,7 +20,8 @@
  * look-around is live makes the arm call ClearHandCameraCorrect in that
  * tick, so the picture is the one the game shows with the stick never
  * moved; the presenter is told it is a cut (no blend from the turned
- * picture), and a toggled zoom (zoom_toggle.h) ends too.  The stick is then
+ * picture), and a toggled zoom (zoom_toggle.h) and a toggled Look at Yorda
+ * (yorda_look.h) end too.  The stick is then
  * ignored until it is back in its dead zone (the game's own: both values 0),
  * so a stick still held does not swing the camera straight out again.  The
  * press is the level against the previous tick's, as Zoom type's.
@@ -37,7 +38,8 @@
    under control, no scripted shot); sx, sz: the right stick as the arm
    hands it to HandCameraCorrect.  Off: returns 0 and leaves sx, sz as they
    are (records the level).  On: a press while live returns 1 (the arm then
-   calls ClearHandCameraCorrect), ends a toggled zoom, marks a cut and
+   calls ClearHandCameraCorrect), ends a toggled zoom and a toggled look
+   at Yorda, marks a cut and
    mutes the stick; while muted sx and sz read 0 until both come in 0;
    !live ends the mute. */
 int ico_cam_reset(int r3, int live, float *sx, float *sz);

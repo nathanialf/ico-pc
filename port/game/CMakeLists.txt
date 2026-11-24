@@ -15,6 +15,8 @@
 # camera_reset.c: Camera reset's press and stick mute ([gameplay] camera_reset,
 # camera_reset.h), called by the four SetCameraMatrix_Ico2 copies in
 # ico2/omori/src/camera-ico2.c
+# yorda_look.c: Look at Yorda's press, toggle and end rules ([gameplay] yorda_look,
+# yorda_look.h), called by the four subBoyCollision copies in ico2/fumi/src/boyact.c
 # zoom_toggle.c: Zoom type's latch ([gameplay] zoom_type, zoom_toggle.h) and its
 # save-state block, called by the camera's zoom blocks in
 # ico2/omori/src/camera-root.c and camera-ico2.c
@@ -32,7 +34,7 @@
 # Shadows' counters and log lines for its game-side hooks (no_shadows.h).
 add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c door_grace.c
             variants.c yorda_trip.c ico_rows.c difficulty.c difficulty_file.c no_shadows.c
-            zoom_toggle.c camera_reset.c)
+            zoom_toggle.c camera_reset.c yorda_look.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -50,7 +52,8 @@ endif()
 # among them), its two in icoMisc.c and its simulation key (text scans), and shadows_together's
 # answer, count and log lines, its hook and eleven callers in enemy_act.c and its simulation key
 # (text scans), and zoom_type's key and the camera's four R2 tests, two resets and the June
-# 2001 look-around's test in camera-root.c and camera-ico2.c (text scans).
+# 2001 look-around's test in camera-root.c and camera-ico2.c (text scans), and yorda_look's
+# key and the four subBoyCollision hooks in boyact.c (text scans).
 add_executable(options_test test/options_test.c ../platform/host_config.c)
 ico_include_dirs(omori _ico_options_incs)
 target_include_directories(options_test PRIVATE ${_ico_options_incs}
@@ -64,7 +67,8 @@ target_compile_definitions(options_test PRIVATE ${ICO_GAME_DEFINITIONS}
     ICO_GIRL_ACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/girl_act.c"
     ICO_ICOMISC_SRC="${CMAKE_SOURCE_DIR}/ico2/common/src/icoMisc.c"
     ICO_CAMERA_ROOT_SRC="${CMAKE_SOURCE_DIR}/ico2/omori/src/camera-root.c"
-    ICO_CAMERA_ICO2_SRC="${CMAKE_SOURCE_DIR}/ico2/omori/src/camera-ico2.c")
+    ICO_CAMERA_ICO2_SRC="${CMAKE_SOURCE_DIR}/ico2/omori/src/camera-ico2.c"
+    ICO_BOYACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/boyact.c")
 target_compile_options(options_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS} -Wno-unused-parameter -Wno-unused-variable
                        -Wno-unused-function)
@@ -514,6 +518,19 @@ target_compile_options(camera_reset_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_P
 target_link_libraries(camera_reset_test PRIVATE ico_options)
 if(ICO_RUN_TESTS)
     add_test(NAME camera_reset COMMAND camera_reset_test)
+endif()
+
+# Look at Yorda (yorda_look.h): off answers 0 over pseudo-random input; Hold
+# while L3 is held; Toggle on a press, off on the next; a toggled look ends
+# without control, with her hand taken, on a new stage and with a Camera reset
+# (the real camera_reset.c); the Main tick clock; a copy of the arms' use; the
+# FRESH save-state block copied back. CPU only, no game sources.
+add_executable(yorda_look_test test/yorda_look_test.c ../platform/host_config.c)
+target_include_directories(yorda_look_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(yorda_look_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(yorda_look_test PRIVATE ico_options)
+if(ICO_RUN_TESTS)
+    add_test(NAME yorda_look COMMAND yorda_look_test)
 endif()
 
 # Free movement and Ask Yorda for a hint (ico_rows.h): the row's key and its
@@ -1048,8 +1065,9 @@ endif()
 # a save on the pause menu, play, a hash, the load, the same play again and
 # the hash equal (on a difference, tools/state_region_diff.py names the
 # first differing symbols from the two dumps of the hash's tick). state_roundtrip_headless_settings: a state saved by one
-# run is refused by a second with a simulation key changed, which names the
-# key and goes on. The disc image is needed; save states are off on a
+# run with two simulation keys set loads in a second without them (never
+# refused for a setting): the one line naming both, the two fix-ups logged,
+# the run to its end. The disc image is needed; save states are off on a
 # sanitizer build; both skipped then (cmake -P cannot exit 77 at CMake 3.25,
 # so the skip is the message). Game runs, so alone.
 if(TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS)

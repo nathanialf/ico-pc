@@ -415,6 +415,9 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_CAMERA_RESET] = "Camera reset",
     [UI_STR_CAMERA_RESET_NOTE] =
         "On: click the right stick (R3) to bring the camera straight back to Ico.",
+    [UI_STR_OPT_YORDA_LOOK] = "Look at Yorda",
+    [UI_STR_YORDA_LOOK_NOTE] =
+        "Ico and the camera turn to Yorda without calling her. Hold: while you hold L3. Toggle: L3 starts and stops it.",
     [UI_STR_OPT_BUTTON_PICTURES] = "Button pictures",
     [UI_STR_BUTTON_PICTURES_NOTE] =
         "The buttons shown in menus and photo mode. Auto follows the controller you used last.",
@@ -795,7 +798,6 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Pause the game to load this state",
     [UI_STR_STATES_REFUSED_BUILD] = "Saved by another version of the game",
     [UI_STR_STATES_REFUSED_DISC] = "Saved from another disc",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "A gameplay setting differs: %s",
     [UI_STR_STATES_REFUSED_BUSY] = "Not now: the game is loading or saving",
     [UI_STR_STATES_REFUSED_CHECK] = "Could not load it; play goes on",
     [UI_STR_STATES_OFF] = "Save states are off on this build",

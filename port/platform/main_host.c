@@ -2026,8 +2026,6 @@ static int state_refusal_str(IcoStateResult r)
         return UI_STR_STATES_REFUSED_BUILD;
     case ICO_STATE_OTHER_DISC:
         return UI_STR_STATES_REFUSED_DISC;
-    case ICO_STATE_OTHER_SETTINGS:
-        return UI_STR_STATES_REFUSED_SETTINGS;
     case ICO_STATE_BAD_FILE:
     case ICO_STATE_SELF_CHECK:
         return UI_STR_STATES_REFUSED_CHECK;
@@ -2041,6 +2039,7 @@ static int state_refusal_str(IcoStateResult r)
     case ICO_STATE_MOVIE:
     case ICO_STATE_PHOTO:
     case ICO_STATE_BUSY:
+    case ICO_STATE_OTHER_SETTINGS: /* never returned (state.h) */
         return UI_STR_STATES_REFUSED_BUSY;
     }
     return UI_STR_STATES_REFUSED_BUSY;
@@ -2144,6 +2143,7 @@ static void states_done(int action, int slot, IcoStateResult r, const char *deta
     int via;
 
     (void)user;
+    (void)detail; /* the log's (state_host.c done); no box names a detail */
     ico_state_last_refusal(&f);
     via = action == UI_STATES_ACT_LOAD && ico_state_last_load_checkpoint(version, sizeof version);
     /* one box per request, chosen without the game (state_checkpoint.h
@@ -2155,10 +2155,6 @@ static void states_done(int action, int slot, IcoStateResult r, const char *deta
         break;
     case ICO_CKPT_BOX_DONE:
         snprintf(body, sizeof body, ui_str((UiStrId)ok_str[action]), slot);
-        break;
-    case ICO_CKPT_BOX_SETTINGS:
-        /* the key that differs, as the log has it */
-        snprintf(body, sizeof body, ui_str(UI_STR_STATES_REFUSED_SETTINGS), detail);
         break;
     case ICO_CKPT_BOX_VERSION:
         /* another version's state: which one, and what in this one blocks it */
@@ -2180,7 +2176,7 @@ static void states_done(int action, int slot, IcoStateResult r, const char *deta
         break;
     }
     {
-        static const char *const box_names[] = {"done", "the checkpoint notice", "settings differ",
+        static const char *const box_names[] = {"done", "the checkpoint notice",
                                                 "another version's refusal", "the refusal"};
         const IcoCkptBox b = ico_ckpt_box(action == UI_STATES_ACT_LOAD, r, via, f.blocker);
 

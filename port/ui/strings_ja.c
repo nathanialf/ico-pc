@@ -417,6 +417,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_CAMERA_RESET] = "カメラリセット",
     [UI_STR_CAMERA_RESET_NOTE] =
         "オン：右スティックを押し込む（R3）と、カメラがすぐにイコへ戻ります。",
+    [UI_STR_OPT_YORDA_LOOK] = "ヨルダを見る",
+    [UI_STR_YORDA_LOOK_NOTE] =
+        "イコとカメラが、声をかけずにヨルダの方を向きます。押し続ける：L3を押している間。切り替え：L3を押すたびに開始と終了。",
     [UI_STR_OPT_BUTTON_PICTURES] = "ボタン表示",
     [UI_STR_BUTTON_PICTURES_NOTE] =
         "メニューとフォトモードに表示するボタンです。自動は最後に使ったコントローラーに合わせます。",
@@ -801,7 +804,6 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST_LOAD] = "このステートを読み込むにはゲームを一時停止してください",
     [UI_STR_STATES_REFUSED_BUILD] = "別のバージョンのゲームで保存されています",
     [UI_STR_STATES_REFUSED_DISC] = "別のディスクで保存されています",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "ゲームの設定が違います：%s",
     [UI_STR_STATES_REFUSED_BUSY] = "今はできません：ゲームを読み込み中か保存中です",
     [UI_STR_STATES_REFUSED_CHECK] = "ロードできませんでした。ゲームは続きます",
     [UI_STR_STATES_OFF] = "このビルドではセーブステートは無効です",

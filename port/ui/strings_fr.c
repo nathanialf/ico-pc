@@ -425,6 +425,9 @@ const char *const
             [UI_STR_OPT_CAMERA_RESET] = "Recentrer la caméra",
             [UI_STR_CAMERA_RESET_NOTE] =
                 "Activé : cliquez le stick droit (R3) pour ramener aussitôt la caméra sur Ico.",
+            [UI_STR_OPT_YORDA_LOOK] = "Regarder Yorda",
+            [UI_STR_YORDA_LOOK_NOTE] =
+                "Ico et la caméra regardent Yorda sans l’appeler, avec L3 maintenu ou en bascule.",
             [UI_STR_OPT_BUTTON_PICTURES] = "Images des boutons",
             [UI_STR_BUTTON_PICTURES_NOTE] =
                 "Les boutons des menus et du mode photo. Auto suit la dernière manette utilisée.",
@@ -773,7 +776,6 @@ const char *const
             [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Mettez le jeu en pause pour charger cet état",
             [UI_STR_STATES_REFUSED_BUILD] = "Enregistré par une autre version du jeu",
             [UI_STR_STATES_REFUSED_DISC] = "Enregistré depuis un autre disque",
-            [UI_STR_STATES_REFUSED_SETTINGS] = "Un réglage de jeu diffère : %s",
             [UI_STR_STATES_REFUSED_BUSY] = "Pas maintenant : le jeu charge ou enregistre",
             [UI_STR_STATES_REFUSED_CHECK] = "Chargement impossible ; le jeu continue",
             [UI_STR_STATES_OFF] = "Les états sauvegardés sont désactivés dans cette version",

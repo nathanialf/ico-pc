@@ -58,13 +58,21 @@ RdRcUnit rd_rc_unit(RdRcStat a, RdRcStat b, double count, double scale)
     }
     RdRcUnit u;
     memset(&u, 0, sizeof(u));
-    const double bm = b.n ? b.med : 0.0, bmin = b.n ? b.min : 0.0, bmax = b.n ? b.max : 0.0;
+    /* the spread: a's least and largest against b's median (not b's
+       extremes: one slow replay of the subtracted frame alone made "max
+       2916" of a 542 ns triangle on the reporter's Mali-G52) */
+    const double bm = b.n ? b.med : 0.0;
     u.med = (a.med - bm) / count * scale;
-    u.lo = (a.min - bmax) / count * scale;
-    u.hi = (a.max - bmin) / count * scale;
+    u.lo = (a.min - bm) / count * scale;
+    u.hi = (a.max - bm) / count * scale;
     u.ok = isfinite(u.med) && isfinite(u.lo) && isfinite(u.hi);
     if (!u.ok) {
         return rd_rc_none("a time not finite");
+    }
+    if (b.n != 0u && !(a.med - bm > 0.0)) {
+        /* a cost is not below nothing: the frames' difference is noise or
+           the subtracted frame is not this one's baseline */
+        return rd_rc_none("a difference not above 0");
     }
     return u;
 }
@@ -74,14 +82,15 @@ RdRcUnit rd_rc_ratio(RdRcUnit a, RdRcUnit b)
     if (!a.ok || !b.ok) {
         return rd_rc_none(!a.ok ? a.why : b.why);
     }
-    if (!(b.med > 0.0) || !(b.lo > 0.0)) {
+    if (!(b.med > 0.0)) {
         return rd_rc_none("its divisor not above 0");
     }
     RdRcUnit u;
     memset(&u, 0, sizeof(u));
+    /* the spread: a's least and largest over b's median (as rd_rc_unit) */
     u.med = a.med / b.med;
-    u.lo = a.lo / b.hi;
-    u.hi = a.hi / b.lo;
+    u.lo = a.lo / b.med;
+    u.hi = a.hi / b.med;
     u.ok = isfinite(u.med) && isfinite(u.lo) && isfinite(u.hi);
     return u.ok ? u : rd_rc_none("a ratio not finite");
 }
@@ -123,7 +132,8 @@ size_t rd_rc_text(const RdRateCard *c, char *out, size_t cap)
     }
     at = put(out, cap, at,
              "rate card: %s on SCENE %ux%u at %ux%u texels, %s; the median of %u timed replays a "
-             "frame (min, max beside it); %.1f ms in all\n",
+             "frame (min, max beside it: the frame's least and largest against the subtracted "
+             "frame's median); %.1f ms in all\n",
              c->device, (unsigned)c->w, (unsigned)c->h, (unsigned)c->tw, (unsigned)c->th, c->sized,
              (unsigned)RD_RC_SAMPLES, c->totalMs);
     for (int i = 0; i < RD_RC_ITEMS; i++) {

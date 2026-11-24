@@ -876,12 +876,6 @@ be loaded is greyed and the line under the cards gives the reason:
   made before save states could move to newer versions.
 - **Saved from another disc.** Each disc has its own four slots. Start the
   game from the disc the state was saved on.
-- **A gameplay setting differs.** The message names the setting and the value
-  it had when you saved. Put the setting back (a few, such as Analogue stick
-  fix, Hold type, Zoom type, Camera reset, Skip the opening and the rows on the Gameplay
-  pages, change how the game plays),
-  and the state loads. The journey's difficulty is not one of them: a state
-  carries its own.
 - **Save states are off on a Permadeath journey.** None can be saved or
   loaded while the journey has Permadeath on, and a state made on such a
   journey never loads. The message says so.
@@ -896,6 +890,14 @@ be loaded is greyed and the line under the cards gives the reason:
   Free some space and try again.
 - **Save states are off on this build.** The game cannot use them on
   your device.
+
+A setting never stops a state from loading. A state loads with the
+settings you have now, whatever they were when you saved it (Hold type, Zoom
+type, Camera reset, Look at Yorda, the rows on the Gameplay pages and the rest). The
+journey's difficulty comes from the state, as always. The one setting a
+state keeps is **Video mode**: a state saved in the other of 50 Hz and 60 Hz
+plays in the one it was saved in until you restart the game, and your
+setting is used again from then on.
 
 If a state fails to load for any other reason, send a
 [problem report](#send-a-problem-report): the log has lines that start with

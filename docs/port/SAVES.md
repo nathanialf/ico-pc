@@ -456,9 +456,10 @@ that verdict too, so its row shows that Load continues from its last checkpoint.
 issue 218 (NTSC disc, stage 37, play time 7:54:12 at 60 frames a second) is found by the
 table's `ios-arm64` entry for its release, which its bytes confirm (the image at `gbss`+0x2ac5d0, the
 checkpoint's stage 46, `systemStatus[3]` 1), and the content search finds the same single image. Another disc and a Permadeath journey (the state's own record, read
-through the state's block list, or the one in force) stay refused by rule; so does the same build's
-state with other settings (the box names the setting: with it put back the state resumes exactly),
-and the moment's conditions (a stage change, the card or the disc busy, a movie, another mode).
+through the state's block list, or the one in force) stay refused by rule, and so do the moment's
+conditions (a stage change, the card or the disc busy, a movie, another mode). No
+setting refuses a state, so none takes this way for one: another build's state whose settings
+differ tries the exact translation first, as any other.
 Another build's state whose restore leaves a word into the old program untranslated in live
 memory (anywhere but a fiber's dead frames, [PLATFORM.md](PLATFORM.md#across-versions) **The
 record**) fails its self-check the same way: the restore is rolled back and Load continues from
@@ -654,11 +655,11 @@ themselves are [PLATFORM.md](PLATFORM.md#save-states).
   `state`), never from `config.toml`.
 - **The keys text**: the fifteen difficulty rows are not simulation keys
   (`port/platform/sim_keys.h`, `ICO_SIM_KEYS_RETIRED`). A state made while they were lists them in
-  its keys text; `ico_state_header_check` passes over a key that only the saved text lists when
-  the retired-key function names it (`ico_state_set_key_retired`, set by `state_host.c` to
-  `ico_sim_key_retired`, since the platform layer does not see the config), at any value. The two
-  hashes then differ by those lines, so the saved text must be whole (its own hash), as for a key a
-  later version adds. A key still listed that differs is refused and named as before.
+  its keys text. No setting refuses a state; the load's difference list (`ico_state_keys_diff`)
+  passes over a key that only the saved text lists when the retired-key function names it
+  (`ico_state_set_key_retired`, set by `state_host.c` to `ico_sim_key_retired`, since the
+  platform layer does not see the config), at any value. A key still listed that differs is named
+  in the load's line and loads under this run's value.
 - **Permadeath**: a state made on a Permadeath journey never loads, and none is made.
   - While the active record has Permadeath on (`ico_difficulty_states_locked`), a load and a
     save are refused before anything is read or written: `ico_state_conditions` returns
@@ -697,7 +698,6 @@ themselves are [PLATFORM.md](PLATFORM.md#save-states).
 | line | when |
 | --- | --- |
 | `state: slot N's difficulty: the state's record` or `...: no record in the state (made before states held one): built from its keys` | every load, before the record's own `difficulty: ...` line |
-| `state: slot N lists K difficulty row(s) among its settings (made before they were its own block): not compared: <key=value, ...>` | a load of a state whose keys text lists the rows |
 | `state: refused load slot N: save states are off on a Permadeath journey: the journey has Permadeath on` | a load while a Permadeath journey is in force (the poll); `... (the page)` from the Save states page |
 | `state: refused save slot N: save states are off on a Permadeath journey: the journey has Permadeath on: a state of it could never be loaded` | a save while a Permadeath journey is in force; `state: refused save slot N: ... (the page)` from the page |
 | `state: refused load slot N: save states are off on a Permadeath journey: the state was saved on a Permadeath journey` | a load of a state whose own record has Permadeath on |

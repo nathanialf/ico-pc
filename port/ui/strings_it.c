@@ -431,6 +431,9 @@ const char *const
                 [UI_STR_OPT_CAMERA_RESET] = "Ripristino visuale",
                 [UI_STR_CAMERA_RESET_NOTE] =
                     "Attivato: premi la levetta destra (R3) per riportare subito la visuale su Ico.",
+                [UI_STR_OPT_YORDA_LOOK] = "Guarda Yorda",
+                [UI_STR_YORDA_LOOK_NOTE] =
+                    "Ico e la visuale guardano Yorda senza chiamarla. Tieni premuto: finché tieni premuto L3. Alterna: L3 avvia e ferma.",
                 [UI_STR_OPT_BUTTON_PICTURES] = "Immagini dei tasti",
                 [UI_STR_BUTTON_PICTURES_NOTE] =
                     "I tasti mostrati nei menu e nella modalità foto. Automatico segue l’ultimo controller usato.",
@@ -828,7 +831,6 @@ const char *const
                     "Metti il gioco in pausa per caricare questo stato",
                 [UI_STR_STATES_REFUSED_BUILD] = "Salvato da un'altra versione del gioco",
                 [UI_STR_STATES_REFUSED_DISC] = "Salvato da un altro disco",
-                [UI_STR_STATES_REFUSED_SETTINGS] = "Un'impostazione di gioco è diversa: %s",
                 [UI_STR_STATES_REFUSED_BUSY] = "Non ora: il gioco sta caricando o salvando",
                 [UI_STR_STATES_REFUSED_CHECK] = "Impossibile caricarlo; il gioco prosegue",
                 [UI_STR_STATES_OFF] = "Gli stati salvati sono disattivati in questa versione",

@@ -49,6 +49,8 @@
  *                   and camera mode (FRESH: a state made before it existed
  *                   keeps this run's words)
  *   camera_reset.c  Camera reset's last R3 level and stick mute (FRESH)
+ *   yorda_look.c    Look at Yorda's last L3 level, toggle, stage and answer
+ *                   (FRESH)
  *
  * Not registered: the scheduler's tables (ico_sched_state_save/restore
  * move their pointers themselves: a scan of them here would move them
@@ -89,5 +91,6 @@ int ico_sound_state_register(void);      /* sce/libsndn2/sound.c: the EE sequenc
 int ico_difficulty_state_register(void); /* port/game/difficulty.c: "difficulty.record" */
 int ico_zoom_state_register(void);       /* port/game/zoom_toggle.c: "zoom_toggle.state" */
 int ico_cam_reset_state_register(void);  /* port/game/camera_reset.c: "camera_reset.state" */
+int ico_yorda_look_state_register(void); /* port/game/yorda_look.c: "yorda_look.state" */
 
 #endif /* ICO_PLATFORM_STATE_PORT_H */

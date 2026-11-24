@@ -5,6 +5,8 @@
  */
 #include "door_grace.h"
 
+#include <stdio.h>
+
 #include "options.h"
 #include "../platform/state_port.h"
 #include "../platform/state_registry.h"
@@ -77,4 +79,19 @@ void ico_door_grace_reset(void)
     s_arm_holding = 0;
     s_left = 0;
     s_from = -1;
+}
+
+int ico_door_grace_state_loaded(void)
+{
+    /* a pending arm alone needs nothing: a stage start begins no grace
+       while the option is off (ico_door_grace_begin) */
+    if (ico_opt_door_fix() || s_left <= 0) {
+        return 0;
+    }
+    fprintf(stderr,
+            "door: after the load the doorway fix is off in this run: the state's grace (%d "
+            "frames left, back to stage %d) ended\n",
+            s_left, s_from);
+    ico_door_grace_reset();
+    return 1;
 }

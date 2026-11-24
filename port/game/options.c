@@ -926,6 +926,46 @@ const char *ico_opt_camera_reset_name(int on)
     return on != 0 ? "on" : "off";
 }
 
+/* [gameplay] yorda_look (options.h): -1 not read yet, else ICO_YORDA_LOOK_* */
+static int s_yorda_look = -1;
+
+int ico_opt_yorda_look(void)
+{
+    /* the value last logged */
+    static int logged = -1;
+
+    if (s_yorda_look < 0) {
+        const char *v = ico_config_get_string("gameplay.yorda_look", "off");
+
+        s_yorda_look = v == NULL                  ? ICO_YORDA_LOOK_OFF
+                       : strcmp(v, "hold") == 0   ? ICO_YORDA_LOOK_HOLD
+                       : strcmp(v, "toggle") == 0 ? ICO_YORDA_LOOK_TOGGLE
+                                                  : ICO_YORDA_LOOK_OFF;
+        if (v != NULL && strcmp(v, "off") != 0 && s_yorda_look == ICO_YORDA_LOOK_OFF) {
+            fprintf(
+                stderr,
+                "options: [gameplay] yorda_look = \"%s\" is not one of off, hold, toggle: off\n",
+                v);
+        }
+    }
+    if (s_yorda_look != logged) {
+        logged = s_yorda_look;
+        fprintf(stderr, "options: look at yorda %s\n", ico_opt_yorda_look_name(s_yorda_look));
+    }
+    return s_yorda_look;
+}
+
+void ico_opt_set_yorda_look(int type)
+{
+    s_yorda_look =
+        type == ICO_YORDA_LOOK_HOLD || type == ICO_YORDA_LOOK_TOGGLE ? type : ICO_YORDA_LOOK_OFF;
+}
+
+const char *ico_opt_yorda_look_name(int type)
+{
+    return type == ICO_YORDA_LOOK_HOLD ? "hold" : type == ICO_YORDA_LOOK_TOGGLE ? "toggle" : "off";
+}
+
 /* [input] button_pictures (options.h): -2 not read yet, else
    ICO_BUTTON_PICTURES_* */
 static int s_button_pictures = -2;
@@ -986,6 +1026,7 @@ void ico_opt_reload(void)
     s_hold_choice = -1;
     s_zoom_type = -1;
     s_camera_reset = -1;
+    s_yorda_look = -1;
     s_button_pictures = -2;
     /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();

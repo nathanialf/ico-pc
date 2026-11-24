@@ -760,7 +760,6 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST] = "Приостановите игру, чтобы сохранить состояние",
     [UI_STR_STATES_REFUSED_BUILD] = "Сохранено в другой версии игры",
     [UI_STR_STATES_REFUSED_DISC] = "Сохранено с другого диска",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "Отличается настройка игрового процесса: %s",
     [UI_STR_STATES_REFUSED_BUSY] = "Подождите, идет процесс загрузки или сохранения",
     [UI_STR_STATES_REFUSED_CHECK] = "Не удалось восстановить состояние",
     [UI_STR_STATES_OFF] = "В этой сборке сохранение состояний отключено",
@@ -909,4 +908,8 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_OPT_CAMERA_RESET] = NULL, /* "Camera reset" */
     /* "On: click the right stick (R3) to bring the camera straight back to Ico." */
     [UI_STR_CAMERA_RESET_NOTE] = NULL,
+    /* ---- new since v0.11.15: English until translated ---- */
+    [UI_STR_OPT_YORDA_LOOK] = NULL, /* "Look at Yorda" */
+    /* "Ico and the camera turn to Yorda without calling her. Hold: while you hold L3. Toggle: L3 starts and stops it." */
+    [UI_STR_YORDA_LOOK_NOTE] = NULL,
 };
