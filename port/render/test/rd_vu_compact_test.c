@@ -1,7 +1,9 @@
 /* rd_vu_compact_test.c: the index compaction's pure parts (rd_vu_compact.h,
  * CPU): the plan's places, groups, raises and refusals, the counts' sums,
  * the counts' base, the window's line word for word and cut short, the
- * tests' switch's words, the device's class by name. */
+ * tests' switch's words, the device's class by name; the Mali-G52's form's
+ * lists (rd_vu_cmp_fill), its start-up test's read-back check of every kind
+ * of triangle and its words, the window's line's CPU clause. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -128,6 +130,107 @@ static void test_text(void)
     CHECK(strstr(b, "a picture: 0 of 0 in list 0 (0.0 %)") != NULL);
 }
 
+/* the Mali-G52's form: the CPU's lists (raised mod 2^32), the read-back
+   check of each kind of triangle against the workgroups' counts and the
+   test's geometry, and its words; the window's line's CPU clause */
+static void test_form(void)
+{
+    /* two triangles (kicks 2 and 3), raised by 2^32 - 8: values 0..6 */
+    static const uint32_t src[] = {8, 9, 10, 12, 13, 14};
+    const uint32_t raise = 0u - 8u;
+    uint32_t dst[6];
+    rd_vu_cmp_fill(dst, src, 6, raise);
+    CHECK(dst[0] == 0u && dst[2] == 2u && dst[3] == 4u && dst[5] == 6u);
+    rd_vu_cmp_fill(dst, src, 0, raise); /* nothing */
+    /* read back: the first as written (kept), the second a filler (13 - 8
+       = 5 three times); the workgroup counted 1 kept, 1 outside */
+    const uint32_t tex1[4] = {0, 1, 1, 1};
+    uint32_t got[6] = {0, 1, 2, 5, 5, 5};
+    RdVuCmpCheck r;
+    rd_vu_cmp_check_reset(&r);
+    CHECK(r.first == UINT32_MAX);
+    CHECK(rd_vu_cmp_check(&r, got, src, 6, raise, tex1, RD_VU_CMP_EXPECT_ANY));
+    CHECK(rd_vu_cmp_check_ok(&r) && r.tris == 2 && r.asWritten == 1 && r.fillers == 1 &&
+          r.leftOut == 1 && r.first == UINT32_MAX);
+    char b[512];
+    size_t n = rd_vu_cmp_check_text(b, sizeof b, &r);
+    const char *want = "2 triangles read back: 1 as the CPU wrote them, 1 fillers where the GPU "
+                       "counted 1 left out";
+    if (strcmp(b, want) != 0) {
+        printf("got:  %s\nwant: %s\n", b, want);
+        failures++;
+    }
+    CHECK(n == strlen(b));
+    /* the same against the geometry: all kept fails (the filler), all left
+       out fails (the first as written) */
+    rd_vu_cmp_check_reset(&r);
+    CHECK(!rd_vu_cmp_check(&r, got, src, 6, raise, tex1, RD_VU_CMP_EXPECT_KEPT));
+    CHECK(r.unexpected == 1 && r.first == 1 && !rd_vu_cmp_check_ok(&r));
+    rd_vu_cmp_check_reset(&r);
+    CHECK(!rd_vu_cmp_check(&r, got, src, 6, raise, tex1, RD_VU_CMP_EXPECT_LEFT));
+    CHECK(r.unexpected == 1 && r.first == 0);
+    /* a filler store lost in part (the third cause's sign): mixed and
+       missing */
+    got[3] = 4; /* corner 0 as written, 1 and 2 the filler */
+    rd_vu_cmp_check_reset(&r);
+    CHECK(!rd_vu_cmp_check(&r, got, src, 6, raise, tex1, RD_VU_CMP_EXPECT_ANY));
+    CHECK(r.mixed == 1 && r.missing == 1 && r.wrong == 0 && r.first == 1);
+    (void)rd_vu_cmp_check_text(b, sizeof b, &r);
+    CHECK(strstr(b, "; 1 mixed (a filler store lost in part); 1 filler writes missing (an "
+                    "unwritten filler leaves its triangle as it was)") != NULL);
+    /* a filler never written: the triangle as written, missing alone */
+    got[3] = 4;
+    got[4] = 5;
+    got[5] = 6;
+    rd_vu_cmp_check_reset(&r);
+    CHECK(!rd_vu_cmp_check(&r, got, src, 6, raise, tex1, RD_VU_CMP_EXPECT_ANY));
+    CHECK(r.mixed == 0 && r.missing == 1 && r.asWritten == 2);
+    /* a stale or lost list: a value neither the CPU's nor the filler */
+    got[4] = 77;
+    rd_vu_cmp_check_reset(&r);
+    CHECK(!rd_vu_cmp_check(&r, got, src, 6, raise, tex1, RD_VU_CMP_EXPECT_ANY));
+    CHECK(r.wrong == 1);
+    (void)rd_vu_cmp_check_text(b, sizeof b, &r);
+    CHECK(strstr(b, "; 1 triangles with a value neither the CPU's nor a filler (a stale or lost "
+                    "list)") != NULL);
+    /* fillers past the count, counts not the triangles */
+    uint32_t all[6] = {1, 1, 1, 5, 5, 5};
+    const uint32_t tex0[4] = {1, 0, 1, 1}; /* one left out counted, two fillers */
+    rd_vu_cmp_check_reset(&r);
+    CHECK(!rd_vu_cmp_check(&r, all, src, 6, raise, tex0, RD_VU_CMP_EXPECT_ANY));
+    CHECK(r.extra == 1 && r.badCounts == 0);
+    const uint32_t texBad[4] = {0, 0, 5, 1};
+    rd_vu_cmp_check_reset(&r);
+    CHECK(!rd_vu_cmp_check(&r, all, src, 6, raise, texBad, RD_VU_CMP_EXPECT_ANY));
+    CHECK(r.badCounts == 1);
+    /* two workgroups: 65 triangles, the second's count its own */
+    {
+        uint32_t s2[195], g2[195];
+        for (uint32_t t = 0; t < 65u; t++) {
+            for (uint32_t k = 0; k < 3u; k++) {
+                s2[3u * t + k] = 4u * (t + 2u) + k;
+            }
+        }
+        rd_vu_cmp_fill(g2, s2, 195, 0);
+        g2[192] = g2[194] = g2[193]; /* triangle 64: a filler */
+        const uint32_t tex2[8] = {0, 0, 64, 1, 1, 0, 0, 1};
+        rd_vu_cmp_check_reset(&r);
+        CHECK(rd_vu_cmp_check(&r, g2, s2, 195, 0, tex2, RD_VU_CMP_EXPECT_ANY));
+        CHECK(r.tris == 65 && r.fillers == 1 && r.leftOut == 1 && rd_vu_cmp_check_ok(&r));
+    }
+    /* the window's line with the CPU's lists: per picture over C */
+    RdVuCmpCounts c;
+    memset(&c, 0, sizeof(c));
+    c.kept[0] = 10;
+    c.pictures = 1;
+    c.cpuBytes = 2u * 1024u * 512u;
+    c.cpuNs = 1500000u;
+    c.cpuPictures = 2;
+    (void)rd_vu_cmp_block_text(b, sizeof b, &c);
+    CHECK(strstr(b, "two frame slots behind); the lists written by the CPU first (the Mali-G52's "
+                    "form): 512 KB and 0.75 ms a picture over 2 pictures") != NULL);
+}
+
 static void test_env(void)
 {
 #ifdef _WIN32
@@ -179,6 +282,7 @@ int main(void)
     test_plan();
     test_counts();
     test_text();
+    test_form();
     test_env();
     if (failures) {
         printf("rd_vu_compact_test: %d failures\n", failures);

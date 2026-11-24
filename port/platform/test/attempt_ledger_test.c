@@ -696,13 +696,31 @@ static void test_classes(void)
     CHECK(ico_attempt_compaction_candidate(1, O, 1, 0, 0) == 1);
     CHECK(ico_attempt_compaction_candidate(1, G, 0, 1, 1) == 0);
     CHECK(ico_attempt_compaction_candidate(0, G, 1, 1, 1) == 0);
-    CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 1, 1) == 1);
+    /* the Mali-G52's form (v0.11.16): refused by its own test, kept off by
+       its mark, not checked by its own test (each over the tests' switch
+       too, as the record's refusal is) */
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 1, ICO_ATT_CMP_ST_OWN_REFUSED) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_REFUSED);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
+                 "its own start-up test refused it (the lists the CPU writes first read back, the "
+                 "pictures or the stamps): every draw reads its own index list") == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, 1, 1, 1, ICO_ATT_CMP_ST_OWN_REFUSED) == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 1, ICO_ATT_CMP_ST_MARKED) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_REFUSED);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
+                 "kept off on this install by its mark (the run before ended badly while it was "
+                 "tried or on)") == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 1, ICO_ATT_CMP_ST_UNCHECKED) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_OFF_DEFAULT);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
+                 "its own start-up test could not check it: tried again at the next start") == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 1, ICO_ATT_CMP_ST_PASSED) == 1);
     ico_attempt_fire(ICO_ATT_COMPACTION, 9866);
     {
         char b[8192];
         (void)ico_attempt_start_text(b, sizeof b);
-        CHECK(strstr(b, "; index compaction on (the Mali-G52, its start-up self-test passed)") !=
-              NULL);
+        CHECK(strstr(b, "; index compaction on (the Mali-G52, its own start-up test passed (the "
+                        "lists written by the CPU first))") != NULL);
         (void)ico_attempt_block_text(b, sizeof b, -1);
         CHECK(strstr(b, "; index compaction on 9866 triangles left out") != NULL);
     }

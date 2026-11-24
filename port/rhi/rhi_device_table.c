@@ -287,9 +287,13 @@ static const RhiDeviceSetting kMaliG52[] = {
     {RHI_DC_COMPACTION_CLASS, RHI_DT_CMP_G52, "the index compaction's Mali-G52 class", NULL,
      "issue 179", "commit 67dedc5d5", "v0.11.6", "never: a class"},
 #if RD_VU_COMPACT_ARM_DEFAULT
-    {RHI_DC_COMPACTION_DEFAULT, 1, "the index compaction on where its self-test passes",
-     "RD_VU_COMPACT_ARM_DEFAULT 1", "issue 179", "an rc build's RD_VU_COMPACT_ARM_DEFAULT 1",
-     "v0.11.7", "the cause of v0.11.6's black pictures found"},
+    {RHI_DC_COMPACTION_DEFAULT, 1,
+     "the index compaction tried by its own start-up test (its lists written by the CPU first), "
+     "on where it passes",
+     "RD_VU_COMPACT_ARM_DEFAULT 1", "issue 179",
+     "v0.11.6's black pictures with the lists the GPU wrote (v0117/evidence/179); the CPU's lists "
+     "draw as without it if a list is read early or a store is lost",
+     "v0.11.16", "a G52 log with it on"},
 #else
     {RHI_DC_COMPACTION_DEFAULT, 0, "the index compaction off by default",
      "off by default on the Mali-G52: it blacked out the picture there in v0.11.6 (issue 179; "

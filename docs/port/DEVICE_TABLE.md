@@ -105,7 +105,7 @@ every row in force) and fails with less than 128 bytes left. Example on the Mali
 
 ```
 rhi_vk: device table: Mali-G52 MC2 (device 13b5:74021000; driver ID 9, version 32.1.0; Vulkan 1.1.177; Android): 8 of the table's 27 rows: tile-vendors, android, tiler, tile-phone, arm, mali, mali-g52, tile-classes; overridden here: other-tiler
-rhi_vk: device table: mali-g52 (vendor 0x13B5, not MoltenVK, a device name with "Mali-G52"): the index compaction's Mali-G52 class (issue 179, ...); the index compaction off by default (issue 179, ...)
+rhi_vk: device table: mali-g52 (vendor 0x13B5, not MoltenVK, a device name with "Mali-G52"): the index compaction's Mali-G52 class (issue 179, ...); the index compaction tried by its own start-up test (its lists written by the CPU first), on where it passes (issue 179, ...)
 ```
 
 ## Who reads the table
@@ -223,8 +223,8 @@ Left where they are, and why:
   (the tile-based words of the performance lines), `memory_floor.c`'s and `present_fallback.c`'s
   line texts ("Qualcomm's own driver").
 - The ledger's sentences that name a device inside a longer reason ("the PowerVR D-Series
-  DXT-48-1536: compute dispatches in place of the vertex stores", "the Mali-G52, its start-up
-  self-test passed") and the compaction's "off by default on the Mali-G52: ..." stay in
+  DXT-48-1536: compute dispatches in place of the vertex stores", "the Mali-G52, its own start-up
+  test passed") and the compaction's "off by default on the Mali-G52: ..." stay in
   `attempt_ledger.c`: the last is also the `mali-g52` row's reason, but the decider is handed the
   class's default as an argument (its test passes 0 whatever `RD_VU_COMPACT_ARM_DEFAULT` the build
   has), so it cannot read a row whose text follows the build's define.
@@ -541,7 +541,7 @@ Matches vendor 0x13B5, not MoltenVK, a device name with "Mali-G52": vendor 0x13B
 | Choice | Value | What | Issue | Since | Evidence | Revisit |
 | --- | --- | --- | --- | --- | --- | --- |
 | `COMPACTION_CLASS` | g52 | the index compaction's Mali-G52 class | issue 179 | v0.11.6 | commit 67dedc5d5 | never: a class |
-| `COMPACTION_DEFAULT` | no | the index compaction off by default ("off by default on the Mali-G52: it blacked out the picture there in v0.11.6 (issue 179; RD_VU_COMPACT_ARM_DEFAULT 0)") | issue 179 | v0.11.7 | the moto g24 power's v0.11.6 pictures black from the first 3D picture on (v0117/evidence/179) | the cause found, or a G52 log of complete pictures with it on |
+| `COMPACTION_DEFAULT` | yes | the index compaction tried by its own start-up test (its lists written by the CPU first), on where it passes ("RD_VU_COMPACT_ARM_DEFAULT 1") | issue 179 | v0.11.16 | v0.11.6's black pictures with the lists the GPU wrote (v0117/evidence/179); the CPU's lists draw as without it if a list is read early or a store is lost | a G52 log with it on |
 
 #### `powervr`
 

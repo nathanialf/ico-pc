@@ -2307,9 +2307,11 @@ end; the last written: list 0's start)` at every replay from 149 on in both of i
 6800 such replays), its timestamp counter restarted (at least 8 and 1200 times), and the fences
 still signalled. The same phone's log of the release before had none of either. Lavapipe draws the
 reporter's loss dumps the same with the compaction on and off and a bounds audit of the record and
-the index lists found nothing out of range, so the cause is not proven; the compaction is off by
-default on the Mali-G52 (`RD_VU_COMPACT_ARM_DEFAULT 0`,
-[PIPELINES.md](PIPELINES.md#the-index-compaction)), as that phone drew before it.
+the index lists found nothing out of range, so the cause is not proven; on the Mali-G52 the
+compaction now has its own form, every list written by the CPU first and only the fillers by the
+GPU, tried by its own start-up test, which reads the lists back and fails on this very sign, and
+kept off on the install by its mark after a bad end
+([PIPELINES.md](PIPELINES.md#the-mali-g52s-form)).
 
 **The rule.** On Vulkan (the slot clock's stamps). A judged picture is a presented one with VU
 draws (a 3D picture; the start-up self-tests present nothing). It is unfinished when its record

@@ -54,6 +54,7 @@
 #include "vu_zero_mark.h"   /* the zero-area cull's mark (issue 179) */
 #include "nodiscard_mark.h" /* the discard-free twins' */
 #include "fastps_mark.h"    /* the fast pixel build's */
+#include "compact_mark.h"   /* the index compaction's */
 #include "onepass_mark.h"   /* the one-pass blend's */
 #include "ratecard_env.h"
 
@@ -2958,6 +2959,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     }
     memcpy(act_path, path, strlen(path) + 1);
     last_run_begin(act_path, act_version, last_run_log); /* "the previous run: ..." first */
+    (void)compact_mark_begin(act_path, act_version, last_run_log); /* first: reads theirs */
     /* the zero-area cull's mark (vu_zero_mark.h): its line; a bad end turns
        the cull off, never the pre-pass (the loss count below is the rung's) */
     (void)vu_zero_mark_begin(act_path, act_version, last_run_log);

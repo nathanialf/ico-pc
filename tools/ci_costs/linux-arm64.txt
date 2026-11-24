@@ -64,6 +64,7 @@ collision_carrier_disc_kor 0.00
 collision_carrier_disc_ntsc 0.00
 collision_carrier_jun26 0.01
 collision_carrier_ntsc 0.01
+compact_mark 0.02  # estimate: a CPU unit test with a few files, like fastps_mark (not run here)
 config 0.03
 content_table_chains 0.05
 content_table_chains_jpn 0.05
@@ -912,6 +913,11 @@ rd_vuprepass_min_ab 43.21
 rd_vuprepass_selftest 1.52
 rd_vuprepass_selftest_compact 1.92
 rd_vuprepass_selftest_compact_mali 1.42
+rd_vuprepass_selftest_compact_mali_lists 6.00  # estimate: rd_vuprepass_selftest_compact_mali plus its own test of 14 replays of four 8064-triangle draws on lavapipe (not run here)
+rd_vuprepass_selftest_compact_mali_marked 2.50  # estimate: the record's self-test alone, like rd_vuprepass_selftest_compact_mali before its own test (not run here)
+rd_vuprepass_selftest_compact_mali_readback 6.00  # estimate: as rd_vuprepass_selftest_compact_mali_lists (not run here)
+rd_vuprepass_selftest_compact_mali_stamps 6.00  # estimate: as rd_vuprepass_selftest_compact_mali_lists (not run here)
+rd_vuprepass_selftest_compact_mali_unchecked 6.00  # estimate: as rd_vuprepass_selftest_compact_mali_lists (not run here)
 rd_vuprepass_selftest_compact_refused 2.39
 rd_vuprepass_selftest_compact_stamps 1.75
 rd_vuprepass_selftest_compact_stores 1.41

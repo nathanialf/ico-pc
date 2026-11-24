@@ -28,6 +28,7 @@ target_sources(ico_platform PRIVATE
     vu_zero_mark.c
     nodiscard_mark.c
     fastps_mark.c
+    compact_mark.c
     onepass_mark.c
     ratecard_env.c
     ahead_mark.c
@@ -450,6 +451,25 @@ if(ICO_RUN_TESTS)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fastps_mark_test_files")
     add_test(NAME fastps_mark COMMAND fastps_mark_test
                                       "${CMAKE_CURRENT_BINARY_DIR}/fastps_mark_test_files")
+endif()
+
+# The index compaction's mark on the install, for its Mali-G52 form
+# (compact_mark.c, issue 179): the zero-area cull's stages and table with its
+# own file and words, every stage at a crash (blocked for that version, the
+# next one tries again), a device loss while trying, a close from the recent
+# apps while counting (not blocked), and the start's step on files, first of
+# the marks: the other attempts' marks as the previous run left them (an end
+# while the twins, the lean vertex outputs or the rate card were trying is
+# theirs), the file rewritten, the environment exported, one line; nothing
+# said without a mark
+add_executable(compact_mark_test test/compact_mark_test.c)
+target_compile_options(compact_mark_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(compact_mark_test PRIVATE ico_platform ico_host_fs ico_miniz)
+if(ICO_RUN_TESTS)
+    # a folder of its own: last-run-previous.txt is written by every mark test
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/compact_mark_test_files")
+    add_test(NAME compact_mark COMMAND compact_mark_test
+                                       "${CMAKE_CURRENT_BINARY_DIR}/compact_mark_test_files")
 endif()
 
 # The one-pass blend's mark on the install (onepass_mark.c, issue 179): the

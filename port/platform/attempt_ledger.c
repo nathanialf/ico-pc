@@ -721,10 +721,21 @@ int ico_attempt_decide_compaction(int compute, const char *notWhy, int cls, int 
     } else if (env == 0) {
         st = ICO_ATT_OFF_DEFAULT;
         why = "ICO_RD_VU_COMPACT=0: the tests' switch";
-    } else if (selftest == 0) {
+    } else if (selftest == ICO_ATT_CMP_ST_REFUSED) {
         st = ICO_ATT_REFUSED;
         why = "the record's self-test failed with it and passed without it: every draw reads its "
               "own index list";
+    } else if (selftest == ICO_ATT_CMP_ST_OWN_REFUSED) {
+        st = ICO_ATT_REFUSED;
+        why = "its own start-up test refused it (the lists the CPU writes first read back, the "
+              "pictures or the stamps): every draw reads its own index list";
+    } else if (selftest == ICO_ATT_CMP_ST_MARKED) {
+        st = ICO_ATT_REFUSED;
+        why = "kept off on this install by its mark (the run before ended badly while it was "
+              "tried or on)";
+    } else if (selftest == ICO_ATT_CMP_ST_UNCHECKED) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "its own start-up test could not check it: tried again at the next start";
     } else if (env != 1 && cls != ICO_ATT_CMP_G52 && cls != ICO_ATT_CMP_DXT) {
         st = ICO_ATT_OFF_DEFAULT;
         why = rhi_device_choice_na_words(RHI_DC_COMPACTION_CLASS);
@@ -743,7 +754,8 @@ int ico_attempt_decide_compaction(int compute, const char *notWhy, int cls, int 
         on = 1;
         why = selftest < 0             ? "ICO_RD_VU_COMPACT=1: the tests' switch"
               : env == 1               ? "ICO_RD_VU_COMPACT=1, its start-up self-test passed"
-              : cls == ICO_ATT_CMP_G52 ? "the Mali-G52, its start-up self-test passed"
+              : cls == ICO_ATT_CMP_G52 ? "the Mali-G52, its own start-up test passed (the lists "
+                                         "written by the CPU first)"
                                        : "the PowerVR D-Series DXT-48-1536, its start-up "
                                          "self-test passed";
     }

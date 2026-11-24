@@ -103,7 +103,9 @@
  * or off) is then that second run's, its "record" part saying so.  [dev]
  * vu_prepass_min is held off while the test runs.
  *
- * After a pass, the zero-area cull's own self-test (rd_vu_zero_selftest.c,
+ * After a pass, first the index compaction's own test where its class has
+ * the Mali-G52's form (rd_vu_compact_selftest.c; the record's test then
+ * runs without the compaction), then the zero-area cull's own self-test (rd_vu_zero_selftest.c,
  * rd_vu_zero.h) runs on the same SCENE and logs its line, then the
  * discard-free twins' (rd_nodiscard_selftest.c, rd_nodiscard.h); after a
  * failure or without a run both are off.
@@ -339,7 +341,13 @@ static bool pushMesh(RdFrame *f, int i, RdMesh mesh, bool ticks, int replay, flo
     p.boneQw = i == M_SKIN ? 8u : 0u;
     p.qwPerVertex = kQpv[i];
     sceneBlock(&vu);
-    vu.mem[6][0] += shiftX; /* x' = 16 x + (2048 + shiftX) z: GS X moved by shiftX */
+    /* x' = 16 x + (2048 + shiftX) z: GS X moved by shiftX.  The prelit
+       program reads its model to GS screen from VU memory 16..19
+       (vu_prelit.hlsl vu_matm(16u, ...)), the z column 18; until v0.11.16
+       only 4..7 (the cluster's world matrix) was moved, so the copy was
+       drawn over the prelit mesh at the centre and nothing was left out */
+    vu.mem[18][0] += shiftX;
+    vu.mem[6][0] += shiftX;
     if (ticks) {
         double cam[4][4];
         tickCam(replay, cam);
@@ -888,6 +896,9 @@ bool rd_vuprepass_selftest(void)
             break;
         }
         runSelftest(t, &v);
+    }
+    if (v.on) {
+        rd__vu_compact_own_selftest(t); /* the Mali-G52 form's own test (rd_vu_compact.h) */
     }
     s_vtRunning = false;
     g_rdRec.minHeld = false;
