@@ -37,7 +37,7 @@ endif()
 # the discard-free twins' clipper check, where it ran: the device's verdict
 # and its cost in the test's own output (CI's log shows what its rasteriser
 # measured)
-string(REGEX MATCH "rd: discard-free twins: the clipper check: (clean|not clean) \\([^\n]*" verdict "${err}")
+string(REGEX MATCH "rd: discard-free twins: the clipper check: (clean|not clean|not checked) \\([^\n]*" verdict "${err}")
 if(verdict)
   message(STATUS "${verdict}")
 endif()

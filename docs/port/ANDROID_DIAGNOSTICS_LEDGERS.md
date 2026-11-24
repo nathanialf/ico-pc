@@ -255,7 +255,9 @@ thread, files and one Java call.
 
 **The stalls against each piece's share** (`stall_coincide.h` `stall_share_text`, `window_stall.c`
 `stall_table_lines`, each 10 s block with a stall, after the present latency line). The piece a
-stall names is the one that grew most against its block median (`stall_pieces_judge`); a piece's
+stall names is the one that added most time over its block median (`stall_pieces_judge`; when another
+piece has the largest factor the row says it beside: "list 0 103.4 ms +95.1 ms x12.4 (most grown by
+factor: list 3 x23.9)"); a piece's
 share is its GPU time over the GPU spans of the block's timed pictures (the effects sit inside their
 lists' times, so the shares do not add up to 100 %). The unit is the stalled replay: a replay whose
 present and one of its passes both stall judges the same record's pieces twice, so it counts once

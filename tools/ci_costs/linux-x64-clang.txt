@@ -934,7 +934,9 @@ rd_vuprepass_selftest_nodiscard_dual 1.68  # estimate: rd_vuprepass_selftest_zer
 rd_vuprepass_selftest_nodiscard_empty 4.26  # estimate: rd_vuprepass_selftest_nodiscard_clipper (every case run; not run here)
 rd_vuprepass_selftest_nodiscard_fallback 2.51  # estimate: rd_vuprepass_selftest_nodiscard_dual plus the blend self-test (rd_blend_selftest_sabotage; not run here)
 rd_vuprepass_selftest_nodiscard_marked 1.68  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
+rd_vuprepass_selftest_nodiscard_nodynamic 4.26  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test with every state in the pipeline keys, a few more twin pipelines made; not run here)
 rd_vuprepass_selftest_nodiscard_sabotage 1.56  # estimate: rd_vuprepass_selftest_zero_mali x 1.1 (three more replays; not run here)
+rd_vuprepass_selftest_nodiscard_unchecked 5.75  # estimate: rd_vuprepass_selftest_nodiscard x 1.35 (every clipper check frame drawn once more after its retry; not run here)
 rd_vuprepass_selftest_nostores_fallback 1.41
 rd_vuprepass_selftest_off 0.35
 rd_vuprepass_selftest_off_gl 0.89

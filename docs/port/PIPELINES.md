@@ -1901,6 +1901,26 @@ rejected ones (OVERDRAW's measurement; the floor's 1.1 % and 1.8 % besides).
   controls show it says `not clean` when a case differs (`ICO_RD_VU_NODISCARD_SABOTAGE=clipper`)
   and when a case draws nothing (`=empty`). The floor's two cases through a twin (plain,
   textured) are shown to draw the same way: the frame without each must differ.
+  The check's pipelines: every frame's keys are gathered in one gathering around all 52 frames
+  and made on the workers before the measured replays (`rd__pipeline_gather(true)` empties the
+  gathered list, so a gathering per frame would make only the last frame's keys). On a device
+  with every state in the pipeline keys (no dynamic depth or blend state: every Android GPU, the
+  issue 179 reporter's Mali-G52) code 36's cut pass (ABE forced on) and the probe (Z write off)
+  have twin keys of their own; when only the last frame's keys were made, those frames drew
+  through the ordinary build on both sides, compared a build with itself, and the missing
+  pipeline was reported as `not clean (case 1 at 36: no pipeline of its twin)`. A measured frame
+  whose pass still finds its twin's pipeline not made has the twins' queue made and waited for
+  (`rd__pipeline_twin_tick(true)`, the twins on for the self-test's frames) and is drawn once
+  more. Still without it, the frame compared nothing: it is left out of every count (drawn
+  through the twins, differing, the class's draws), logged on its own line, and with no
+  difference or undrawn frame measured elsewhere the verdict is `not checked`: no verdict, clip
+  mode none alone (as for `not clean`), nothing kept on the mark's second line, nothing written
+  as failed, the check run again at the next start. A difference or an undrawn frame measured
+  elsewhere still makes it `not clean`, the unchecked frames named after. A twin's pipeline the
+  device could not make during the check turns the twins off for the run, as in play. The
+  cost line counts the twin pipelines the check made and the frames drawn again, so a log shows
+  the twins were really drawn. `ICO_RD_VU_NODISCARD_SABOTAGE=unmade` (every twin the check's
+  frames ask for taken as not made) shows the third outcome.
 - **Never waited for.** A pass whose twin's pipeline is not made draws through its *_nodual build
   and asks for the twin (`rd_pipeline.c` `rd__pipeline_twin`: queued once). Between pictures
   (`rd__pipe_finish_tick`, the background finisher's slot) the queue's next batch is begun on the
@@ -1984,7 +2004,15 @@ The lines (`rd: ` before each):
   `clean (ICO_RD_VU_NODISCARD_CLIPPER; measured not clean: ...)`). After the case lines, its
   cost: `discard-free twins: the clipper check's cost: N replays (52 frames gathered, each
   through the twins and without them, each case's without the probe, the probe's and the clear's
-  alone) on SCENE WxH at TWxTH texels in T ms`; the whole self-test's time is on the `on
+  alone) on SCENE WxH at TWxTH texels in T ms; M twin pipelines made for it, R frames drawn
+  again once the twins' queue was made, U of them still without a twin's pipeline (not
+  checked)`; a frame still without one, `discard-free twins: the clipper check, case K at F: not
+  checked (N passes found no pipeline of their twin after the twins' queue was made and the
+  frame drawn again): the frame compares nothing` (its case line ends `; not checked at F, ...
+  (no twin's pipeline)`), and when nothing else was measured the verdict `discard-free twins:
+  the clipper check: not checked (no pipeline of their twin after a retry: case K at F, ...):
+  clip mode none alone takes them (no verdict: nothing kept on the mark, nothing written as
+  failed; the check runs again at the next start)`; the whole self-test's time is on the `on
   (self-test: ...) ... in T ms` line. The queued twin keys of the self-test's frames are
   forgotten at its end (`rd__pipeline_twin_forget_queued`).
 - The 10 s VU line's clause: `; discard-free twins: D draws a picture through them (P proven by

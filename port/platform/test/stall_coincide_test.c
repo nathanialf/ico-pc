@@ -131,6 +131,7 @@ static void pieces_cases(void)
         m.headroom = -1.0;
         CHECK(stall_pieces_judge(&m, ms, med, 4) == 0);
         CHECK(m.pieceN == 4u && m.grown == 1u && m.pieceFactor == 6.0);
+        CHECK(m.pieceAddedMs == 100.0 && m.topFactorAt == -1);
         CHECK(m.othersFactor == 1.125); /* 1.0, 1.125, 1.25: the middle */
         CHECK(stall_classes(&m) == 1u << STALL_CLASS_ONE_PIECE);
         snprintf(m.pieceName, sizeof m.pieceName, "list 0");
@@ -142,7 +143,8 @@ static void pieces_cases(void)
         (void)stall_moment_text(&m, t, sizeof t);
         text_is(t,
                 "the game thread's core not known; the core waits not sampled; device memory not "
-                "known; its 4 timed pieces against their block medians: list 0 x6.0, the others "
+                "known; its 4 timed pieces against their block medians: list 0 +100.0 ms x6.0, the "
+                "others "
                 "x1.1 (their median; 1 of 4 at x2 or more); the GPU idle 0.2 ms before its "
                 "work; 13000 VU triangles against the block's median 12000 (x1.08); coincided "
                 "with: one piece grew",
@@ -167,7 +169,11 @@ static void pieces_cases(void)
         m.availMb = m.floorMb = -1;
         m.pressure = -1;
         m.headroom = -1.0;
-        CHECK(stall_pieces_judge(&m, ms, med, 4) == 3); /* 3.5x */
+        /* list 0 added 40 ms at 3.0x; the last piece has the largest factor
+           (3.5x) and added 5 ms: list 0 is the piece */
+        CHECK(stall_pieces_judge(&m, ms, med, 4) == 0);
+        CHECK(m.pieceAddedMs == 40.0 && m.pieceFactor == 3.0 && m.topFactorAt == 3 &&
+              m.topFactor == 3.5);
         CHECK(m.pieceN == 3u && m.grown == 3u && m.factorMin == 3.0 && m.factorMax == 3.5);
         CHECK(stall_classes(&m) == 1u << STALL_CLASS_GPU_WHOLE);
         m.idleKnown = true;
@@ -179,6 +185,26 @@ static void pieces_cases(void)
                 "to x3.5; its work begun 1.5 ms before the picture before ended; coincided with: "
                 "the GPU slow as a whole",
                 __LINE__);
+    }
+    /* issue 179's v0.11.15 log, stage 40: list 3 at 12.9 ms x23.9 beside
+       list 0 at 103.4 ms x12.4: list 0 added 95 ms and is the piece, the
+       factor's pick said beside it */
+    {
+        const double ms[3] = {103.4, 12.9, 2.5}, med[3] = {8.34, 0.54, 2.4};
+        memset(&m, 0, sizeof m);
+        m.gameCore = m.renderCore = -1;
+        m.gpuMhz = m.gpuMaxMhz = -1;
+        m.availMb = m.floorMb = -1;
+        m.pressure = -1;
+        m.headroom = -1.0;
+        CHECK(stall_pieces_judge(&m, ms, med, 3) == 0 && m.topFactorAt == 1);
+        CHECK(m.pieceAddedMs > 95.0 && m.pieceAddedMs < 95.1 && m.pieceFactor > 12.3 &&
+              m.pieceFactor < 12.5 && m.topFactor > 23.8 && m.topFactor < 24.0);
+        snprintf(m.pieceName, sizeof m.pieceName, "list 0");
+        snprintf(m.topName, sizeof m.topName, "list 3");
+        (void)stall_moment_text(&m, t, sizeof t);
+        CHECK(strstr(t, "block medians: list 0 +95.1 ms x12.4 (most grown by factor: list 3 "
+                        "x23.9), the others ") != NULL);
     }
     /* one piece alone: no class of the two; none with a median: nothing */
     {
@@ -258,7 +284,7 @@ static StallRow row_of(uint32_t replay, int kind, double ms)
     r.stage = 42;
     r.kind = (uint8_t)kind;
     r.ms = (float)ms;
-    r.piece = -1;
+    r.piece = r.topPiece = -1;
     r.tris = r.trisMed = r.trisMax = -1.0f;
     r.red[0] = r.pres[0] = -1.0f;
     return r;
@@ -282,6 +308,7 @@ static void table_cases(void)
     a.piece = 0;
     a.pieceMs = 88.1f;
     a.pieceFactor = 9.4f;
+    a.pieceAddedMs = 78.7f;
     a.tris = 31475.0f;
     a.trisMed = 30000.0f;
     a.trisMax = 35000.0f;
@@ -308,12 +335,13 @@ static void table_cases(void)
             "naming none (6 timed pictures, 180.0 ms of GPU spans)",
             __LINE__);
     CHECK(stall_table_text(&s_t, names, false, 0, b, sizeof b) == strlen(b));
-    text_is(b,
-            "stall table (part 1 of 1; 1 stall, 0 of them from the block before, 1 waiting for "
-            "their next timed replays): r4 s42 present 141 ms: list 0 88.1 ms x9.4; tris 31475 "
-            "x1.05 of the median, x0.90 of the 2 s most; reduction 2.40/2.50/2.30, present "
-            "2.70/2.60/2.80 ms; battery -812 mA",
-            __LINE__);
+    text_is(
+        b,
+        "stall table (part 1 of 1; 1 stall, 0 of them from the block before, 1 waiting for "
+        "their next timed replays): r4 s42 present 141 ms: list 0 88.1 ms +78.7 ms x9.4; tris 31475 "
+        "x1.05 of the median, x0.90 of the 2 s most; reduction 2.40/2.50/2.30, present "
+        "2.70/2.60/2.80 ms; battery -812 mA",
+        __LINE__);
     CHECK(stall_table_text(&s_t, names, false, 1, b, sizeof b) == 0);
     stall_table_end(&s_t, false);
     /* the next block: the pass stall carried, written with what it has */
@@ -373,6 +401,23 @@ static void table_cases(void)
     (void)stall_share_text(&s_t, names, b, sizeof b);
     CHECK(strstr(b, ": 260 stalls in 260 replays, 260 of them naming a piece; list 3: 260, 100 %, "
                     "0 %; 0 naming none (0 timed pictures, 0.0 ms of GPU spans)") != NULL);
+    /* another piece with the largest factor: said beside the named one */
+    stall_table_end(&s_t, true);
+    {
+        StallRow q = row_of(7626, 0, 129.0);
+        q.piece = 0;
+        q.pieceMs = 103.4f;
+        q.pieceAddedMs = 95.1f;
+        q.pieceFactor = 12.4f;
+        q.topPiece = 3;
+        q.topFactor = 23.9f;
+        stall_table_add(&s_t, &q);
+        (void)stall_table_text(&s_t, names, true, 0, b, sizeof b);
+        CHECK(strstr(b, "present 129 ms: list 0 103.4 ms +95.1 ms x12.4 (most grown by factor: "
+                        "list 3 x23.9); ") != NULL);
+        (void)stall_share_text(&s_t, names, b, sizeof b);
+        CHECK(strstr(b, "; list 0: 1, 100 %, ") != NULL);
+    }
     /* an unnamed piece */
     stall_table_end(&s_t, true);
     {
