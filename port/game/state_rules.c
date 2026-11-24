@@ -175,6 +175,24 @@ void ico_state_list_dir(const char *dir, const IcoStateHeader *now,
     free(h);
 }
 
+int ico_state_settings_line(int slot, const char *saved_keys, const char *now_keys, char *out,
+                            size_t size)
+{
+    char diffs[ICO_STATE_KEYS_MAX];
+    const int n = ico_state_keys_diff(saved_keys, now_keys, diffs, sizeof diffs);
+
+    if (out != NULL && size > 0) {
+        out[0] = '\0';
+        if (n > 0) {
+            snprintf(out, size,
+                     "state: slot %d was saved with other settings (%s): it loads under this "
+                     "run's",
+                     slot, diffs);
+        }
+    }
+    return n;
+}
+
 int ico_state_parse_at(const char *s, unsigned int *tick, int *slot)
 {
     char *end;

@@ -828,7 +828,6 @@ const char *const
                     "Metti il gioco in pausa per caricare questo stato",
                 [UI_STR_STATES_REFUSED_BUILD] = "Salvato da un'altra versione del gioco",
                 [UI_STR_STATES_REFUSED_DISC] = "Salvato da un altro disco",
-                [UI_STR_STATES_REFUSED_SETTINGS] = "Un'impostazione di gioco è diversa: %s",
                 [UI_STR_STATES_REFUSED_BUSY] = "Non ora: il gioco sta caricando o salvando",
                 [UI_STR_STATES_REFUSED_CHECK] = "Impossibile caricarlo; il gioco prosegue",
                 [UI_STR_STATES_OFF] = "Gli stati salvati sono disattivati in questa versione",

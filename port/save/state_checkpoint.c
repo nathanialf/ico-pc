@@ -478,6 +478,9 @@ int ico_ckpt_locate(const IcoCkptInput *in, IcoCkptPlan *plan)
 
 IcoCkptRoute ico_ckpt_route(IcoStateResult r, int other_version)
 {
+    /* no result routes by the version since a state stopped being refused
+       for a setting (the one that did); kept for the callers' sake */
+    (void)other_version;
     switch (r) {
     case ICO_STATE_OK:
         return ICO_CKPT_ROUTE_EXACT;
@@ -490,10 +493,6 @@ IcoCkptRoute ico_ckpt_route(IcoStateResult r, int other_version)
     case ICO_STATE_SELF_CHECK:
     case ICO_STATE_BAD_FILE:
         return ICO_CKPT_ROUTE_CHECKPOINT;
-    /* settings: another version's state differs in more than them; this
-       version's resumes exactly with the setting the box names put back */
-    case ICO_STATE_OTHER_SETTINGS:
-        return other_version ? ICO_CKPT_ROUTE_CHECKPOINT : ICO_CKPT_ROUTE_REFUSED;
     /* by rule: another disc's journey, a Permadeath journey */
     case ICO_STATE_OTHER_DISC:
     case ICO_STATE_PERMADEATH:
@@ -508,6 +507,8 @@ IcoCkptRoute ico_ckpt_route(IcoStateResult r, int other_version)
     case ICO_STATE_PHOTO:
     case ICO_STATE_IO:
     case ICO_STATE_BUSY:
+    /* never returned: a state is not refused for a setting (state.h) */
+    case ICO_STATE_OTHER_SETTINGS:
         return ICO_CKPT_ROUTE_REFUSED;
     }
     return ICO_CKPT_ROUTE_REFUSED;
@@ -528,9 +529,6 @@ IcoCkptBox ico_ckpt_box(int is_load, IcoStateResult r, int via_checkpoint, IcoSt
 {
     if (r == ICO_STATE_OK) {
         return is_load && via_checkpoint ? ICO_CKPT_BOX_NOTICE : ICO_CKPT_BOX_DONE;
-    }
-    if (r == ICO_STATE_OTHER_SETTINGS) {
-        return ICO_CKPT_BOX_SETTINGS;
     }
     if (r == ICO_STATE_OTHER_BUILD && is_load && blocker != ICO_STATE_BLOCK_NONE) {
         return ICO_CKPT_BOX_VERSION;

@@ -795,7 +795,6 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST_LOAD] = "이 상태를 불러오려면 게임을 일시정지하세요",
     [UI_STR_STATES_REFUSED_BUILD] = "다른 버전의 게임에서 저장됨",
     [UI_STR_STATES_REFUSED_DISC] = "다른 디스크에서 저장됨",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "게임 설정이 다릅니다: %s",
     [UI_STR_STATES_REFUSED_BUSY] = "지금은 할 수 없습니다: 게임이 불러오거나 저장하는 중입니다",
     [UI_STR_STATES_REFUSED_CHECK] = "불러오지 못했습니다. 게임은 계속됩니다",
     [UI_STR_STATES_OFF] = "이 빌드에서는 저장 상태가 꺼져 있습니다",

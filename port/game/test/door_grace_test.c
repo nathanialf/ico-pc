@@ -5,7 +5,10 @@
  * and the grace with the option off and on, holding hands or not, a stage
  * start elsewhere, no arm, the frame count, the other way through the door,
  * and a copy of the exit check's guard (ico2/fumi/src/boyact.c,
- * CheckCollisionAttr) driven frame by frame through an arrival.
+ * CheckCollisionAttr) driven frame by frame through an arrival; a save
+ * state's grace loaded with the option off now ends
+ * (ico_door_grace_state_loaded), with it on goes on, and a pending arm
+ * alone is left.
  */
 #include <stdio.h>
 #include "config.h"
@@ -219,6 +222,29 @@ static void test_scenario(void)
     CHECK(fired == 3);
 }
 
+/* a save state's grace (its blocks put back by the load) under this run's
+   option */
+static void test_state_loaded(void)
+{
+    /* saved during a grace, the option on in this run: it goes on */
+    fresh(1);
+    ico_door_grace_arm(STAGE_LEFT, STAGE_IN, 1);
+    CHECK(ico_door_grace_begin(STAGE_IN, GRACE) == 1);
+    CHECK(ico_door_grace_state_loaded() == 0);
+    CHECK(ico_door_grace_active() == 1 && ico_door_grace_holds(STAGE_LEFT) == 1);
+    /* the option off in this run: the grace ends, logged */
+    ico_opt_set_door_fix(0);
+    CHECK(ico_door_grace_state_loaded() == 1);
+    CHECK(ico_door_grace_active() == 0 && ico_door_grace_holds(STAGE_LEFT) == 0);
+    CHECK(ico_door_grace_state_loaded() == 0);
+    /* a pending arm alone: nothing to end (no grace begins while off) */
+    ico_door_grace_arm(STAGE_LEFT, STAGE_IN, 1);
+    CHECK(ico_door_grace_state_loaded() == 0);
+    CHECK(ico_door_grace_begin(STAGE_IN, GRACE) == 0);
+    CHECK(ico_door_grace_active() == 0);
+    fresh(0);
+}
+
 int main(int argc, char **argv)
 {
     (void)argc;
@@ -233,6 +259,7 @@ int main(int argc, char **argv)
     test_no_arm();
     test_rearm();
     test_scenario();
+    test_state_loaded();
     if (failures != 0) {
         fprintf(stderr, "door_grace_test: %d failure(s)\n", failures);
         return 1;

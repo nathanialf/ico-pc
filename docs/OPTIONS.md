@@ -475,9 +475,8 @@ A change takes effect the next time you start the game.
   **Toggle** ends too, and while you keep pushing the right stick the camera
   stays on Ico until you let go. You can give R3 to another key or button
   under **Remap controls**. It shows from the title screen and the pause
-  menu, on every disc, and is kept in the settings file. A save state made
-  with it set the other way, or made before the row existed, will not load
-  until you set it back.
+  menu, on every disc, and is kept in the settings file. Save states load
+  whichever way it is set.
 - **Analogue stick fix** is the same switch as the one on the Gameplay
   page, shown here too so you find it with the other controls. Turn it on
   in either place and it is on in both.
@@ -1113,8 +1112,11 @@ Choose a slot and press Left or Right to pick **Save**, **Load** or
 use, and deleting, ask you to press again within two seconds. Saving is
 only possible from the pause menu, so from the title screen the page only
 loads and deletes. A slot that cannot be loaded (it was saved on another
-disc, or with different gameplay settings) is greyed, and the line under the
-cards says why. A state keeps the journey's [Difficulty](#difficulty) with it:
+disc, for example) is greyed, and the line under the cards says why. A
+setting never stops a state from loading: it loads with the settings you
+have now, whatever they were when it was saved. The one it keeps is **Video
+mode**: a state saved in the other of 50 Hz and 60 Hz plays in its own until
+you restart the game. A state keeps the journey's [Difficulty](#difficulty) with it:
 loading one brings back the difficulty and the knock-down count it was
 saved with. On a journey with Permadeath on, save states are off: none can be
 saved or loaded, and a state made on such a journey never loads. After a load the game is back on the pause menu, on **Save states**. On
@@ -1138,9 +1140,7 @@ works from the pause menu and the title screen: F9 during play asks you to
 pause first. A state from another disc or a Permadeath journey is refused,
 and a state saved in a new game before its first checkpoint, or one whose
 checkpoint the game cannot find, has nothing to continue from; the message
-then says so. A gameplay
-setting that a later version adds does not stop an older state from loading
-while you leave that setting as it starts. A state made before states kept
+then says so. A state made before states kept
 their difficulty takes the gameplay rows it was made with as its difficulty.
 Your
 achievements keep counting as before and are not taken back by a load. The

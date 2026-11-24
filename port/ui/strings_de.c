@@ -812,7 +812,6 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Pausiere das Spiel, um diesen Zustand zu laden",
     [UI_STR_STATES_REFUSED_BUILD] = "Von einer anderen Version des Spiels gespeichert",
     [UI_STR_STATES_REFUSED_DISC] = "Von einer anderen Disc gespeichert",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "Eine Spieleinstellung weicht ab: %s",
     [UI_STR_STATES_REFUSED_BUSY] = "Jetzt nicht: Das Spiel lädt oder speichert gerade",
     [UI_STR_STATES_REFUSED_CHECK] = "Laden nicht möglich; das Spiel läuft weiter",
     [UI_STR_STATES_OFF] = "Spielzustände sind in dieser Version aus",

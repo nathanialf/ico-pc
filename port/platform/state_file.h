@@ -15,7 +15,8 @@
  *                  sizes, the address the bytes lived at in the saving
  *                  process, the CRC-32 of the raw bytes, the caller's flags
  *   the keys text  "key=value\n" for every simulation key (sim_keys.h), so
- *                  a refusal names the first key that differs
+ *                  a load's log line names the settings that differ (a
+ *                  state is never refused for one)
  *
  * then each section's bytes, raw deflate (miniz tdefl, level 1).  A write
  * goes to <path>.tmp, is synced (ico_fsync) and renamed over <path>
@@ -108,16 +109,10 @@ void ico_state_header_init(IcoStateHeader *h, const char *commit);
    header_init plus disc, settings_hash and keys): ICO_STATE_OK, or in this
    order of precedence ICO_STATE_OTHER_PLATFORM (detail: the saved
    platform), ICO_STATE_OTHER_BUILD (another format version or build id;
-   detail: the saved commit), ICO_STATE_OTHER_DISC (the saved slug) or
-   ICO_STATE_OTHER_SETTINGS (the first key whose value differs, as
-   "key=saved (now cur)"; the keys text decides it, the hash only when the
-   texts agree).  A key this run lists that the saved text lacks (a key a
-   later version added) is equal when the key-default function (below)
-   says this run's value is its default; the saved text must then be whole
-   (its own hash is the saved settings_hash), else "the settings differ".
-   Without the function such a key differs ("key=(absent) (now cur)").  A
-   key only the saved text lists is equal when this version retired it
-   (ico_state_set_key_retired), under the same whole-text rule. */
+   detail: the saved commit) or ICO_STATE_OTHER_DISC (the saved slug).  The
+   simulation keys never refuse a state (it loads under this run's
+   settings; ico_state_keys_diff names the ones that differ for the log):
+   ICO_STATE_OTHER_SETTINGS is never returned. */
 IcoStateResult ico_state_header_check(const IcoStateHeader *saved, const IcoStateHeader *now,
                                       char *detail, size_t n);
 /* The same without the build id: what a state of another build of this
@@ -130,36 +125,33 @@ IcoStateResult ico_state_header_check_other_build(const IcoStateHeader *saved,
    key is key_n bytes, not NUL-terminated): sim_keys.h
    ico_sim_key_is_default, which state_host.c sets at its start (the
    platform layer does not see the config).  NULL: no key reads as a
-   default (the tests' and tools' header checks). */
+   default (the tests' and tools' checks). */
 typedef int (*IcoStateKeyDefaultFn)(const char *key, size_t key_n, const char *value,
                                     size_t value_n);
 void ico_state_set_key_default(IcoStateKeyDefaultFn fn);
 
-/* The keys `now` lists that `saved` lacks, as "a, b" into out (size bytes,
-   truncated; "" for none); their count.  For the load's log line. */
-int ico_state_keys_absent(const char *saved, const char *now, char *out, size_t size);
-
-/* The keys both texts list whose values are written differently but both
-   mean the key's default (the key-default function above: unset on one
-   side, the default's text on the other), as "a, b" into out (size bytes,
-   truncated; "" for none); their count.  The header check takes them as
-   equal; for the load's log line.  0 without the key-default function. */
-int ico_state_keys_defaulted(const char *saved, const char *now, char *out, size_t size);
-
 /* 1 when the simulation key (key_n bytes, not NUL-terminated) is one this
    version retired: sim_keys.h ico_sim_key_retired (v0.11.3: the fifteen
    difficulty rows, which a state now carries as its own block), set by
-   state_host.c at its start.  A key the saved text lists, `now` lacks and
-   this function names is passed over whatever its value (the saved text
-   must then be whole, as for an absent key).  NULL: none is retired (such
-   a key differs: "key=value (now absent)"). */
+   state_host.c at its start.  NULL: none is retired. */
 typedef int (*IcoStateKeyRetiredFn)(const char *key, size_t key_n);
 void ico_state_set_key_retired(IcoStateKeyRetiredFn fn);
 
-/* The retired keys (above) `saved` lists and `now` lacks, as
-   "key=value, key=value" into out (size bytes, truncated; "" for none);
-   their count.  For the load's log line. */
-int ico_state_keys_retired(const char *saved, const char *now, char *out, size_t size);
+/* Every setting the saved keys text and this run's (`now`) disagree on, as
+   "key=saved (now cur)" joined by ", " into out (size bytes, cut at the
+   end, NUL-terminated; "" for none), this run's keys in their order first;
+   the count (whole, also when the text is cut).  The rules:
+     - a key `now` lists that `saved` lacks (a later version added it) reads
+       as its default in the state: equal while the key-default function
+       says this run's value is its default, else "key=(absent) (now cur)"
+       (always so without the function);
+     - a key only `saved` lists: passed over when the retired-key function
+       names it (the state's own block holds it), else "key=value (now
+       absent)";
+     - a key unset on one side and at its default's text on the other is
+       equal (issue 218).
+   For the load's log line (state_host.c); nothing is refused for it. */
+int ico_state_keys_diff(const char *saved, const char *now, char *out, size_t size);
 
 /* --- writing (the writer thread) --- */
 
