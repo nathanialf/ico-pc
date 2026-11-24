@@ -3577,6 +3577,14 @@ typedef struct RdPerfRecord {
     uint16_t listBoxDraws[RD_LIST_COUNT], listBoxNone[RD_LIST_COUNT];
     uint32_t listBoxTargetPx[RD_LIST_COUNT];
     uint32_t vuListTris[RD_LIST_COUNT];
+    /* Per list, for the where table's rate card clause (rd_perf_where.h;
+     * issue 179): vuListAgainTris the VU triangles drawn again by a draw's
+     * passes after its first (rd_replay_vu.c vuDraw: the two-pass blend's
+     * alpha pass without dual-source blending, or any second pass its plan
+     * makes; a merged run draws every pass too), shadowListTris the shadow
+     * volumes' triangles drawn (rd_replay.c doShadowStripIn, each half of a
+     * strip whose pipeline was made) */
+    uint32_t vuListAgainTris[RD_LIST_COUNT], shadowListTris[RD_LIST_COUNT];
     /* The in-play A/B judge (port/render/rd_ab.h, rd_ab_run.h): the arms
      * the replay was recorded under, set at its start (rd__perf_begin), so
      * its GPU span read back later is judged as theirs: abTrial the trial's

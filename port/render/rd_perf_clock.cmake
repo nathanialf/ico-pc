@@ -57,10 +57,11 @@ if(ICO_RUN_TESTS)
 endif()
 
 # rd_perf_where_test: where the time went, one table a block
-# (rd_perf_where.h, issue 179): the six lines word for word from a made-up
+# (rd_perf_where.h, issue 179): the seven lines word for word from a made-up
 # block of the boat scene's shape, a piece of 0 ms left out, a list not
 # timed pass by pass, an effect without a name, the window's texts absent,
-# no timed picture, the rate card's hook, a short buffer (CPU only)
+# no timed picture, a short buffer; the rate card's clause with hand-computed
+# numbers and "no rate card figure" each way the card has none (CPU only)
 add_executable(rd_perf_where_test test/rd_perf_where_test.c rd_perf_where.c rd_perf_rank.c)
 target_include_directories(rd_perf_where_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                                       "${CMAKE_SOURCE_DIR}/port/rhi")

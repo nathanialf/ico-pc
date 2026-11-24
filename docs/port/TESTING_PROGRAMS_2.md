@@ -252,8 +252,16 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   and block lines word for word.
 - `rd_perf_where_test.c` (ctest `rd_perf_where`, a program of its own; CPU only): where the time
   went (`port/render/rd_perf_where.h`, issue 179) from a made-up block of the boat scene's shape:
-  the six lines word for word, a piece of 0 ms left out, a list not timed pass by pass, an effect
-  without a name, the window's texts absent, no timed picture, the rate card's hook, a short buffer.
+  the seven lines word for word, a piece of 0 ms left out, a list not timed pass by pass, an effect
+  without a name, the window's texts absent, no timed picture, a short buffer; the rate card's
+  line from the reporter's card of issue 179 (118.29 ns a vertex, 541.76 ns a triangle, 0.003 ms
+  a pass): each term on its own, never summed (list 0: 91.1k triangles at most 49.4 ms against
+  49.0 ms measured, nothing said of the rest; 273.3k corners at most 32.3 ms; one pass; list 3:
+  triangles at most 6.6 ms of 15.0 ms, so at least 8.4 ms is something else), and `no rate card
+  figure` for no card, none given, another graphics API, an item not measured, one at or below
+  0, another unit, the other pre-pass state (both terms), an empty pass of another size, a list
+  not timed pass by pass; `about` and no `at least` with the pre-pass off on both; no VU or shadow
+  volume triangles.
 - `perf_secs_test.c`, its phone case (`perf_secs`): the second's last reading, `-` a second with
   none, the block's thermal line, nothing with no reading, the next block from nothing.
 - `stall_coincide_test.c`, its phone case (`stall_coincide`): the reading at the row's end.

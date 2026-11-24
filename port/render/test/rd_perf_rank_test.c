@@ -29,7 +29,10 @@
  *   run        the profile by scene: blocks, the median and worst picture,
  *              the median and lowest rate, the bounds, the worst block's
  *              ranking kept, a full table counted;
- *   short      a small buffer is cut and terminated.
+ *   short      a small buffer is cut and terminated;
+ *   list counts the per-list VU triangles, those drawn again and the
+ *              shadow volumes' summed over every record (the where table's
+ *              rate card clause).
  */
 #include <math.h>
 #include <stdio.h>
@@ -917,6 +920,26 @@ static void testElse(void)
     CHECK(at >= 0 && near(v.c[at].ms, 10.0, 1e-9));
 }
 
+/* the per-list counts the where table's rate card clause reads
+   (rd_perf_where.h): summed over every record, timed or not */
+static void testListCounts(void)
+{
+    static RdPerfRankBlock b;
+    rd_perf_rank_block_reset(&b);
+    for (uint32_t i = 0; i < 3; i++) {
+        RdPerfRecord r = record(7000u + i, 40.0);
+        r.gpuValid = i != 1u; /* one without GPU times: its counts still in */
+        r.vuListTris[0] = 1000u + i;
+        r.vuListAgainTris[0] = 400u;
+        r.vuListTris[3] = 50u;
+        r.shadowListTris[3] = 120u;
+        rd_perf_rank_add_record(&b, &r, 0.0);
+    }
+    CHECK(near(b.listTris[0], 3003.0, 1e-9) && near(b.listAgainTris[0], 1200.0, 1e-9));
+    CHECK(near(b.listTris[3], 150.0, 1e-9) && near(b.listShadowTris[3], 360.0, 1e-9));
+    CHECK(b.listTris[1] == 0.0 && b.listAgainTris[3] == 0.0 && b.listShadowTris[0] == 0.0);
+}
+
 int main(void)
 {
     testGpu();
@@ -931,6 +954,7 @@ int main(void)
     testShort();
     testSpread();
     testElse();
+    testListCounts();
     printf("rd_perf_rank_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

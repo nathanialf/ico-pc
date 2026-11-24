@@ -607,7 +607,9 @@ What was tried for the issue 163 rooms' lamps (`port/render/rd_lamps.c`, [RENDER
 decision), `rd_ratecard_run.c` (the frames). Issue 179's Mali-G52 exposes no clock or load, so at
 start-up, after the fog self-test (`window_host.c`, and again after a Graphics API switch: the
 backend is in its key), the device times small synthetic frames through the game's own builds and
-logs its unit costs once. A diagnostic: nothing in play reads it in this release.
+logs its unit costs once. A diagnostic: nothing in play reads it; the window's where table
+multiplies its vertex, triangle and pass units by each list's counts ([Where the time
+went](ANDROID_DIAGNOSTICS_LEDGERS.md#where-the-time-went)).
 
 **The frames.** Each on SCENE at its real size and scale, cleared, Z GEQUAL with Z written, ABE
 off, prelit code 34 meshes under the twins' self-test's screen matrix: the twins' floor's state, so
@@ -661,7 +663,7 @@ the 10 s line's counts:
 | a shaded fragment, the ordinary build and the textured one | (`L2` - `E`) / (2 texels) | the fragments a list shades (OVERDRAW: lists 0-2 shade 6-7 times the target) |
 | a shaded fragment through the twin | the same under the hold | the twins' share of them |
 | a fragment hidden by depth, with discard and through the twin | (`H2` - `L1`) / texels, the hold off and on (both frames under it: the visible layer subtracted costs what `H2`'s own does) | the fragments the depth test rejects (about half of lists 0-2 in the boat); the difference is what a twin buys a hidden fragment: whether discard costs this chip its early depth test |
-| a vertex | (`V` - `E`) / its corners (the VU pre-pass on or off, said) | the 10 s line's vertex invocations |
+| a vertex | (`V` - `E`) / its corners (the VU pre-pass on or off, said): with the pre-pass on a corner holds one pre-pass vertex and one draw invocation (the card's corners are all distinct), with it off three of the programs' own invocations | a list's corners, 3 a triangle each pass (the 10 s VU line's `the draws' vu_main_vs N more`, the two-pass blend's second pass added), never the pre-pass's `vertex invocations`; with the pre-pass on an upper bound, as play times the pre-pass apart and draws more corners than it has pre-pass vertices; never added to the triangle's figure, which holds its corners |
 | a triangle binned | (`S` - `B`) / (2046 x 8) | the triangles a list submits (most cover no pixel: OVERDRAW's 64-71 %) |
 | the 2x2-quad factor | (`S` - `E`) / (`B` - `E`): the small triangles' cost a covered texel over the large ones' | the lanes small triangles waste |
 | a pass with nothing drawn | `E`: a replay's whole span with one cleared SCENE pass | the passes a picture makes (the 10 s line's pass count) |

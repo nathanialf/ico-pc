@@ -1347,7 +1347,7 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     RdDrawPass dp[8];
     const int np = vuPlan(r, s, ds, prog, vs, vcb, dp);
     rd__perf_vu_draw(np == 2 && rd__no_dual_second(dp, 1),
-                     np == 1 && (dp[0].flags & ICO_DF_NODUAL_FACTOR) != 0, count / 3u);
+                     np == 1 && (dp[0].flags & ICO_DF_NODUAL_FACTOR) != 0, count / 3u, np);
     for (int i = 0; i < np; i++) {
         if (dp[i].key.dst == RHI_DST_READ_STORAGE) {
             /* the _dstrov build writes depth before its shader runs, so a
