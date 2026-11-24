@@ -90,6 +90,7 @@
 #include "rd_vu_zero.h"   /* rd__pipeline_drop_vs */
 #include "rd_fastps.h"    /* the fast pixel build's modules and pipelines */
 #include "rd_nodiscard.h" /* the discard-free twins' modules and pipelines */
+#include "rd_onepass.h"   /* the one-pass blend's blend state and pipelines */
 #include "rd_passring.h"
 #include "rd_paste_spec.h"
 #include "rd_comp_spec.h"
@@ -645,6 +646,12 @@ static RhiBlendState blendState(RdBlendPath bp, uint8_t mask, uint8_t nodual)
     b.alphaOp = RHI_BO_ADD;
     b.colorOp = RHI_BO_ADD;
     b.enable = bp != RD_BP_NONE;
+    if (bp == RD_BP_LERP && (nodual & RD_NODUAL_ONEPASS) && (mask & 8u)) {
+        /* the one-pass blend's colour pass (rd_onepass.h): c0.a is the
+         * factor As/128, stored as (As/128) * the constant's alpha 128/255
+         * (rd__op_bind sets the constant at bind) */
+        b.srcAlpha = RHI_BF_CONSTANT;
+    }
     switch (bp) {
     case RD_BP_LERP:
         /* no dual-source blending: the colour pass's c0.a is the factor */
@@ -1508,6 +1515,9 @@ void rd__key_dynamic_normalise(RdPipeKeyInt *k)
     if (bits & RHI_DYN_BLEND) {
         k->gs.blend = RD_BLEND_COUNT;
         k->gs.colorMask = 0xF;
+        /* the one-pass blend's colour pass (rd_onepass.h) draws with the
+         * colour pass's module; its blend state is the bind's: one pipeline */
+        k->gs.nodual = (uint8_t)(k->gs.nodual & ~RD_NODUAL_ONEPASS);
     }
 }
 
@@ -1925,6 +1935,7 @@ void rd__set_pipeline(RhiCommandList cl, RhiPipeline p, const RdPipeKeyInt *k)
      * pipeline, every fixed-function state the same (rd_comp_spec.c) */
     p = rd__comp_spec_turn(p, k);
     rhi_cmd_set_pipeline(cl, p);
+    rd__op_bind(cl, k); /* the blend constant of a one-pass key (rd_onepass.h) */
     if (k == NULL || !p.id || (!g_rd.dynDepth && !g_rd.dynBlend)) {
         return;
     }
@@ -3405,7 +3416,12 @@ static void twinKeep(const RhiPipeline *bp)
                      s_twin.bk[j].gs.program, s_twin.bk[j].gs.blend, s_twin.bk[j].vs,
                      s_twin.bk[j].fs, why);
             __atomic_add_fetch(&s_twin.blockFailed, 1u, __ATOMIC_RELAXED);
-            if (s_twin.bk[j].gs.nodual & RD_NODUAL_FAST) {
+            if ((s_twin.bk[j].gs.nodual & RD_NODUAL_ONEPASS) ||
+                !(s_twin.bk[j].gs.nodual & (RD_NODUAL_NODISCARD | RD_NODUAL_FAST))) {
+                /* the one-pass blend's (rd_onepass.h): its keys, and the
+                   ordinary kick keys it asks for before it unfuses */
+                rd__op_fault(what);
+            } else if (s_twin.bk[j].gs.nodual & RD_NODUAL_FAST) {
                 rd__fps_fault(what); /* the fast pixel build's (rd_fastps.h) */
             } else {
                 rd__nd_fault(what);
@@ -3479,8 +3495,11 @@ static void twinBegin(void)
            limit, port/platform/gpu_hang.c ico_pipe_note_creating) */
         int w = snprintf(s_batchNote, sizeof(s_batchNote),
                          "creating %u pipelines of the %s in the background: %s", nb,
-                         (s_twin.bk[0].gs.nodual & RD_NODUAL_FAST) ? "fast pixel build"
-                                                                   : "discard-free twins",
+                         (s_twin.bk[0].gs.nodual & RD_NODUAL_ONEPASS) ||
+                                 !(s_twin.bk[0].gs.nodual & (RD_NODUAL_NODISCARD | RD_NODUAL_FAST))
+                             ? "one-pass blend"
+                         : (s_twin.bk[0].gs.nodual & RD_NODUAL_FAST) ? "fast pixel build"
+                                                                     : "discard-free twins",
                          mods);
         (void)w;
         if (s_activityFn != NULL) {
@@ -3520,7 +3539,8 @@ void rd__pipeline_twin_tick(bool wait)
             return; /* one step a picture in play */
         }
     }
-    if (s_twin.n == 0 || s_fin.on || s_fin.jobs != NULL || !(rd__nd_on() || rd__fps_on())) {
+    if (s_twin.n == 0 || s_fin.on || s_fin.jobs != NULL ||
+        !(rd__nd_on() || rd__fps_on() || rd__op_on())) {
         return;
     }
     if (!wait && (double)__atomic_load_n(&s_finHoldUs, __ATOMIC_ACQUIRE) / 1000.0 > rd__now_ms()) {
@@ -3532,8 +3552,8 @@ void rd__pipeline_twin_tick(bool wait)
         /* the tests' waited path (ICO_RD_VU_NODISCARD=1, rd__nd_replay_begin):
            the whole queue, a batch at a time, so the next replay draws every
            pass the CPU gives a twin through it (play: one batch a picture) */
-        while (s_twin.n > 0 && s_twin.jobs == NULL && (rd__nd_on() || rd__fps_on()) &&
-               !s_createStopped) {
+        while (s_twin.n > 0 && s_twin.jobs == NULL &&
+               (rd__nd_on() || rd__fps_on() || rd__op_on()) && !s_createStopped) {
             twinBegin();
             (void)twinEnd(true);
         }
@@ -3603,6 +3623,11 @@ uint32_t rd__pipeline_count_twins(void)
 uint32_t rd__pipeline_count_fast(void)
 {
     return countBits(RD_NODUAL_FAST, RD_NODUAL_FAST);
+}
+
+uint32_t rd__pipeline_count_onepass(void)
+{
+    return countBits(RD_NODUAL_ONEPASS, RD_NODUAL_ONEPASS);
 }
 
 uint32_t rd__pipeline_twins_background(void)

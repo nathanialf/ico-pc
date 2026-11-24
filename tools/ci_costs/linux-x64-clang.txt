@@ -267,6 +267,7 @@ no_shadows_disc_ntsc 0.00
 nodiscard_mark 0.02  # estimate: a CPU unit test with a few files, like vu_zero_mark (not run here)
 null_devices 0.00
 offset_audit 100.11  # estimate: 63.0 s local (merge-wt_ROOMS4-20261106T021351Z.rest.log) x 1.59
+onepass_mark 0.02  # estimate: a CPU unit test with a few files, like fastps_mark (not run here)
 options 0.07
 options_aug6 0.14
 options_cn 0.04
@@ -632,6 +633,8 @@ rd_nodiscard_ab_gl 65.46  # estimate: the round-1 estimate x 2 (four fixtures to
 rd_nodiscard_clean 68.40  # estimate: rd_nodiscard_ab (the same runs, the verdict taken as clean; not run here)
 rd_noplanes_ab 26.94  # estimate: 16.7 s local (merge-wt_FIX-P5b-20261115T232657Z.lvp.log) x 1.62
 rd_occlusion_tool 12.56  # estimate: 7.8 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 1.62
+rd_onepass 0.10  # estimate: rd_fastps x 10 (a CPU unit test whose blender table is 562,432 cases; not run here)
+rd_onepass_ab 60.02  # estimate: rd_fastps_ab x 0.68 (two fixtures under two settings, three runs each; not run here)
 rd_pace_gpu 0.02
 rd_pace_screen 0.29
 rd_pass_area_ab 606.64  # estimate: 375.4 s local (merge-wt_FIX-P4d2-20261116T031841Z.lvp.log) x 1.62
@@ -940,6 +943,12 @@ rd_vuprepass_selftest_nodiscard_unchecked 5.75  # estimate: rd_vuprepass_selftes
 rd_vuprepass_selftest_nostores_fallback 1.41
 rd_vuprepass_selftest_off 0.35
 rd_vuprepass_selftest_off_gl 0.89
+rd_vuprepass_selftest_onepass 9.90  # estimate: rd_vuprepass_selftest_fastps x 1.5 (the fast build's self-test before it plus about 250 small replays of the check; not run here)
+rd_vuprepass_selftest_onepass_cut 9.90  # estimate: rd_vuprepass_selftest_onepass (not run here)
+rd_vuprepass_selftest_onepass_dynamic 9.90  # estimate: rd_vuprepass_selftest_onepass (the same check with dynamic blend state; not run here)
+rd_vuprepass_selftest_onepass_marked 6.60  # estimate: rd_vuprepass_selftest_fastps (the check not run; not run here)
+rd_vuprepass_selftest_onepass_sabotage 9.90  # estimate: rd_vuprepass_selftest_onepass (every frame drawn, no control replays; not run here)
+rd_vuprepass_selftest_onepass_unchecked 11.88  # estimate: rd_vuprepass_selftest_fastps x 1.8 (every arm replay of the check drawn again after its retry; not run here)
 rd_vuprepass_selftest_plain 1.36
 rd_vuprepass_selftest_plain_gl 5.26
 rd_vuprepass_selftest_sabotage 4.98

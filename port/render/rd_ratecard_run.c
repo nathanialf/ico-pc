@@ -54,6 +54,7 @@
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "rd_nodiscard.h"
+#include "rd_onepass.h" /* held at the two-pass blend through the card */
 #include "rd_ratecard.h"
 #include "shader_consts.h"
 
@@ -579,6 +580,10 @@ static void measure(RdRateCard *c, RdTargetRec *t, double budgetMs)
     g_rd.msaaBlocked = true;
     rd__nd_hold(false);
     rd__fps_hold(false);
+    /* the one-pass blend held at today's form (rd_onepass.h: its check's
+       reference, every pair in two passes): the blended layer is the
+       two-pass blend's, as the card says */
+    rd__op_check_arm(RD_OP_ARM_REF, false);
     double ms[F_COUNT][RD_RC_SAMPLES];
     uint32_t got[F_COUNT];
     uint32_t ids[F_COUNT][RD_RC_SAMPLES];
@@ -713,6 +718,7 @@ static void measure(RdRateCard *c, RdTargetRec *t, double budgetMs)
     rd__nd_hold(false);
     rd__nd_hold_end();
     rd__fps_hold_end(); /* the fast build's counts put back: the card's draws are not play */
+    rd__op_check_arm(-1, false);
     g_rd.msaaBlocked = wasBlocked;
     const uint32_t released = rd__pipeline_forget_since(pipeMark);
     if (m.nearL.id) {

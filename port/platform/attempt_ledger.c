@@ -95,15 +95,16 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
                            "without it"},
     [ICO_ATT_AB_ND_CAMERA] = {"the discard-free twins' camera rule class timed in play",
                               "verdicts with them so far", "without them"},
+    [ICO_ATT_AB_ONEPASS] = {"the one-pass blend timed in play", "verdicts with it so far",
+                            "without it"},
 };
 
 static const AttMore k_more[ICO_ATT_COUNT] = {
     /* the run's totals: a verdict is once a stage, the block's would be 0
        nearly always */
-    [ICO_ATT_AB_ZERO] = {"trials run", 1},
-    [ICO_ATT_AB_NODISCARD] = {"trials run", 1},
-    [ICO_ATT_AB_FASTPS] = {"trials run", 1},
-    [ICO_ATT_AB_ND_CAMERA] = {"trials run", 1},
+    [ICO_ATT_AB_ZERO] = {"trials run", 1},    [ICO_ATT_AB_NODISCARD] = {"trials run", 1},
+    [ICO_ATT_AB_FASTPS] = {"trials run", 1},  [ICO_ATT_AB_ND_CAMERA] = {"trials run", 1},
+    [ICO_ATT_AB_ONEPASS] = {"trials run", 1},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -309,7 +310,8 @@ size_t ico_attempt_on_text(char *out, size_t cap)
     for (int i = 0; i < ICO_ATT_COUNT; i++) {
         const IcoAttemptState st = ico_attempt_state_of(i);
         const bool judged = i == ICO_ATT_AB_ZERO || i == ICO_ATT_AB_NODISCARD ||
-                            i == ICO_ATT_AB_FASTPS || i == ICO_ATT_AB_ND_CAMERA;
+                            i == ICO_ATT_AB_FASTPS || i == ICO_ATT_AB_ND_CAMERA ||
+                            i == ICO_ATT_AB_ONEPASS;
         if (st != ICO_ATT_ON && !(judged && st != ICO_ATT_NOT_SET && st != ICO_ATT_NOT_BUILT &&
                                   st != ICO_ATT_REMOVED)) {
             continue;

@@ -251,6 +251,13 @@ enum {
        verdicts with them, those without them (second), the trials run
        (third) */
     ICO_ATT_AB_ND_CAMERA,
+    /* rd_ab_run.c, rd_onepass_run.c (issue 179, v0.11.16): the one-pass
+       blend (port/render/rd_onepass.h) timed in play as the fast pixel
+       build is; state from ico_attempt_decide_timed (not applicable where
+       its device check put nothing in use), its counts the run's totals:
+       the verdicts with it, those without it (second), the trials run
+       (third) */
+    ICO_ATT_AB_ONEPASS,
     ICO_ATT_COUNT
 };
 

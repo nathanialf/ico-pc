@@ -70,6 +70,7 @@
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "rd_nodiscard.h"
+#include "rd_onepass.h" /* rd__nd_clip_case: the one-pass blend's check reuses the cases */
 #include "rd_vis.h"
 #include "shader_consts.h"
 #include "vu1_ref.h"
@@ -1388,4 +1389,21 @@ void rd__nd_selftest(RdTargetRec *t)
                 why, (unsigned)released, t->w, t->h, t->tw, t->th, rd__now_ms() - t0);
     }
     rd__nd_start_line();
+}
+
+/* the clipper check's cases as geometry for the one-pass blend's check
+   (rd_onepass.h, rd_onepass_selftest.c): their count, case k's corners on
+   a frame w x h GS pixels, its name */
+int rd__nd_clip_case_count(void)
+{
+    return NC_CASES;
+}
+
+const char *rd__nd_clip_case(int k, uint32_t w, uint32_t h, float out[3][3])
+{
+    if (k < 0 || k >= NC_CASES) {
+        return "?";
+    }
+    caseCorners(k, w, h, out);
+    return kClip[k].name;
 }

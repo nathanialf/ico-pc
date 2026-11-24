@@ -703,6 +703,10 @@ size_t rd_nd_text(char *out, size_t cap, unsigned n);
 /* And the fast pixel build's (rd_fastps.h): "; fast pixel build: P passes a
  * picture through it, T triangles (R refused a picture: ...)" */
 size_t rd_fps_text(char *out, size_t cap, unsigned n);
+/* And the one-pass blend's (rd_onepass.h): "; one-pass blend (...): P pairs
+ * a picture in one pass (Q of code 36), ... (R pairs kept two-pass a
+ * picture: ...)" */
+size_t rd_op_text(char *out, size_t cap, unsigned n);
 /* The record written without render targets (stores or compute: a device
  * loss takes the restart's losstargets step first, startup_retry.h
  * StartupRetryRun.storesWereOn) */

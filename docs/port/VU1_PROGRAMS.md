@@ -928,6 +928,12 @@ So the merge and the fuse take the two passes (`port/render/rd_replay_vu.c` `vuM
   word for word; the four `_nodual` builds grow 34 to 44 words (`vu_ps_nodual` 5,606,
   `vu_texa_ps_nodual` 11,749, `vu_np_ps_nodual` 4,992, `vu_texa_np_ps_nodual` 11,128).
 
+Where the one-pass blend's cut class is in use ([PIPELINES.md](PIPELINES.md#the-one-pass-blend))
+a command whose cut pair it draws in one pass is not fused (`vuFuseVerdict`, kept apart as
+`passes`): a fused kick's pixel would need the factor 1.0 and its own As from the one output the
+blender reads. Its cut then draws once and its kick once under its own state, the draws the fusion
+stands for; the device's check compares that unfused form with the fused one before it is used.
+
 Expected on the 164 dump under the fakes: `1097 draws in 358 GPU draws (826 merged into 87, 271
 alone)` and `397 pairs fused`, the desktop's figures. `rd_vumerge_mali` (`port/render/test/rd_vumerge_mali.cmake`,
 label `mali`) is its gate: the committed fixtures of `port/render/test/fixtures/lists/vumerge_mali.txt`
