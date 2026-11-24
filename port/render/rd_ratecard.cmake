@@ -6,8 +6,9 @@
 target_sources(ico_render PRIVATE rd_ratecard.c rd_ratecard_run.c)
 
 # rd_ratecard_rule (test/rd_ratecard_test.c, CPU): the medians and spreads
-# of synthetic timings, the unit arithmetic (a difference over a count, too
-# few times, nothing to divide by, the ratio), the printed block word for
+# of synthetic timings, the unit arithmetic (a difference over a count, the
+# spread against the subtracted frame's median, too few times, nothing to
+# divide by, a difference not above 0, the ratio), the printed block word for
 # word with a measured item, a ratio and "not measured", the block read back
 # (rd_rc_parse), and the result file's decision: no file, another key,
 # done (reprinted), measuring (skipped), blocked, a text it does not know
@@ -26,8 +27,9 @@ endif()
 # lavapipe through rd_vuprepass_selftest_test (on, plain): under the Arm
 # fakes without dual-source blending (the twins on, both twin items
 # measured) and as lavapipe is (dual-source blending: the twins not
-# applicable), each the block's lines and the results file "done", then the
-# reprint; _end the start ending inside it, then skipped twice ("blocked")
+# applicable), each the block's lines (one an item of rd_ratecard.h's enum,
+# read by the script) and the results file "done", then the reprint; _end
+# the start ending inside it, then skipped twice ("blocked")
 if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test)
     set(_rc "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_ratecard.cmake")
     foreach(_rc_t mali lavapipe end)
@@ -41,7 +43,8 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test)
         add_test(NAME rd_ratecard_${_rc_t}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test>
                          "-DFILE=${CMAKE_CURRENT_BINARY_DIR}/rd_ratecard_${_rc_t}.txt"
-                         -DMODE=${_rc_mode} -DTWINS=${_rc_twins} -P "${_rc}")
+                         -DMODE=${_rc_mode} -DTWINS=${_rc_twins}
+                         "-DHEADER=${CMAKE_CURRENT_SOURCE_DIR}/rd_ratecard.h" -P "${_rc}")
         set_tests_properties(rd_ratecard_${_rc_t} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     endforeach()
     set_tests_properties(rd_ratecard_mali rd_ratecard_end

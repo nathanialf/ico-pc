@@ -1,7 +1,8 @@
 /* rd_ratecard_test.c: the rate card's pure part (rd_ratecard.h), CPU only:
  * the median and spread of synthetic timings, the unit arithmetic (a
- * difference over a count, the spread from the extremes, too few times,
- * nothing to divide by, not finite), the ratio, the printed block word for
+ * difference over a count, the spread from the measured frame's extremes
+ * against the subtracted frame's median, too few times, nothing to divide
+ * by, a difference not above 0), the ratio, the printed block word for
  * word (a golden text with a measured item, a ratio and "not measured"),
  * the block read back (rd_rc_parse, a reprint's suffix allowed), and the
  * result file's decision (no file, another key, done, measuring, blocked, a
@@ -31,10 +32,22 @@ static void units(void)
 {
     const double a[5] = {10.0, 10.2, 10.1, 9.9, 10.0}, b[5] = {2.0, 2.1, 1.9, 2.0, 2.0};
     const RdRcStat sa = rd_rc_stat(a, 5), sb = rd_rc_stat(b, 5);
-    /* (10.0 - 2.0) ms over 4e6 fragments: 2 ns; spread (9.9 - 2.1) .. (10.2 - 1.9) */
+    /* (10.0 - 2.0) ms over 4e6 fragments: 2 ns; spread (9.9 - 2.0) .. (10.2 - 2.0),
+       a's extremes against b's median */
     RdRcUnit u = rd_rc_unit(sa, sb, 4.0e6, 1.0e6);
-    CHECK(u.ok && fabs(u.med - 2.0) < 1e-9 && fabs(u.lo - 1.95) < 1e-9 && fabs(u.hi - 2.075) < 1e-9,
+    CHECK(u.ok && fabs(u.med - 2.0) < 1e-9 && fabs(u.lo - 1.975) < 1e-9 && fabs(u.hi - 2.05) < 1e-9,
           "a unit: %d %g %g %g", u.ok, u.med, u.lo, u.hi);
+    /* one slow replay of the subtracted frame (the reporter's "max 2916" of a
+       542 ns triangle) does not widen the spread: (5.0 - 1.0) .. (5.2 - 1.0) */
+    const double s5[5] = {5.0, 5.1, 5.2, 5.0, 5.05}, b5[5] = {1.0, 1.0, 1.0, 1.0, 4.9};
+    u = rd_rc_unit(rd_rc_stat(s5, 5), rd_rc_stat(b5, 5), 1.0, 1.0);
+    CHECK(u.ok && fabs(u.med - 4.05) < 1e-9 && fabs(u.lo - 4.0) < 1e-9 && fabs(u.hi - 4.2) < 1e-9,
+          "one slow subtracted replay: %d %g %g %g", u.ok, u.med, u.lo, u.hi);
+    /* a difference at or below 0 (the reporter's -0.94 ns): not measured */
+    u = rd_rc_unit(sb, sa, 1.0, 1.0e6);
+    CHECK(!u.ok && strcmp(u.why, "a difference not above 0") == 0, "below 0: %s", u.why);
+    u = rd_rc_unit(sa, sa, 1.0, 1.0e6);
+    CHECK(!u.ok && strcmp(u.why, "a difference not above 0") == 0, "at 0: %s", u.why);
     /* a alone (b.n 0): its median over the count, in ms */
     const RdRcStat none = rd_rc_stat(NULL, 0);
     u = rd_rc_unit(sb, none, 1.0, 1.0);
@@ -48,7 +61,12 @@ static void units(void)
     /* the ratio */
     RdRcUnit x = rd_rc_unit(sa, sb, 2.0e6, 1.0e6), y = rd_rc_unit(sa, sb, 4.0e6, 1.0e6);
     RdRcUnit r = rd_rc_ratio(x, y);
-    CHECK(r.ok && fabs(r.med - 2.0) < 1e-9, "a ratio: %g", r.med);
+    /* x 4 (3.95 .. 4.1) over y 2: the spread over y's median, 1.975 .. 2.05 */
+    CHECK(r.ok && fabs(r.med - 2.0) < 1e-9 && fabs(r.lo - 1.975) < 1e-9 && fabs(r.hi - 2.05) < 1e-9,
+          "a ratio: %g %g %g", r.med, r.lo, r.hi);
+    r = rd_rc_ratio(x, rd_rc_unit(sb, sa, 1.0, 1.0));
+    CHECK(!r.ok && strcmp(r.why, "a difference not above 0") == 0,
+          "a ratio over a difference not above 0: %s", r.why);
     r = rd_rc_ratio(x, rd_rc_none("off"));
     CHECK(!r.ok && strcmp(r.why, "off") == 0, "a ratio of a unit not measured: %s", r.why);
 }
@@ -65,23 +83,26 @@ static RdRateCard sample(void)
     c.th = 512;
     snprintf(c.sized, sizeof(c.sized), "2 full layers");
     c.totalMs = 612.5;
-    static const char *const kLabel[RD_RC_ITEMS] = {"a shaded fragment, vu_ps_nodual",
-                                                    "a shaded fragment, vu_texa_ps_nodual",
-                                                    "a shaded fragment, the twin vu_ps_nodual_nd",
-                                                    "a shaded fragment, vu_ps_nodual (RGBA32)",
-                                                    "a shaded fragment, the fast pixel build",
-                                                    "a shaded fragment, its discard-free form",
-                                                    "a fragment hidden by depth, with discard",
-                                                    "a fragment hidden by depth, through the twin",
-                                                    "a vertex (a corner drawn off the target)",
-                                                    "a triangle binned",
-                                                    "the 2x2-quad factor",
-                                                    "a pass with nothing drawn",
-                                                    "a MB loaded or stored",
-                                                    "a blended fragment, the two-pass blend",
-                                                    "the blended fragment over the opaque one"};
-    static const char *const kUnit[RD_RC_ITEMS] = {"ns", "ns", "ns", "ns", "ns", "ns", "ns", "ns",
-                                                   "ns", "ns", "x",  "ms", "ms", "ns", "x"};
+    static const char *const kLabel[] = {"a shaded fragment, vu_ps_nodual",
+                                         "a shaded fragment, vu_texa_ps_nodual",
+                                         "a shaded fragment, the twin vu_ps_nodual_nd",
+                                         "a shaded fragment, vu_ps_nodual (RGBA32)",
+                                         "a shaded fragment, the fast pixel build",
+                                         "a shaded fragment, its discard-free form",
+                                         "a fragment hidden by depth, with discard",
+                                         "a fragment hidden by depth, through the twin",
+                                         "a vertex (a corner drawn off the target)",
+                                         "a triangle binned",
+                                         "the 2x2-quad factor",
+                                         "a pass with nothing drawn",
+                                         "a MB loaded or stored",
+                                         "a blended fragment, the two-pass blend",
+                                         "the blended fragment over the opaque one"};
+    static const char *const kUnit[] = {"ns", "ns", "ns", "ns", "ns", "ns", "ns", "ns",
+                                        "ns", "ns", "x",  "ms", "ms", "ns", "x"};
+    /* a new item (rd_ratecard.h) needs its line here and in the golden text */
+    _Static_assert(sizeof(kLabel) / sizeof(kLabel[0]) == RD_RC_ITEMS, "a label an item");
+    _Static_assert(sizeof(kUnit) / sizeof(kUnit[0]) == RD_RC_ITEMS, "a unit an item");
     for (int i = 0; i < RD_RC_ITEMS; i++) {
         snprintf(c.item[i].label, sizeof(c.item[i].label), "%s", kLabel[i]);
         snprintf(c.item[i].unit, sizeof(c.item[i].unit), "%s", kUnit[i]);
@@ -91,6 +112,7 @@ static RdRateCard sample(void)
         c.item[i].u.hi = 11.25 + i;
     }
     c.item[RD_RC_SHADE_FAST_ND].u = rd_rc_none("the twins off");
+    c.item[RD_RC_HIDDEN_TWIN].u = rd_rc_none("a difference not above 0");
     c.item[RD_RC_PASS_MB].u = rd_rc_none("one target size: not separable from the pass");
     return c;
 }
@@ -101,7 +123,7 @@ static void text(void)
     char out[4096];
     const size_t n = rd_rc_text(&c, out, sizeof(out));
     static const char kWant[] =
-        "rate card: Mali-G52 (Mali 32.1, vulkan) on SCENE 688x512 at 688x512 texels, 2 full layers; the median of 5 timed replays a frame (min, max beside it); 612.5 ms in all\n"
+        "rate card: Mali-G52 (Mali 32.1, vulkan) on SCENE 688x512 at 688x512 texels, 2 full layers; the median of 5 timed replays a frame (min, max beside it: the frame's least and largest against the subtracted frame's median); 612.5 ms in all\n"
         "rate card: a shaded fragment, vu_ps_nodual: 10.00 ns (min 9.50, max 11.25)\n"
         "rate card: a shaded fragment, vu_texa_ps_nodual: 11.00 ns (min 10.50, max 12.25)\n"
         "rate card: a shaded fragment, the twin vu_ps_nodual_nd: 12.00 ns (min 11.50, max 13.25)\n"
@@ -109,7 +131,7 @@ static void text(void)
         "rate card: a shaded fragment, the fast pixel build: 14.00 ns (min 13.50, max 15.25)\n"
         "rate card: a shaded fragment, its discard-free form: not measured (the twins off)\n"
         "rate card: a fragment hidden by depth, with discard: 16.00 ns (min 15.50, max 17.25)\n"
-        "rate card: a fragment hidden by depth, through the twin: 17.00 ns (min 16.50, max 18.25)\n"
+        "rate card: a fragment hidden by depth, through the twin: not measured (a difference not above 0)\n"
         "rate card: a vertex (a corner drawn off the target): 18.00 ns (min 17.50, max 19.25)\n"
         "rate card: a triangle binned: 19.00 ns (min 18.50, max 20.25)\n"
         "rate card: the 2x2-quad factor: 20.00 x (min 19.50, max 21.25)\n"
@@ -133,6 +155,8 @@ static void text(void)
     }
     CHECK(strcmp(b.item[RD_RC_PASS_MB].u.why, "one target size: not separable from the pass") == 0,
           "a reason read back: %s", b.item[RD_RC_PASS_MB].u.why);
+    CHECK(strcmp(b.item[RD_RC_HIDDEN_TWIN].u.why, "a difference not above 0") == 0,
+          "a difference not above 0 read back: %s", b.item[RD_RC_HIDDEN_TWIN].u.why);
     CHECK(!rd_rc_parse("rate card: nothing\n", &b), "a block of another form read back");
     char small[40];
     const size_t m = rd_rc_text(&c, small, sizeof(small));
