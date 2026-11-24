@@ -230,7 +230,8 @@ enum {
     ICO_ATT_AB_ZERO,
     /* rd_ab_run.c, rd_nodiscard_run.c (issue 179, v0.11.15): the
        discard-free twins (port/render/rd_nodiscard.h) timed in play as the
-       cull is; state from ico_attempt_decide_timed (not applicable where
+       cull is (their proven classes: clip mode none and proven in front of
+       the eye; the camera rule class is ICO_ATT_AB_ND_CAMERA); state from ico_attempt_decide_timed (not applicable where
        their self-test did not pass: a device with dual-source blending, the
        mark, the loss ladder), its counts the run's totals: the stages kept
        with them, those without them (second), the trials run (third) */
@@ -241,6 +242,15 @@ enum {
        not pass), its counts the run's totals: the stages kept with it, those
        without it (second), the trials run (third) */
     ICO_ATT_AB_FASTPS,
+    /* rd_ab_run.c, rd_nodiscard_run.c (issue 179, v0.11.16): the
+       discard-free twins' camera rule class (the passes taken on the
+       device's clean clipper check) timed in play as a subject of its own,
+       the twins' row then the proven classes alone; state from
+       ico_attempt_decide_timed (not applicable where the twins are off or
+       the clipper check was not clean), its counts the run's totals: the
+       verdicts with them, those without them (second), the trials run
+       (third) */
+    ICO_ATT_AB_ND_CAMERA,
     ICO_ATT_COUNT
 };
 

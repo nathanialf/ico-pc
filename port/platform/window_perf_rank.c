@@ -15,9 +15,11 @@
 #include "log_cost.h"
 #include "perf_secs.h" /* pictures a second by stage */
 #include "rd_perf_more.h"
-#include "rd.h"        /* rd_vu_prepass_on */
-#include "rd_ab_run.h" /* rd_ab_scenery: the in-play judge */
-#include "rd_ledger.h" /* the scene ledger: the stage in play */
+#include "rd.h"             /* rd_vu_prepass_on */
+#include "rd_ab.h"          /* rd_ab_scenery_of: the in-play judge's scenery */
+#include "rd_ab_run.h"      /* rd_ab_scenery: the in-play judge */
+#include "../core/region.h" /* stage_title: the boot logo and title's stage */
+#include "rd_ledger.h"      /* the scene ledger: the stage in play */
 #include "rd_list_draws.h"
 #include "rd_perf_rank.h"
 #include "rd_perf_where.h"    /* where the time went: one table a block */
@@ -106,8 +108,12 @@ void window_perf_rank_step(SceneKind kind, int stage, uint64_t ns)
        and the stall lines' medians (window_stall.h: a new stage's own) */
     perf_secs_window_step(stage, ico_thread_now_ms());
     /* the in-play judge times its attempts in scenery alone: play or a
-       cutscene, never the title, the logo or a menu (rd_ab_run.h) */
-    rd_ab_scenery(kind == SCENE_PLAY || kind == SCENE_SCENE);
+       cutscene, never the title, the logo or a menu, and never in the boot
+       logo and title's stage whatever its layout (rd_ab.h rd_ab_scenery_of:
+       with Skip the opening on that stage sits on the scene layout past
+       the judge's 2 s) */
+    rd_ab_scenery(rd_ab_scenery_of(kind == SCENE_PLAY || kind == SCENE_SCENE, stage,
+                                   ico_region_cur()->stage_title));
     window_stall_stage(stage);
     /* the scene ledger (rd_ledger.h) on the game's thread, the one that
        records the frames: a new stage writes the stage before's lines; the

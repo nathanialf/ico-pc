@@ -16,8 +16,9 @@
  *     with the tag it was recorded under, so a span is always the arm's it
  *     was recorded with however many pictures are in flight;
  *   - each subject is timed once a run: a trial starts RD_AB_START_MS into
- *     a stage of game scenery (play or a cutscene; not the title, the logo,
- *     a menu or a movie: rd_ab_set_scenery, the renderer's word), for one
+ *     a stage of game scenery (play or a cutscene; not the boot logo and
+ *     title's stage whatever its layout, the title, a menu or a movie:
+ *     rd_ab_scenery_of, rd_ab_set_scenery, the renderer's word), for one
  *     subject at a time that may be tried (rd_ab_allow), changed something
  *     in that stage's pictures and has no verdict this run; at most
  *     RD_AB_TRIALS trials a run;
@@ -41,7 +42,10 @@
  *   - no verdict: fewer than RD_AB_PAIRS_MIN pairs after RD_AB_GIVE_UP
  *     trial replays (no more trials in that stage), the stage ended or the
  *     subject was turned off before: not an answer, the subject is tried
- *     again in the next stage of scenery while trials are left; between
+ *     again in the next stage of scenery while trials are left; the scenery
+ *     ended (a menu, a movie, the title): no verdict whatever the pairs, no
+ *     mark, tried again RD_AB_START_MS into the next stretch of scenery
+ *     (the same stage too) while trials are left; between
  *     RD_AB_PAIRS_MIN and
  *     RD_AB_PAIRS pairs at either end, the verdict on those pairs with
  *     RD_AB_FAVOUR scaled;
@@ -53,6 +57,10 @@
  *     out) a thousand vertices and triangles (the median pair 4.3 % dearer
  *     with it, 25 of 32 cheaper without), 3 dropped by a long picture, 0
  *     by unequal work: off for the rest of the run, every stage
+ *   A/B: discard-free twins, camera rule, stage 42: no verdict (the
+ *     scenery ended, 12 pairs; 0 dropped by a long picture, 0 by unequal
+ *     work, 2 replays not measured): with it until it is timed again in the
+ *     next stretch of play or a cutscene
  *   A/B: zero-area cull, stage 42: no verdict (600 replays, 11 pairs; 30
  *     dropped by a long picture, 4 by unequal work, 120 replays not
  *     measured): with it until it is timed again in another stage
@@ -86,7 +94,7 @@
 #define RD_AB_GIVE_UP 600u    /* a trial's replays at most */
 #define RD_AB_PAIRS_MIN 16u   /* fewer pairs than this at a trial's end: no verdict */
 
-#define RD_AB_SUBJECTS 4 /* subjects at most (a bit each in a tag's mask) */
+#define RD_AB_SUBJECTS 5 /* subjects at most (a bit each in a tag's mask; rd_ab_run.h) */
 #define RD_AB_MEMORY 32  /* verdicts kept (stage, subject) */
 #define RD_AB_LINES 6    /* lines waiting for rd_ab_take_line */
 #define RD_AB_LINE 640   /* a line's bytes */
@@ -203,9 +211,15 @@ void rd_ab_forget(RdAb *a, const char *why);
    is left */
 double rd_ab_scene_ms(double spanMs, double displayWaitMs, double presentMs);
 /* whether the replays now are game scenery (play or a cutscene; not the
-   title, the logo, a menu or a movie): only then may a trial start
-   (true from rd_ab_init: the tests' streams) */
+   title, the logo, a menu or a movie): only then may a trial start, and a
+   trial running ends with no verdict when it goes false (true from
+   rd_ab_init: the tests' streams) */
 void rd_ab_set_scenery(RdAb *a, bool scenery);
+/* the renderer's word for rd_ab_set_scenery: the game's layout is play or a
+   cutscene's (playOrScene) in a stage that is not the boot logo and title's
+   (titleStage: region.h stage_title, the stage the perf lines name "logo",
+   on every disc), stage below 0 none yet: false */
+bool rd_ab_scenery_of(bool playOrScene, int stage, int titleStage);
 
 /* every trial stopped, every subject at its off arm for the run (why) */
 void rd_ab_stop(RdAb *a, const char *why);
