@@ -192,6 +192,10 @@ static bool pushMesh(RdFrame *f, RdMesh mesh, float shiftX, uint32_t key)
     p.batchCount = CT_BANDS;
     p.qwPerVertex = RD_VU_QW_PRELIT;
     sceneBlock(&vu);
+    /* x' = 16 x + (2048 + shiftX) z: the prelit program's model to GS
+       screen is VU memory 16..19 (vu_prelit.hlsl vu_matm(16u, ...)), its
+       z column 18; 4..7 is the world's (the cluster's), moved alike */
+    vu.mem[18][0] += shiftX;
     vu.mem[6][0] += shiftX;
     memcpy(buf, &p, sizeof(p));
     memcpy(buf + sizeof(p), &vu, sizeof(vu));
@@ -279,12 +283,17 @@ static bool runOnce(const RdFrame *f, RdTargetRec *t, int k)
     return true;
 }
 
+/* the triangles the GPU left out in replay 1, by draw (the log's proof of
+   where the keep stage decided what) */
+static uint64_t s_ctLeft[RD_VU_CMP_OWN_DRAWS];
+
 /* the lists of every replay against the CPU's: into r, the first
    problem's words into where */
 static bool checkLists(RdVuCmpCheck *r, char *where, size_t whereSize, char *unchecked,
                        size_t uncheckedSize)
 {
     rd_vu_cmp_check_reset(r);
+    memset(s_ctLeft, 0, sizeof(s_ctLeft));
     bool ok = true;
     for (int k = 0; k < CT_REPLAYS; k++) {
         const RdVuCmpOwnCopy *o = rd__vu_cmp_own_copy(k);
@@ -322,7 +331,13 @@ static bool checkLists(RdVuCmpCheck *r, char *where, size_t whereSize, char *unc
                 }
             }
             const uint32_t first = r->first;
-            if (!rd_vu_cmp_check(r, got, src, c->count, c->raise, texels, kExpect[i]) && ok) {
+            const uint64_t left0 = r->leftOut;
+            const bool drawOk =
+                rd_vu_cmp_check(r, got, src, c->count, c->raise, texels, kExpect[i]);
+            if (k == 0) {
+                s_ctLeft[i] = r->leftOut - left0;
+            }
+            if (!drawOk && ok) {
                 ok = false;
                 snprintf(where, whereSize,
                          "in replay %d of %d (frame slot %u), draw %u (%s), the first at triangle "
@@ -334,6 +349,16 @@ static bool checkLists(RdVuCmpCheck *r, char *where, size_t whereSize, char *unc
         rhi_unmap_buffer(o->rb);
     }
     return ok;
+}
+
+/* replay 1's left-out triangles by draw, for the lines */
+static const char *leftText(void)
+{
+    static char b[200];
+    snprintf(b, sizeof b, "%s %llu, %s %llu, %s %llu, %s %llu", kDraw[0],
+             (unsigned long long)s_ctLeft[0], kDraw[1], (unsigned long long)s_ctLeft[1], kDraw[2],
+             (unsigned long long)s_ctLeft[2], kDraw[3], (unsigned long long)s_ctLeft[3]);
+    return b;
 }
 
 /* the cause the check points at, for the reporter's log (TRI-COMPACT.md's
@@ -470,7 +495,8 @@ void rd__vu_compact_own_selftest(RdTargetRec *t)
                 result = 0;
                 char text[512];
                 rd_vu_cmp_check_text(text, sizeof text, &chk);
-                snprintf(why, sizeof why, "the lists: %s %s: %s", text, where, causeOf(&chk));
+                snprintf(why, sizeof why, "the lists: %s %s: %s (replay 1 left out: %s)", text,
+                         where, causeOf(&chk), leftText());
             }
         } else {
             /* the pictures: the references alike, every replay with it as
@@ -545,11 +571,12 @@ void rd__vu_compact_own_selftest(RdTargetRec *t)
         rd__log("VU index compaction: its own start-up test passed (the Mali-G52's form: %d "
                 "replays in both frame slots on the record at %u rows, %u draws of %u triangles "
                 "a replay, the lists from value %u moved %u values a replay; the lists read "
-                "back: %s; the pictures byte for byte with it off, %u of %zu pixels drawn; no "
-                "stamp of the test's %u pictures unwritten) on SCENE %ux%u at %ux%u texels in "
-                "%.1f ms",
+                "back: %s (replay 1 left out: %s); the pictures byte for byte with it off, %u of "
+                "%zu pixels drawn; no stamp of the test's %u pictures unwritten) on SCENE %ux%u "
+                "at %ux%u texels in %.1f ms",
                 CT_REPLAYS, rows, RD_VU_CMP_OWN_DRAWS, (unsigned)CT_TRIS, startAt,
-                RD_VU_CMP_OWN_SHIFT, text, drawn, size / 4u, stN, t->w, t->h, t->tw, t->th, ms);
+                RD_VU_CMP_OWN_SHIFT, text, leftText(), drawn, size / 4u, stN, t->w, t->h, t->tw,
+                t->th, ms);
         rd__vu_cmp_own_verdict(1, NULL);
     } else if (result == 0) {
         rd__log("VU index compaction: refused by its own start-up test (%s) on SCENE %ux%u at "

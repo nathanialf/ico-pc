@@ -53,7 +53,9 @@ endif()
 #                      without it (no copy in its frame) and its own test
 #                      (rd_vu_compact_selftest.c) passes: 6 replays at the
 #                      play's record size, 193536 triangles read back as
-#                      written or as fillers where the GPU counted them, the
+#                      written or as fillers where the GPU counted them
+#                      (replay 1: none of the centre, some across the edge,
+#                      all 8064 of each copy past it), the
 #                      pictures byte for byte, every stamp written; on after
 #                      it, the mark "counting v0.0.0"
 #   _mali_lists        the CPU's lists written one triangle off
@@ -100,7 +102,7 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
     # log has "; "
     set(_cmp_g52 "the Mali-G52 \\([^\n]*, vendor 0x[0-9A-F]+, ICO_RD_VU_COMPACT_ARM=1\\): RD_VU_COMPACT_ARM_DEFAULT 1")
     set(_cmp_try "rd: VU index compaction: to be tried by its own start-up test, on where it passes: [^\n]*the Mali-G52's form: every planned list written whole by the CPU first, only the fillers by the GPU \\(its start-up self-test not run \\(yet\\), ${_cmp_g52}\\)")
-    set(_cmp_own "rd: VU index compaction: its own start-up test passed \\(the Mali-G52's form: 6 replays in both frame slots on the record at [0-9]+ rows, 4 draws of 8064 triangles a replay, the lists from value [0-9]+ moved 1237 values a replay, the lists read back: 193536 triangles read back: [1-9][0-9]* as the CPU wrote them, [1-9][0-9]* fillers where the GPU counted [1-9][0-9]* left out, the pictures byte for byte with it off, [1-9][0-9]* of [0-9]+ pixels drawn, no stamp of the test's [1-9][0-9]* pictures unwritten\\)")
+    set(_cmp_own "rd: VU index compaction: its own start-up test passed \\(the Mali-G52's form: 6 replays in both frame slots on the record at [0-9]+ rows, 4 draws of 8064 triangles a replay, the lists from value [0-9]+ moved 1237 values a replay, the lists read back: 193536 triangles read back: [1-9][0-9]* as the CPU wrote them, [1-9][0-9]* fillers where the GPU counted [1-9][0-9]* left out \\(replay 1 left out: the centre 0, across the edge [1-9][0-9]*, past the edge 8064, past the region 8064\\), the pictures byte for byte with it off, [1-9][0-9]* of [0-9]+ pixels drawn, no stamp of the test's [1-9][0-9]* pictures unwritten\\)")
     set(_cmp_ownoff "rd: VU index compaction: off after the start-up self-tests \\(its own start-up test refused it \\(the lists the CPU writes first read back, the pictures or the stamps\\): every draw reads its own index list, ${_cmp_g52}\\)")
     set(_cmp_mark "test: the index compaction's mark after the self-test: ")
     set(_cmp_markenv "ICO_COMPACT_VERSION=v0.0.0;ICO_COMPACT_MARK=${CMAKE_CURRENT_BINARY_DIR}/compact_mark")

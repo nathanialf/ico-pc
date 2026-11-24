@@ -341,7 +341,13 @@ static bool pushMesh(RdFrame *f, int i, RdMesh mesh, bool ticks, int replay, flo
     p.boneQw = i == M_SKIN ? 8u : 0u;
     p.qwPerVertex = kQpv[i];
     sceneBlock(&vu);
-    vu.mem[6][0] += shiftX; /* x' = 16 x + (2048 + shiftX) z: GS X moved by shiftX */
+    /* x' = 16 x + (2048 + shiftX) z: GS X moved by shiftX.  The prelit
+       program reads its model to GS screen from VU memory 16..19
+       (vu_prelit.hlsl vu_matm(16u, ...)), the z column 18; until v0.11.16
+       only 4..7 (the cluster's world matrix) was moved, so the copy was
+       drawn over the prelit mesh at the centre and nothing was left out */
+    vu.mem[18][0] += shiftX;
+    vu.mem[6][0] += shiftX;
     if (ticks) {
         double cam[4][4];
         tickCam(replay, cam);
