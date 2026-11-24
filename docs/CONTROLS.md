@@ -32,13 +32,13 @@ pictures picks a set yourself (also the Wii Classic Controller's).
 
 | PS2 button | Gamepad | Keyboard | Mouse |
 | --- | --- | --- | --- |
-| Cross (confirm, jump, call Yorda) | bottom face button (A on Xbox) | Space | left button |
+| Cross (confirm, jump) | bottom face button (A on Xbox) | Space | left button |
 | Circle (in menus, goes back like Triangle) | right face button | E | right button |
 | Square | left face button | Q | |
 | Triangle (back) | top face button | R | |
-| L1 / R1 (R1 holds Yorda's hand; in Options > Picture they change a colour row by 10) | shoulder buttons | Tab or the ` key (left of 1) / F | middle button (R1) |
+| L1 / R1 (R1 calls Yorda and holds her hand; in Options > Picture they change a colour row by 10) | shoulder buttons | Tab or the ` key (left of 1) / F | middle button (R1) |
 | L2 / R2 (R2 zooms the camera in) | triggers | Z / X | |
-| L3 / R3 (press a stick in; R3 brings the camera back to Ico with Camera reset on) | press a stick in | V / B | |
+| L3 / R3 (press a stick in; L3 looks at Yorda with Look at Yorda on, R3 brings the camera back to Ico with Camera reset on) | press a stick in | V / B | |
 | Start / Select | start / back (or view) | Enter / Backspace | |
 | D-pad (menus) | d-pad (hold Left or Right on a slider row in Options to keep changing it) | arrow keys | |
 | Left stick (move) | left stick | W A S D (hold Left Shift to walk) | |
@@ -71,6 +71,25 @@ to any other key or button under **Remap controls**. It is off unless you
 turn it on, shows from the title screen and the pause menu, and works on
 every disc. The touch screen has no R3 button, so there it only works with a
 controller or keyboard. Save states load whichever way it is set.
+
+To see where Yorda is without calling her, set **Options > Controls > Look
+at Yorda** to **Hold** or **Toggle** and press L3 (click the left stick in,
+or keyboard V). Ico turns his head to her and the camera turns to show
+them both, the same look the game gives when you call her with R1, but Ico
+does not call her and she does not come. With **Hold** the look lasts while
+you keep L3 held; with **Toggle** one press starts it and the next ends it.
+A look started with Toggle also ends when a cutscene takes over, when you
+go into another room, when you take her hand, and when you press R3 with
+Camera reset on; calling her with R1 leaves it on. While you hold her hand
+L3 does nothing (she is beside you). When she is somewhere else in the
+castle the camera turns toward where she is, as it does when you press R1
+there. Where the game keeps the camera fixed when you call her, Ico still
+turns his head but the camera stays. It is off unless you turn it on, shows
+from the title screen and the pause menu, and works on every disc. L3 can
+be moved to any other key or button under **Remap controls**; the touch
+screen has no L3 button, so there it only works with a controller or
+keyboard. While **Free movement** (under [Developer mode](OPTIONS.md#developer-mode))
+is on, L3 is its own button, so Look at Yorda waits until you turn it off.
 
 A few more keys on a computer:
 

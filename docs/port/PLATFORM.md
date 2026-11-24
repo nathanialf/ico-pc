@@ -1049,7 +1049,7 @@ disc's or the device's own choice, `video.video_mode`, `dev.start_stage`) and it
 (`kCarry`, `IcoSimKeyCarry`, the same size rule): what a load does when the state's value is not
 this run's. HARMLESS: read live, at the start only, or a port latch that clears itself
 (`gameplay.mirror`, the running journey's; stick fix, start stage, anti-aliasing, Skip the
-opening, the weapon rows, Free movement, Zoom type, Camera reset). FIXUP: the restore put the
+opening, the weapon rows, Free movement, Zoom type, Camera reset, Look at Yorda). FIXUP: the restore put the
 saving run's value into the game, and the load sets this run's again, each change logged: the
 cutscene and chain rows' debug switches (`ico_variants_state_loaded`: a variant on now writes its
 value, one off now writes this run's own value of the switch and lets go of it), the doorway
@@ -1117,6 +1117,7 @@ what each owner registers and why):
 | `port/audio/audio_host.c` (`ico_audio_state_register`) | `spu2.state` (the SPU2: RAM, cores, register shadow, time, event queue, DMA channels and their callbacks, the IRQ callback, the reverb presets; not the render's scratch or the statistics), `spu2_sd.time`, `spu2_sd.effect_attr`, `mix_gain.tag`, `mix_gain.cache`, `mix_gain.ready` (the gains themselves are the player's settings), `sndn2.host` (the driver's pages, counters, reply and pitch table), `sndn2.carry`, `sndn2.staging`, `sndn2.adpcm`, `sndn2.queue`, `sndn2.q_write`, `sndn2.q_read`, `sndn2.pending`, `sndn2.pcm`, `audio.vsync_index` (which vsyncs render 801 frames at 59.94 Hz) | AUDIO; SCAN on `spu2.state` and `sndn2.host` |
 | `port/game/difficulty.c` | `difficulty.record` (the journey's difficulty) | FRESH |
 | `port/game/camera_reset.c` | `camera_reset.state` (Camera reset's last R3 level and its stick mute; [GAME_FEATURES.md](GAME_FEATURES.md#camera-reset)) | FRESH |
+| `port/game/yorda_look.c` | `yorda_look.state` (Look at Yorda's last L3 level, its toggle, the stage and the last answer; [GAME_FEATURES.md](GAME_FEATURES.md#look-at-yorda)) | FRESH |
 | `port/game/zoom_toggle.c` | `zoom_toggle.state` (Zoom type's latch: zoomed in, the last R2 level, its source and the camera mode; [GAME_FEATURES.md](GAME_FEATURES.md#zoom-type)) | FRESH |
 | `sce/libsndn2/sound.c` (`ico_sound_state_register`) | the EE sequencer's .bss: `sound.vab`, `sound.slot`, `sound.seq`, `sound.com`, `sound.packet`, `sound.iop2ee`, `sound.iop2ee_p`, `sound.se`, `sound.head`, `sound.client`, `sound.vab_hd`, `sound.seq_body`, `sound.hd_rel` (compiled into the sound library, so outside the game's data ranges) | AUDIO; SCAN on the pointer blocks |
 

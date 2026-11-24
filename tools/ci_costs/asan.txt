@@ -1300,6 +1300,7 @@ weapon_kinds_disc_kor 0.02
 weapon_kinds_disc_ntsc 0.03
 window_scene 0.01
 window_video 0.03
+yorda_look 0.01  # estimate: a CPU-only unit test of 2000 ticks, as camera_reset (LOOK)
 yorda_trip 0.02
 yorda_trip_aug6 0.01
 yorda_trip_cn 0.02

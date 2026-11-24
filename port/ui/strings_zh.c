@@ -414,6 +414,9 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "按住：按住 R2 期間拉近鏡頭。切換：按一下 R2 拉近鏡頭，再按一下恢復。",
     [UI_STR_OPT_CAMERA_RESET] = "視角重設",
     [UI_STR_CAMERA_RESET_NOTE] = "開：按下右搖桿（R3）即可讓視角立刻回到 Ico 身上。",
+    [UI_STR_OPT_YORDA_LOOK] = "看向 Yorda",
+    [UI_STR_YORDA_LOOK_NOTE] =
+        "Ico 與視角轉向 Yorda，但不呼喚她。按住：按住 L3 期間。切換：每按一下 L3 開始或結束。",
     [UI_STR_OPT_BUTTON_PICTURES] = "按鈕圖示",
     [UI_STR_BUTTON_PICTURES_NOTE] = "選單與照相模式中顯示的按鈕圖示。自動會依照最後使用的控制器。",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "「遊戲」中也有此項。",

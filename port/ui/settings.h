@@ -761,6 +761,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_HOLD_TYPE,    /* [gameplay] hold_type: A (hold) or B (toggle) */
     UI_OPT_ZOOM_TYPE,    /* [gameplay] zoom_type: Hold or Toggle (port/game/zoom_toggle.h) */
     UI_OPT_CAMERA_RESET, /* [gameplay] camera_reset: Off/On (port/game/camera_reset.h) */
+    UI_OPT_YORDA_LOOK,   /* [gameplay] yorda_look: Off/Hold/Toggle (port/game/yorda_look.h) */
     /* [input] button_pictures: Auto, PlayStation, Xbox, Nintendo, Wii Classic
        Controller (settings_pads.h), after Vibration */
     UI_OPT_BUTTON_PICTURES,
