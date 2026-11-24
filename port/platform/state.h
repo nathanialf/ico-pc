@@ -50,7 +50,9 @@ typedef enum IcoStateResult {
     ICO_STATE_OTHER_BUILD,    /* saved by another build of the program */
     ICO_STATE_OTHER_DISC,     /* saved from another disc */
     ICO_STATE_OTHER_PLATFORM, /* saved on another platform */
-    ICO_STATE_OTHER_SETTINGS, /* a simulation setting differs (detail names the key) */
+    /* never returned: a state loads whatever the settings are (state_file.h
+       ico_state_header_check); the value stays so the numbering holds */
+    ICO_STATE_OTHER_SETTINGS,
     ICO_STATE_SELF_CHECK, /* the restored memory failed its checks; the game went on as before */
     ICO_STATE_IO,         /* the file could not be written */
     ICO_STATE_BUSY,       /* a save or load is already in flight */
@@ -63,7 +65,7 @@ typedef enum IcoStateResult {
 /* What the UI shows for a slot (state_host.c fills it from the header). */
 typedef struct IcoStateSlotInfo {
     int present;              /* 1 when a file exists */
-    int loadable;             /* 1 when it would load (build, disc, platform, settings match) */
+    int loadable;             /* 1 when it would load (build, disc, platform match) */
     IcoStateResult why_not;   /* when !loadable */
     unsigned int play_frames; /* the game's play time at the save (ico_gs_play_frames) */
     int stage_no;             /* for the area name (settings.c areaName) */

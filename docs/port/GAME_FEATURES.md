@@ -138,7 +138,9 @@ The hooks are all in `ico2/fumi/src/boyact.c`:
   frame-rate expression the game uses there.
 
 `port/game/test/door_grace_test.c` runs the arm and grace with the option off and on, holding
-hands or not, and a copy of the exit check's guard.
+hands or not, and a copy of the exit check's guard. A save state carries the arm and the grace
+(their blocks); loaded with the option off, a grace it holds ends (`ico_door_grace_state_loaded`,
+logged).
 
 ### Yorda trips
 
@@ -1679,14 +1681,17 @@ What a player sees:
   the area and the play time.
 - **Loading** works from the pause menu and from the title (Options > Extras > Save states), or F9
   for slot 1, under the same conditions but the pause. The game comes back exactly where it was,
-  on the pause menu. A state saved by another version of the program, from another disc, on
-  another platform, or with a gameplay setting that changes the simulation set otherwise
-  (`port/platform/sim_keys.h`: the popup names the setting) is refused, and so is a damaged file;
-  the game goes on. A state whose memory fails the checks after it is put back is undone the same
-  way.
+  on the pause menu. A state saved by another version of the program that cannot be translated,
+  from another disc or on another platform is refused (or continues from its checkpoint, as
+  [PLATFORM.md](PLATFORM.md#save-states) words it), and so is a damaged file; the game goes on. A
+  state whose memory fails the checks after it is put back is undone the same way. A setting
+  never refuses a state: it loads under this run's settings (`port/platform/sim_keys.h`, each
+  key's carry), the differences in one log line; the 50/60 Hz mode it was saved in runs until the
+  next start.
 - **What a load keeps**: the achievements, their counters, the session's and the run's counts
   (fresh, captures, game overs) stay as they were (DIVERGENCES.md GL-17); the options are the
-  player's, not the state's.
+  player's, not the state's (what the restore put back of them in the game is set to this run's
+  again, PLATFORM.md's Validity).
 - **Off**: a build where the game's data cannot be found as a whole (`state: the game's data
   ranges are not bracketed ...`), a sanitizer build, or no folder to write to: the row and the keys
   say "Save states are off on this build".

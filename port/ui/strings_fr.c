@@ -773,7 +773,6 @@ const char *const
             [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Mettez le jeu en pause pour charger cet état",
             [UI_STR_STATES_REFUSED_BUILD] = "Enregistré par une autre version du jeu",
             [UI_STR_STATES_REFUSED_DISC] = "Enregistré depuis un autre disque",
-            [UI_STR_STATES_REFUSED_SETTINGS] = "Un réglage de jeu diffère : %s",
             [UI_STR_STATES_REFUSED_BUSY] = "Pas maintenant : le jeu charge ou enregistre",
             [UI_STR_STATES_REFUSED_CHECK] = "Chargement impossible ; le jeu continue",
             [UI_STR_STATES_OFF] = "Les états sauvegardés sont désactivés dans cette version",

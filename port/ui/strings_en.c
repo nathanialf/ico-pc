@@ -795,7 +795,6 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Pause the game to load this state",
     [UI_STR_STATES_REFUSED_BUILD] = "Saved by another version of the game",
     [UI_STR_STATES_REFUSED_DISC] = "Saved from another disc",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "A gameplay setting differs: %s",
     [UI_STR_STATES_REFUSED_BUSY] = "Not now: the game is loading or saving",
     [UI_STR_STATES_REFUSED_CHECK] = "Could not load it; play goes on",
     [UI_STR_STATES_OFF] = "Save states are off on this build",

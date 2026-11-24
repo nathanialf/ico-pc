@@ -760,7 +760,6 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST] = "Приостановите игру, чтобы сохранить состояние",
     [UI_STR_STATES_REFUSED_BUILD] = "Сохранено в другой версии игры",
     [UI_STR_STATES_REFUSED_DISC] = "Сохранено с другого диска",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "Отличается настройка игрового процесса: %s",
     [UI_STR_STATES_REFUSED_BUSY] = "Подождите, идет процесс загрузки или сохранения",
     [UI_STR_STATES_REFUSED_CHECK] = "Не удалось восстановить состояние",
     [UI_STR_STATES_OFF] = "В этой сборке сохранение состояний отключено",

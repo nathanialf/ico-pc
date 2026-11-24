@@ -11,7 +11,11 @@
  * take within 60 frames is dropped, and each ignore (no host, the title,
  * photo mode, no pause allowed, another screen) with its line.  CPU only;
  * the host's own work (files, memory, the pause picture) is
- * state_host_test's. */
+ * state_host_test's.  After a load (ui_settings_reapply_after_state_load,
+ * every disc's run): the hold type and, on the disc with a language of its
+ * own, the game's language the restore put back are this run's again, the
+ * Debug menu closed when the state had developer mode on and this run has
+ * it off; nothing when they already are this run's. */
 #include "settings_fixture.h"
 #include "photo_mode.h"
 #include "pointer.h"
@@ -1261,6 +1265,50 @@ static void testPauseSquare(void)
     CHECK(current_layout_id == pause, "no host: Square does nothing (%d)", current_layout_id);
 }
 
+/* a state loaded under this run's settings: what the restore put back of
+   the saving run's game settings is set to this run's again */
+static void testReapplyAfterLoad(void)
+{
+    const int lang = ico_region_cur()->has_game_language;
+    int got;
+
+    useConfig("version = 1\n[game]\nlanguage = \"fr\"\n[gameplay]\nhold_type = \"toggle\"\n");
+    CHECK(ico_opt_hold_type() == ICO_HOLD_TOGGLE, "this run: toggle");
+    CHECK(!lang || ico_boot_language() == 3, "this run: French (%d)", ico_boot_language());
+    CHECK(!ico_opt_developer_mode(), "this run: no developer mode");
+    /* the restore: the saving run's hold type A and German, a state saved in
+       developer mode */
+    optionControlType = ICO_HOLD_HOLD;
+    NonLinearCameraMove = 4;
+    s_menuOffs = 0;
+    got = ui_settings_reapply_after_state_load("gameplay.mirror=\ngameplay.developer_mode=true\n");
+    CHECK(got == (UI_REAPPLY_HOLD_TYPE | (lang ? UI_REAPPLY_LANGUAGE : 0) | UI_REAPPLY_DEBUG_MENU),
+          "what changed: %d", got);
+    CHECK(optionControlType == ICO_HOLD_TOGGLE, "the hold type: %d", optionControlType);
+    CHECK(NonLinearCameraMove == (lang ? 3 : 4), "the game's language: %d", NonLinearCameraMove);
+    CHECK(s_menuOffs == 1, "the Debug menu closed: %d", s_menuOffs);
+    /* already this run's, a state saved without developer mode: nothing */
+    got = ui_settings_reapply_after_state_load("gameplay.developer_mode=false\n");
+    CHECK(got == 0 && s_menuOffs == 1, "nothing to do: %d", got);
+    CHECK(ui_settings_reapply_after_state_load(NULL) == 0 && s_menuOffs == 1, "no keys text");
+    /* developer mode on in this run: the menu is left as the state has it */
+    useConfig("version = 1\n[game]\nlanguage = \"fr\"\n[gameplay]\nhold_type = \"toggle\"\n"
+              "developer_mode = true\n");
+    CHECK(ui_settings_reapply_after_state_load("gameplay.developer_mode=true\n") == 0 &&
+              s_menuOffs == 1,
+          "developer mode on now: the menu left");
+    /* the hold type alone: A now, B in the state */
+    useConfig("version = 1\n[gameplay]\nhold_type = \"hold\"\nhold_type_chosen = true\n");
+    optionControlType = ICO_HOLD_TOGGLE;
+    NonLinearCameraMove = lang ? ico_boot_language() : 4;
+    CHECK(ui_settings_reapply_after_state_load("") == UI_REAPPLY_HOLD_TYPE &&
+              optionControlType == ICO_HOLD_HOLD,
+          "A again: %d", optionControlType);
+    useConfig("version = 1\n");
+    NonLinearCameraMove = 2;
+    ui_set_language(UI_LANG_EN);
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -1276,6 +1324,7 @@ int main(int argc, char **argv)
         testPermadeath();
         testPauseSquare();
         testStatesKey();
+        testReapplyAfterLoad();
         CHECK(ico_region_select("pal") == 0, "the European region again");
         printf("settings_states_test %s: %s\n", argv[2], failures ? "failed" : "ok");
         return failures ? 1 : 0;
@@ -1294,6 +1343,7 @@ int main(int argc, char **argv)
     testNoHost();
     testPictureBox();
     testStatesKey();
+    testReapplyAfterLoad();
     if (failures) {
         printf("settings_states_test: %d failure(s)\n", failures);
         return 1;

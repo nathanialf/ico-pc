@@ -279,6 +279,18 @@ void ico_variants_bind_debug_chain(int *cycle_speed, int *slow_speed);
    of the page). */
 void ico_variants_apply(void);
 
+/* A save state was loaded (state_host.c perform_load, after the journey's
+   difficulty is applied; never on the checkpoint's way): the restore put
+   back the game's debug switches as the saving run left them, and the state
+   loads under this run's settings.  For the switches the global variants
+   hold (No cutscene look-around, Ignore cutscene cameras, Chain swing speed
+   and damping): a variant on now writes its value; one off now writes this
+   run's own value of the switch (the one taken at the bind or when a
+   variant last took it) and lets go of it.  Each switch it changes is
+   logged ("variants: after the load ...").  The number of switches
+   changed. */
+int ico_variants_state_loaded(void);
+
 /* 1 when the disc has a hint system (not the USA disc nor the two 2001
    builds) and No hints is off: lws_kyomi.c's hint timers and girl.c's hint
    voice read it. */

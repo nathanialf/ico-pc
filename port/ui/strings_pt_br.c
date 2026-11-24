@@ -767,7 +767,6 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST] = "Pause o jogo para criar um save state",
     [UI_STR_STATES_REFUSED_BUILD] = "Salvo em outra versão do jogo",
     [UI_STR_STATES_REFUSED_DISC] = "Salvo a partir de outro disco",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "Uma configuração de jogo é diferente: %s",
     [UI_STR_STATES_REFUSED_BUSY] = "Aguarde: o jogo está carregando ou salvando",
     [UI_STR_STATES_REFUSED_CHECK] = "Não foi possível restaurar o save state. O jogo continua",
     [UI_STR_STATES_OFF] = "Save states desativados nesta versão",

@@ -889,6 +889,69 @@ static void test_chain(void)
     use_config(NULL);
 }
 
+/* A save state loaded under this run's settings (ico_variants_state_loaded):
+   the restore wrote the saving run's switches; a variant off now gives each
+   of its switches this run's own value back and lets go of it, one on now
+   writes its value; the difficulty rows' switches are left to the state's
+   record; a switch already right is not counted; unbound, nothing */
+static void test_state_loaded(void)
+{
+    int cycle = 4, slow = 4;
+
+    /* this run: every global variant off; the state was saved with Ignore
+       cutscene cameras, No cutscene look-around and both chain rows on */
+    use_config(NULL);
+    bind_retail();
+    ico_variants_bind_debug_chain(&cycle, &slow);
+    CHECK(retail() && cycle == 4 && slow == 4);
+    CHECK(ico_variants_state_loaded() == 0); /* nothing restored yet */
+    s_demo_cam = 1;
+    s_hand = 0;
+    cycle = 9;
+    slow = 2;
+    s_one_hit = 1; /* a difficulty row's switch: the state's record decides */
+    CHECK(ico_variants_state_loaded() == 4);
+    CHECK(s_demo_cam == 0 && s_hand == 1 && cycle == 4 && slow == 4);
+    CHECK(s_one_hit == 1);
+    CHECK(ico_variants_state_loaded() == 0);
+    /* the switch the achievements rule follows is off with the row: no
+       suspended achievements and no cutscene camera ignored */
+    CHECK(ico_variants_suspend_achievements() == 0 && s_demo_cam == 0);
+    /* a variant off now, then on: switched on later, its game value back */
+    ico_variant_set(ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS, 1);
+    CHECK(s_demo_cam == 1);
+    ico_variant_set(ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS, 0);
+    CHECK(s_demo_cam == 0);
+
+    /* this run: the rows on; the state was saved with them off */
+    use_config("[variants]\nignore_cutscene_cameras = true\nno_cutscene_look = true\n"
+               "chain_swing_speed = 7\n");
+    bind_retail();
+    cycle = 4;
+    slow = 4;
+    ico_variants_bind_debug_chain(&cycle, &slow);
+    CHECK(s_demo_cam == 1 && s_hand == 0 && cycle == 7 && slow == 4);
+    s_demo_cam = 0;
+    s_hand = 1;
+    cycle = 4;
+    CHECK(ico_variants_state_loaded() == 3);
+    CHECK(s_demo_cam == 1 && s_hand == 0 && cycle == 7 && slow == 4);
+    CHECK(ico_variants_suspend_achievements() == 1);
+    /* turned off later: the game's own values back (the bind's) */
+    ico_variant_set(ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS, 0);
+    ico_variant_set(ICO_VARIANT_NO_CUTSCENE_LOOK, 0);
+    ico_variant_set(ICO_VARIANT_CHAIN_SWING_SPEED, 3);
+    CHECK(s_demo_cam == 0 && s_hand == 1 && cycle == 4);
+
+    /* unbound: nothing written, nothing counted */
+    use_config(NULL);
+    ico_variants_bind_debug(NULL, NULL, NULL, NULL, NULL, NULL);
+    ico_variants_bind_debug_chain(NULL, NULL);
+    s_demo_cam = 1;
+    CHECK(ico_variants_state_loaded() == 0 && s_demo_cam == 1);
+    use_config(NULL);
+}
+
 /* Shadow toughness American is offered on every disc but the June 2001 demo
    (its enemy rows are its own): there a config "american" reads as Original,
    a set of it gives Original, and the row steps Original <-> Not tougher
@@ -979,6 +1042,7 @@ int main(int argc, char **argv)
     test_offered();
     test_peaceful();
     test_chain();
+    test_state_loaded();
     remove(s_path);
     if (failures != 0) {
         fprintf(stderr, "variants_test: %d failure(s)\n", failures);

@@ -810,7 +810,6 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Pausa el juego para cargar este estado",
         [UI_STR_STATES_REFUSED_BUILD] = "Guardado por otra versión del juego",
         [UI_STR_STATES_REFUSED_DISC] = "Guardado desde otro disco",
-        [UI_STR_STATES_REFUSED_SETTINGS] = "Un ajuste de juego es distinto: %s",
         [UI_STR_STATES_REFUSED_BUSY] = "Ahora no: el juego está cargando o guardando",
         [UI_STR_STATES_REFUSED_CHECK] = "No se pudo cargar; el juego continúa",
         [UI_STR_STATES_OFF] = "Los estados guardados están desactivados en esta versión",

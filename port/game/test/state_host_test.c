@@ -23,10 +23,18 @@
  *   [dev] keys   "<tick>:<slot>" and "<tick>", and the malformed ones
  *   listing      a folder that does not exist and an empty one: four empty
  *                slots; then states written with each validity field
- *                changed (platform, build, disc, a simulation key) listed
- *                as present and not loadable with the reason, a good one
- *                loadable with its play time, stage, time, commit and
- *                picture, a damaged file present and BAD_FILE
+ *                changed (platform, build, disc) listed as present and not
+ *                loadable with the reason, a good one loadable with its
+ *                play time, stage, time, commit and picture, a damaged file
+ *                present and BAD_FILE; a state with a simulation key other
+ *                than this run's loadable (never refused for a setting),
+ *                before and after the key changes
+ *   settings line  the load's one line for a state saved with other
+ *                settings (ico_state_settings_line): every difference
+ *                named, this run's keys first, a key a later version added
+ *                at its default and a retired one passed over, none for
+ *                the same keys or a key unset on one side and at its
+ *                default's text on the other; a short buffer
  *   thumbnail    the size: the pause picture's square pixels (1920 x 1080
  *                to 960 x 540, a narrow one kept, a tall one held to 960
  *                lines), the fallback DISPLAY frame at the box's shape (640 x
@@ -362,26 +370,93 @@ static void test_listing(void)
     CHECK_STR(s[2].build_commit, "another-commit");
     CHECK(s[3].present && !s[3].loadable && s[3].why_not == ICO_STATE_OTHER_DISC);
 
-    /* folder b: a simulation key that differs, a damaged file, slot 3
-       empty, slot 4 good; then the key changed back */
+    /* folder b: a simulation key that differs (and its hash), a damaged
+       file, slot 3 empty, slot 4 good; then the key changed in this run:
+       a setting never greys a slot */
     h = now;
     snprintf(h.keys, sizeof h.keys, "gameplay.mirror=true\n");
+    h.settings_hash = now.settings_hash ^ 1;
     write_state(d2, 1, &h);
     CHECK(ico_state_slot_path(p, sizeof p, d2, 2, ".ics") == 0);
     write_bytes(p, "not a state at all");
     write_state(d2, 4, &now);
     ico_state_list_dir(d2, &now, s);
-    CHECK(s[0].present && !s[0].loadable && s[0].why_not == ICO_STATE_OTHER_SETTINGS);
+    CHECK(s[0].present && s[0].loadable && s[0].why_not == ICO_STATE_OK,
+          "another setting: loadable (%d)", (int)s[0].why_not);
     CHECK(s[1].present && !s[1].loadable && s[1].why_not == ICO_STATE_BAD_FILE);
     CHECK(!s[2].present && s[2].why_not == ICO_STATE_EMPTY);
     CHECK(s[3].present && s[3].loadable);
     snprintf(now.keys, sizeof now.keys, "gameplay.mirror=true\n");
+    now.settings_hash ^= 0x55;
     ico_state_list_dir(d2, &now, s);
-    CHECK(s[0].loadable, "loadable once the key is the same");
-    CHECK(!s[3].loadable && s[3].why_not == ICO_STATE_OTHER_SETTINGS);
+    CHECK(s[0].loadable, "loadable with the key the same");
+    CHECK(s[3].loadable && s[3].why_not == ICO_STATE_OK, "loadable with the key changed (%d)",
+          (int)s[3].why_not);
     /* no header to check against: present, not loadable */
     ico_state_list_dir(d2, NULL, s);
     CHECK(s[0].present && !s[0].loadable);
+}
+
+/* the key-default and retired-key functions state_host.c sets (sim_keys.h),
+   for the test's keys: "false" or unset is the default; "old.row" retired */
+static int fake_default(const char *key, size_t key_n, const char *value, size_t value_n)
+{
+    (void)key;
+    (void)key_n;
+    return value_n == 0 || (value_n == 5 && memcmp(value, "false", 5) == 0);
+}
+
+static int fake_retired(const char *key, size_t key_n)
+{
+    return key_n == 7 && memcmp(key, "old.row", 7) == 0;
+}
+
+static void test_settings_line(void)
+{
+    static const char now_keys[] = "video.video_mode=60hz\ngameplay.mirror=\n"
+                                   "gameplay.hold_type=toggle\nnew.key=false\n";
+    char line[512];
+
+    ico_state_set_key_default(fake_default);
+    ico_state_set_key_retired(fake_retired);
+    /* the same keys: no line */
+    CHECK(ico_state_settings_line(2, now_keys, now_keys, line, sizeof line) == 0 && line[0] == '\0',
+          "the same keys: %s", line);
+    /* unset on one side, the default's text on the other; a later
+       version's key at its default; a retired row: none */
+    CHECK(ico_state_settings_line(2,
+                                  "video.video_mode=60hz\ngameplay.mirror=false\n"
+                                  "gameplay.hold_type=toggle\nold.row=7\n",
+                                  now_keys, line, sizeof line) == 0 &&
+              line[0] == '\0',
+          "nothing that differs: %s", line);
+    /* two settings and a key this version lacks */
+    CHECK(ico_state_settings_line(3,
+                                  "video.video_mode=pal50\ngameplay.mirror=true\n"
+                                  "gameplay.hold_type=toggle\ngone.key=1\n",
+                                  now_keys, line, sizeof line) == 3,
+          "three differences: %s", line);
+    CHECK_STR(line, "state: slot 3 was saved with other settings (video.video_mode=pal50 (now "
+                    "60hz), gameplay.mirror=true (now ), gone.key=1 (now absent)): it loads "
+                    "under this run's");
+    /* a later version's key changed from its default */
+    CHECK(ico_state_settings_line(1,
+                                  "video.video_mode=60hz\ngameplay.mirror=\n"
+                                  "gameplay.hold_type=hold\n",
+                                  "video.video_mode=60hz\ngameplay.mirror=\n"
+                                  "gameplay.hold_type=toggle\nnew.key=true\n",
+                                  line, sizeof line) == 2,
+          "two differences: %s", line);
+    CHECK_STR(line, "state: slot 1 was saved with other settings (gameplay.hold_type=hold (now "
+                    "toggle), new.key=(absent) (now true)): it loads under this run's");
+    /* a short buffer: the start, the count whole */
+    CHECK(ico_state_settings_line(1, "gameplay.mirror=true\n", "gameplay.mirror=\n", line, 16) ==
+                  1 &&
+              strcmp(line, "state: slot 1 w") == 0,
+          "cut: %s", line);
+    CHECK(ico_state_settings_line(1, "gameplay.mirror=true\n", "gameplay.mirror=\n", NULL, 0) == 1);
+    ico_state_set_key_retired(NULL);
+    ico_state_set_key_default(NULL);
 }
 
 static void test_thumbnail(void)
@@ -702,6 +777,7 @@ int main(int argc, char **argv)
     test_paths();
     test_dev_keys();
     test_listing();
+    test_settings_line();
     test_thumbnail();
     test_pause_picture();
     test_record();

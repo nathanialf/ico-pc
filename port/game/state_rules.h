@@ -72,6 +72,17 @@ int ico_state_slot_path(char *out, size_t size, const char *dir, int slot, const
 void ico_state_list_dir(const char *dir, const IcoStateHeader *now,
                         IcoStateSlotInfo out[ICO_STATE_SLOTS]);
 
+/* The load's line for a state whose settings are not this run's (it loads
+   under this run's: a state is never refused for a setting): "state: slot
+   N was saved with other settings (key=saved (now cur), ...): it loads
+   under this run's" into out (size bytes, cut, NUL-terminated), every
+   difference ico_state_keys_diff names (state_file.h: a key a later version
+   added at its default, a retired key and a key unset on one side and at
+   its default's text on the other are none).  The count of differences;
+   0 and out "" when there is none. */
+int ico_state_settings_line(int slot, const char *saved_keys, const char *now_keys, char *out,
+                            size_t size);
+
 /* A [dev] key's value: "<tick>:<slot>" (state_save_at, state_load_at;
    slot 1..ICO_STATE_SLOTS) or "<tick>" (state_hash_at, slot NULL).  0 with
    the numbers, or -1 (both 0) for an empty, malformed or out-of-range

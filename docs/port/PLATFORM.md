@@ -1042,37 +1042,49 @@ The **simulation keys** are the config keys that change what the game computes
 (`port/platform/sim_keys.h`, `ICO_SIM_KEYS`, compiled into `ico_config`): the same list the pad
 recording's header writes ([CONFIG.md](CONFIG.md#adding-a-key)). `ico_sim_keys_hash` is XXH3-64
 over `key=value\n` for each, in order, the value as `ico_config_get_string` gives it (`""` when
-unset); the text is stored in the file. `ico_sim_keys_first_diff` names the first key whose saved
-value differs from the current one. Each key has its default beside it (`kDefaults` in
-`sim_keys.c`: the config text the game takes when the key is unset, such as `false` or
-`original`; none where unset is the disc's or the device's own choice, `video.video_mode`,
-`dev.start_stage`, `variants.barrier_hits`). A key absent from the saved text is one a later
-version added: the state was made at its default, so it is equal while the key is unset or at
+unset); the text is stored in the file. A state is never refused for a key: it loads under this
+run's settings. Each key has its default beside it (`kDefaults` in `sim_keys.c`: the config text
+the game takes when the key is unset, such as `false` or `original`; none where unset is the
+disc's or the device's own choice, `video.video_mode`, `dev.start_stage`) and its carry
+(`kCarry`, `IcoSimKeyCarry`, the same size rule): what a load does when the state's value is not
+this run's. HARMLESS: read live, at the start only, or a port latch that clears itself
+(`gameplay.mirror`, the running journey's; stick fix, start stage, anti-aliasing, Skip the
+opening, the weapon rows, Free movement, Zoom type, Camera reset). FIXUP: the restore put the
+saving run's value into the game, and the load sets this run's again, each change logged: the
+cutscene and chain rows' debug switches (`ico_variants_state_loaded`: a variant on now writes its
+value, one off now writes this run's own value of the switch and lets go of it), the doorway
+fix's grace (`ico_door_grace_state_loaded`: ended when the fix is off now), the hold type, the
+game's language (as the Language row sets it) and the Debug menu (closed when the state had
+developer mode on and this run has it off), the last three in `ui_settings_reapply_after_state_load`.
+KEPT: `video.video_mode`, the 50/60 Hz mode word the state restores (`systemStatus[0]`, which
+the clock follows) runs until the next start, `config.toml` untouched (`state: slot N runs at
+50 Hz as it was saved; the video mode set (60 Hz) applies from the next start (config.toml
+unchanged)`). `perform_load` calls them after `ico_difficulty_state_loaded`, never on the
+checkpoint's way. The load's one line names every difference (`ico_state_keys_diff`,
+`ico_state_settings_line`: `state: slot N was saved with other settings (key=saved (now cur),
+...): it loads under this run's`). A key absent from the saved text is one a later version
+added: the state was made at its default, so it is no difference while the key is unset or at
 that default now (`ico_sim_key_is_default`). A key unset on one side and written at its default
-on the other is the same setting too (issue 218: opening the Debug menu writes
-`gameplay.developer_mode = false`, and a state saved while it was unset was refused as `settings
-differ`): both checks take them as equal (`same_default` in `state_file.c`,
-`ico_sim_keys_first_diff`), under the whole-text rule below, and a load logs them (`state: slot N
-was saved with the setting K unset and it is written as its default now, or the other way round:
-the same setting`, `ico_state_keys_defaulted`). A key without one default text
-(`video.video_mode`, `dev.start_stage`) is equal only to itself.
+on the other is the same setting too (issue 218, `same_default` in `state_file.c`). A key
+without one default text (`video.video_mode`, `dev.start_stage`) is equal only to itself.
 
 `ico_state_header_check` compares a saved header with this run's, in this order: the platform
 (`ICO_STATE_OTHER_PLATFORM`, a Windows state on Linux), the format version and the build id
-(`ICO_STATE_OTHER_BUILD`, the detail is the other build's commit), the disc slug
-(`ICO_STATE_OTHER_DISC`), the keys text and then the hash (`ICO_STATE_OTHER_SETTINGS`, the detail
-`key=saved (now cur)`). A key this run lists that the saved text lacks is equal when the
-key-default function says this run's value is the default (`ico_state_set_key_default`, set by
-`state_host.c` to `ico_sim_key_is_default`, since the platform layer does not see the config);
-the two hashes then differ by those lines, so the saved text must instead be the whole of what
-its own hash covered (`xxh3_64` of the saved text equal to the saved hash), else `the settings
-differ`. Without the function (tests, tools) such a key differs, as `key=(absent) (now cur)`.
-Retired keys: [SAVES.md](SAVES.md#save-states-and-difficulty).
+(`ICO_STATE_OTHER_BUILD`, the detail is the other build's commit) and the disc slug
+(`ICO_STATE_OTHER_DISC`). The keys text and the settings hash are still written, so an older
+version reads a new state as before, but no check reads them: `ICO_STATE_OTHER_SETTINGS` is never
+returned (the value kept for the numbering), the slot list greys no slot for a setting, and the
+verdicts' cache is keyed by the disc, not the settings. In the load's difference list a key this
+run lists that the saved text lacks is no difference when the key-default function says this
+run's value is the default (`ico_state_set_key_default`, set by `state_host.c` to
+`ico_sim_key_is_default`, since the platform layer does not see the config); without the
+function (tests, tools) it is `key=(absent) (now cur)`. Retired keys:
+[SAVES.md](SAVES.md#save-states-and-difficulty).
 
 The rule has two levels. The same build (build id equal) loads a state with one delta per range,
 nothing else consulted. Another build of the same platform and format goes on to
-`ico_state_header_check_other_build` (the same checks without the build id: the disc and the
-simulation keys must still match) and then to its `syms` section, which loads it only when
+`ico_state_header_check_other_build` (the same checks without the build id: the disc must still
+match) and then to its `syms` section, which loads it only when
 everything the state points into is unchanged in this build ([Across versions](#across-versions)).
 A format 1 state is refused there with the words of [UI.md](UI.md#save-states): nothing in it can
 be translated.
@@ -1587,9 +1599,9 @@ globals; it is not a proof that the later build means the same by the state:
 - A pointer into unnamed writable data is no block, no variable and no point: such a state is
   pinned. A C string found again by its bytes may be another literal with the same text (the same
   bytes, so the game sees the same text).
-- A simulation key the later build adds is read as its default in an older state: the state loads
-  while the key is at its default and is refused as `ICO_STATE_OTHER_SETTINGS` (`key=(absent)
-  (now cur)`) once the player changed it. A block the later build adds loads only when
+- A simulation key the later build adds is read as its default in an older state, which loads
+  under this run's value either way (the load's line names it, `key=(absent) (now cur)`, once
+  the player changed it). A block the later build adds loads only when
   registered FRESH ([The registry](#the-registry)), keeping this run's value.
 - Host addresses that are rebuilt rather than saved are untouched by any of this: the vsync hook
   list, the SIF server table and the other host callbacks set up at start-up, files, the
@@ -1856,9 +1868,10 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: slot N (saved by <commit>) loads here`, or `... cannot be loaded here: <v> -> <v>: <blocker>` | each listing, per slot of another build |
 | `state: slot N cannot be moved into this run exactly: the <program's image\|arena\|fiber pool> it was saved with (0x..-0x..) lies elsewhere now (+0x..) and its addresses' upper half 0x.. is below 0x10, where the game's own pairs of numbers read as addresses in it (W words of the saved arena lie in it; which of them are addresses cannot be told), so nothing is moved and it continues from its checkpoint` | a load refused before its restore ([Relocation](#relocation)); the checkpoint's line follows |
 | `state: slot N from version V: K values in its data lie inside that version's code at no function's start, numbers next to a small integer rather than addresses (first 0x.., last 0x..): kept as they are`, or `state: slot N: <why>: it continues from its checkpoint` | a load of another build's state from an image below 0x10 (Windows; [Across versions](#across-versions)) |
-| `state: slot N was saved with the setting<s> K unset and it is written as its default now, or the other way round: the same setting` | a load whose keys differ only that way ([Validity](#validity)) |
+| `state: slot N was saved with other settings (key=saved (now cur), ...): it loads under this run's` | a load whose simulation keys differ from this run's, every difference named; none for a key a later version added at its default, a retired row, or unset against the default's text ([Validity](#validity)) |
+| `variants: after the load <switch> A -> B (<its variant's value\|the game's own value> in this run; the state was saved with another value)`, `door: after the load the doorway fix is off in this run: the state's grace (N frames left, back to stage S) ended`, `settings: after the load the hold type is this run's A again (the state had B)`, `settings: after the load the game's language is this run's L again (the state had M)`, `settings: after the load developer mode is off in this run: the Debug menu is closed`, `state: slot N runs at 50 Hz as it was saved; the video mode set (60 Hz) applies from the next start (config.toml unchanged)` | a load, each only for what it changed ([Validity](#validity): the keys' carry) |
 | `state: loaded slot N (saved at Main tick T, stage S): deltas module +0x0 (fixed image), arena +0x0 (pinned), pool +0x0 (pinned), pobj ... ; words rewritten [(nothing moved)] arena .., gdata .., gbss .., registry .., pobj ..; thread pointer 0x<old>->0x<new>[ unchanged\| not recorded\| not needed] (K words), stack guard[ unchanged\| not recorded\| not needed] (M words); checks P partitions, B blocks, T threads, H handlers; K fibers; apply <ms> ms` | a load done |
-| `state: refused <save\|load\|delete> slot N: <reason>[: <detail>]` | every refusal: save states off, not on the pause menu, a stage switch, the card, the disc, a movie, another mode (photo mode, the credits, the music gallery), the slot empty, a damaged file, another build (its commit; `no thread-pointer record` for a state without the saving process's thread pointer or stack guard where the platform needs them; for a state this build cannot translate `<saved commit> -> <commit here>: <blocker>`, the blocker as [Across versions](#across-versions) words it, or `made before save states could carry over to later versions (format 1)`), another disc, another platform, settings differ (`key=saved (now cur)`), the self-checks (the failing check; the backup restored), the file not written (why), busy |
+| `state: refused <save\|load\|delete> slot N: <reason>[: <detail>]` | every refusal: save states off, not on the pause menu, a stage switch, the card, the disc, a movie, another mode (photo mode, the credits, the music gallery), the slot empty, a damaged file, another build (its commit; `no thread-pointer record` for a state without the saving process's thread pointer or stack guard where the platform needs them; for a state this build cannot translate `<saved commit> -> <commit here>: <blocker>`, the blocker as [Across versions](#across-versions) words it, or `made before save states could carry over to later versions (format 1)`), another disc, another platform, the self-checks (the failing check; the backup restored), the file not written (why), busy |
 | `state: slot N (version V, P) cannot resume where it was saved (<refusal>): it continues from its last checkpoint, stage S (saved in stage T), found by <the state's own record\|the table's <release> <platform> (<asset>)\|the layout of <release> <platform>, which its bytes confirm (K layouts agree)\|its bytes: ...>; the game's own load runs at the end of the next Main tick`, then `state: slot N continues from its checkpoint at Main tick M: the game's own load from <the title\|play (as End Game)>, to stage S; option words ..., preview ..., difficulty ...`; or `... and its checkpoint cannot be loaded either: <why>` | a load the exact path refused ([SAVES.md](SAVES.md#loading-a-state-from-its-checkpoint)) |
 | `state: each state names its checkpoint (a later version continues it from there): gameSysMainSaveBuff gbss+0x.., systemStatus gdata+0x.., ...` | once, the first save |
 | `state: deleted slot N` | a delete |
@@ -1866,7 +1879,6 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: slot N's picture: the frame after the save (no pause picture: <why>)` | a save without a pause picture: none taken since the program started, the frame before the pause menu still to come or not presented, still being written, could not be written, the game went back to play, a state was loaded, no renderer |
 | `state: the pause picture: the game before the pause menu, WxH from the WxH picture, written in <ms> ms (<path>; picture N)` (the first 8, then every 100th), `state: the pause picture could not be written (<path>)` | the pause menu opened from play |
 | `state: the pause picture: slot N's own, the game as loaded, WxH, copied in <ms> ms (<path>)`, `state: the pause picture: slot N's picture could not be copied (none, or unreadable): a save before going back to play takes the frame after it` | a load (the loaded slot's picture becomes the pause picture) |
-| `state: slot N was saved before the setting(s) <keys> existed: read as its (their) default, which it has (they have) now` | a load of a state saved before a simulation key existed ([Validity](#validity)) |
 | `state: slot N was saved before K of the blocks registered here existed (<names>): they start from this run's values` | a load of another build's state without FRESH blocks this build registers ([The registry](#the-registry)) |
 | `rd: state picture: WxH from the WxH output (the box at X,Y), read back in <ms> ms`, `rd: state picture: not taken: the first present after the request showed frame F, later than frame G it asked for` or `...: no copy of the WxH output` (the first 8, then every 100th) | the renderer's side of the pause picture |
 | `state: [dev] save at Main tick ..., load at ..., hash at ...` and `state: hash ...` | the [dev] keys |

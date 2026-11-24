@@ -98,6 +98,7 @@ extern const char *s_devNames[3];
 extern char s_reopened[ICO_AUDIO_DEVICE_NAME_MAX];
 extern int s_reopens;
 extern int s_filmCalls, s_filmLast;
+extern int s_menuOffs; /* debug_Menu_off calls (settings.c after a state load) */
 extern int failures;
 void setEnv(const char *k, const char *v);
 void setRow(int i, int up, int down, int downItem, int upItem, int left, int right, int y);
