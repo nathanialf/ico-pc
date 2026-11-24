@@ -60,6 +60,12 @@ extern int ico_free_movement(void);
 /* PC port: port/game/yorda_look.h: Options > Controls > Look at Yorda, L3 runs
    subBoyCollision's look at her (head and camera) without the call */
 extern int ico_yorda_look(int l3, int live, int hand, int stage);
+/* PC port: 1 while the boy's own cut to her capture (privInsCam) is not
+   running.  Defined at the file's end and never inline: a mention of
+   privInsCam inside subBoyCollision moved the variable in the Android
+   build's game data (clang places a file's statics by its own order of
+   use), which changes the layout every older save state resumes by */
+static int boyPrivInsCamOff(void) __attribute__((noinline));
 
 typedef struct { /* field names derived */
     int a, b, c;
@@ -5974,7 +5980,7 @@ void subBoyCollision(GObj *volatile self)
                below without the call (no wish bit, no mail to her) */
             look = ico_yorda_look(pad[0].now & 0x200,
                                   IsAbleBoyControl() != 0 && ico_free_movement() == 0 &&
-                                      privInsCam.on == 0,
+                                      boyPrivInsCamOff(),
                                   ACTGame_FLAG_TETSUNAGI() != 0, stage_no);
             looking = 0;
             if (((int)(sub->wish0.ll >> 46) & 1) == 0 || ((int)(sub->wish2.ll >> 46) & 1) == 0) {
@@ -9315,4 +9321,10 @@ inline void Boy_Init(void)
 {
     *(BoyWork *)boyInfo = boyInfoDefault;
     *(BoyKidnapWork *)characterPacket = characterPacketDefault;
+}
+
+/* PC port: see the declaration at the top (Look at Yorda's live test) */
+static int boyPrivInsCamOff(void)
+{
+    return privInsCam.on == 0;
 }
