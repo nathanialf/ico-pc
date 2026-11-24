@@ -58,8 +58,9 @@
  * section the checkpoint does not need).  Never: another disc, a Permadeath
  * journey (the state's or the one in force), an empty slot, the conditions
  * of the moment (not paused, a stage change, the card or the disc busy, a
- * movie, another mode), this version's state with other settings (the box
- * names the setting; with it put back the state resumes exactly).
+ * movie, another mode).  A state is never refused for a setting (it loads
+ * under this run's, state_file.h ico_state_header_check), so no route
+ * starts from one.
  */
 #ifndef ICO_SAVE_STATE_CHECKPOINT_H
 #define ICO_SAVE_STATE_CHECKPOINT_H
@@ -205,7 +206,9 @@ typedef enum IcoCkptRoute {
 } IcoCkptRoute;
 
 /* r: the exact path's result for the state; other_version: the state's
-   build is not this one (its header's build id or format differs). */
+   build is not this one (its header's build id or format differs; no
+   result routes by it now: the one that did, a setting that differs, is
+   never returned). */
 IcoCkptRoute ico_ckpt_route(IcoStateResult r, int other_version);
 /* The load's result for another build's state from its syms verdict
    (state_xbuild.h ICO_XB_*, the legacy tables' naming of an earlier
@@ -222,7 +225,6 @@ IcoStateResult ico_ckpt_xb_result(int xb_kind);
 typedef enum IcoCkptBox {
     ICO_CKPT_BOX_DONE = 0, /* saved / loaded / deleted */
     ICO_CKPT_BOX_NOTICE,   /* continued from the state's checkpoint */
-    ICO_CKPT_BOX_SETTINGS, /* the setting that differs */
     ICO_CKPT_BOX_VERSION,  /* another version's state: the blocker's words */
     ICO_CKPT_BOX_REFUSAL   /* the refusal's line */
 } IcoCkptBox;

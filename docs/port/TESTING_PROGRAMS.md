@@ -365,8 +365,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   demo) with `backStageProcessMain`'s guard before every stage test, the Queen's stage (37)
   without a Shadow row, no preset setting the row and the row on being what the hooks read;
   skipped (77) without the image (`no_shadows_disc`, `no_shadows_disc_<disc>`).
-- `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
-  (`door_grace`).
+- `door_grace_test.c`: the doorway fix's arm and grace, a copy of the exit check's guard, a
+  state's grace ended at a load with the fix off (`door_grace`).
 - `ico_rows_test.c`: Developer > Free movement and the Ask Yorda for a hint button
   ([GAME_FEATURES.md](GAME_FEATURES.md#free-movement-and-ask-yorda-for-a-hint)) on the CPU: the key
   off by default, the row on without Developer mode doing nothing and with it on, the setter, a
@@ -426,7 +426,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   [PLATFORM.md](PLATFORM.md#saving-and-loading)): every refusal of the conditions reachable and
   their order, a load without the pause, the pause menu and a port page over it; the log texts;
   the slots' paths; the `[dev]` keys' values; the listing of a missing, an empty and a filled
-  folder (each validity field changed, a damaged file, a picture); the thumbnail's size (the pause
+  folder (each validity field changed, a damaged file, a picture; another setting loadable);
+  the load's settings line (`ico_state_settings_line`); the thumbnail's size (the pause
   picture's square pixels to 960 wide, a tall one to 960 lines, the fallback DISPLAY frame at the
   box's shape) and box filter; the pause picture's path, its copy to a slot's picture and its steps
   (taken once from play to the pause menu, kept over the pages, dropped on play); after a load the
@@ -451,7 +452,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the chain rows (`test_chain`: the game's 4 and 4 by default, `ico_variants_bind_debug_chain` leaves
   the switches alone at 4, every value 1 to 10 reaches its own switch, 4 puts the game's value back,
   a step wraps and writes the number, a file's value is written at the bind, 0, 11 or a word read as 4,
-  nothing written unbound), Shadow toughness Third journey (`third_offered`: the step order round the offered values only,
+  nothing written unbound), `test_state_loaded` (after a load each global switch at this run's value), Shadow toughness Third journey (`third_offered`: the step order round the offered values only,
   the key `third_journey`, a config word or a set of it giving Original on `ntsc`, `aug6` and
   `jun26`, `restart_index` 40 on every playthrough where offered), and the game
   hooks: the bound debug switches (untouched at the shipped values, each variant's value while it
@@ -528,11 +529,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `tools/state_region_diff.py`'s report on the two dumps: the first ten differing symbols of the
   game's data and bss and the arena's first ten differing ranges (the dumps are deleted on a
   pass). On a pass the output ends with the `state: hash masked ...` line.
-  `state_roundtrip_headless_settings`: one run saves slot 1, a
-  second run over a copy of its states folder with `[gameplay] door_fix = true` (a simulation
-  key) loads it and must log `state: refused load slot 1: settings differ: gameplay.door_fix=...`
-  and go on to its last tick (the difficulty rows are each state's own block, so none of them
-  refuses a load: [SAVES.md](SAVES.md#save-states-and-difficulty)). Both skip without the disc image and on a sanitizer build ([Tests
+  `state_roundtrip_headless_settings`: a run with `hold_type = "toggle"` and
+  `ignore_cutscene_cameras = true` saves slot 1, a second run without them loads it (never
+  refused for a setting): the one `was saved with other settings` line naming both, `loaded`,
+  the hold type and `ignore_demo_camera` fix-up lines, no refusal, its last tick. Both skip without the disc image and on a sanitizer build ([Tests
   that need the disc](TESTING.md#tests-that-need-the-disc)).
 - `options_test.c`: `test_pit_time` (Time to rescue Yorda in seconds, issue 186: the pull-in's ticks per disc, the parser's seconds, words and range, the factor seconds x 30 / ticks and the ratios 1/factor and 2/factor for 4 to 30 s with the whole pull-in lasting the seconds, Original bit for bit, and the source scan: four hooks over each copy's five SINK motions, this disc's among them, the three camera timeouts, the frame-50 test); `test_shadows_together` (Shadows attack together, issue 185): off by default
   and from the file, `ico_opt_shadow_waits` 1 for a Shadow while another attacks with the option
@@ -973,11 +973,10 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   while one is in flight; each validity field changed alone gives its result and detail; every
   damaged file (magic, version, a header byte, truncation, an appended byte, a flipped packed byte) is
   `ICO_STATE_BAD_FILE`; a write into a missing folder fails on its thread and leaves no `.tmp`; the
-  build id is stable and changes with the commit and with one more block; a retired key the saved
-  text lists passed over at any value on both checks under the whole-text rule (a damaged hash
-  refused), `(now absent)` without the retired-key function, a listed key that differs and a key
-  only the state lists that is not retired still refused, a retired name this run still lists
-  compared as any key, the retired keys named for the log (`state_format`).
+  build id is stable and changes with the commit and with one more block; no key or hash refuses,
+  `ico_state_keys_diff` names each difference (order, a short buffer): a retired key passed over,
+  `(now absent)` without the function, a listed key that differs and a key only the state lists
+  named, a retired name this run lists compared as any key (`state_format`).
 - `state_registry_test.c`: registration order, the stored fields, every refusal with the table
   unchanged, a full table, reset (`state_registry`).
 - `sim_keys_test.c`: the simulation keys' list (no repeats, the expected keys), the text, the hash
@@ -989,15 +988,14 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   state saved before `gameplay.skip_opening` existed equal with the option off and differing
   (`gameplay.skip_opening=(absent) (now true)`) with it on; the fifteen difficulty keys out of the
   list and in `ICO_SIM_KEYS_RETIRED` (`ico_sim_key_retired`), out of the hash and the text, an older
-  state's text that lists them at any value equal; the same text through the save state's own
-  header check with the two functions `state_host.c` sets: it loads (both checks), the fifteen
-  named for the log, a damaged hash and `gameplay.door_fix=true` refused.
+  state's text that lists them at any value equal; through the header check with the two
+  functions `state_host.c` sets it loads whatever the keys, the diff passing over the fifteen and
+  naming `gameplay.door_fix=true`; every key's carry (`ico_sim_key_carry`), `ico_sim_keys_value`.
   The same for `developer.free_movement` (`developer.free_movement=(absent) (now true)`); `config_test.c` checks the first-run file's `[developer]` block.
   Issue 218's side note: `gameplay.developer_mode` unset in the state and `false` now is the same
-  setting in `ico_sim_keys_first_diff` and in the header check (it loads; the key named by
-  `ico_state_keys_defaulted` for the log; refused with a damaged hash and without the key-default
-  function), `true` now differs, the reverse (saved `false`, unset now) loads, every key with one
-  default text (16 of the 18) loads unset in the state and at its default now, while
+  setting in `ico_sim_keys_first_diff` and the diff (named without the key-default function),
+  `true` now differs, the reverse is the same, every key with one default text is no difference
+  unset in the state and at its default now, while
   `video.video_mode` unset and `pal` now and `variants.weapon` at two non-default values differ.
 - `tools/macho_image_check.py selftest`: the Apple programs' image base check
   ([BUILDING.md](../BUILDING.md#apple-image-base)) on hand-built Mach-O headers: the released
@@ -1011,8 +1009,9 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   shape, and F6 (the page from play and from the pause menu, back to the game, a late press, each
   ignore), on a Permadeath journey (the pause row greyed and still shown, the page's line
   "cannot be made", the Continue screen's prompt hidden with its line and Square opening nothing,
-  all back with Normal), on each disc's layout (`settings_states`, `_jpn`, `_kor`, `_cn`, `_ntsc`,
-  `_aug6`, `_jun26`).
+  all back with Normal), after a load the hold type, language and Debug menu set back to this
+  run's, on each disc's layout (`settings_states`, `_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`,
+  `_jun26`).
 - `fiber_test.c`: [fibers](ARCHITECTURE.md#terms) switched round-robin with their stacks checked,
   deep stacks, the FP state inside a fiber (`fiber`, `fiber_guard`).
 - `ico_thread_test.c`: a thread runs and joins, a mutex and condition hand a value across, the clock does not run backwards (`ico_thread`).

@@ -1048,8 +1048,9 @@ endif()
 # a save on the pause menu, play, a hash, the load, the same play again and
 # the hash equal (on a difference, tools/state_region_diff.py names the
 # first differing symbols from the two dumps of the hash's tick). state_roundtrip_headless_settings: a state saved by one
-# run is refused by a second with a simulation key changed, which names the
-# key and goes on. The disc image is needed; save states are off on a
+# run with two simulation keys set loads in a second without them (never
+# refused for a setting): the one line naming both, the two fix-ups logged,
+# the run to its end. The disc image is needed; save states are off on a
 # sanitizer build; both skipped then (cmake -P cannot exit 77 at CMake 3.25,
 # so the skip is the message). Game runs, so alone.
 if(TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS)

@@ -53,6 +53,7 @@
 #include "state_rules.h"
 #include "state_syms.h"
 #include "state_xbuild.h"
+#include "sysconf.h" /* ico_boot_video_mode: the 50/60 Hz mode set */
 #include "trace_host.h"
 #if defined(__ANDROID__)
 #include <SDL3/SDL.h>
@@ -72,8 +73,10 @@
 #include "../ui/settings.h"
 #include "achievements.h"
 #include "difficulty.h"
+#include "door_grace.h"
 #include "options.h"
 #include "state_checkpoint_live.h"
+#include "variants.h"
 #include "video_options.h"
 
 #ifndef ICO_HEADLESS
@@ -2713,14 +2716,27 @@ static int vd_key_file(int slot, IcoVdKey *key)
     return 0; /* a header that cannot be read is keyed by its size and time */
 }
 
-/* the slot's key now (the game thread: the live settings) */
+/* What a verdict is judged under besides the file: the disc (a state is
+   never refused for a setting, so the settings are not part of it) */
+static uint64_t vd_judged_under(const IcoStateHeader *h)
+{
+    uint64_t f = 0xcbf29ce484222325ull;
+    size_t i;
+
+    for (i = 0; i < sizeof h->disc && h->disc[i] != '\0'; i++) {
+        f = (f ^ (unsigned char)h->disc[i]) * 0x100000001b3ull;
+    }
+    return f;
+}
+
+/* the slot's key now (the game thread: the disc running) */
 static int vd_key_now(int slot, void *user, IcoVdKey *key)
 {
     (void)user;
     if (vd_key_file(slot, key) != 0) {
         return -1;
     }
-    key->keys = now_header()->settings_hash;
+    key->keys = vd_judged_under(now_header());
     return 0;
 }
 
@@ -2856,13 +2872,13 @@ static int vd_compute(int slot, void *user, void *res, IcoVdKey *key)
     int xb = 0;
 
     (void)user;
-    /* keyed by the settings it is judged under (the work's copy) */
+    /* keyed by the disc it is judged under (the work's copy) */
     if (vd_key_file(slot, key) != 0 ||
         ico_state_slot_path(path, sizeof path, s_dir, slot, ".ics") != 0 ||
         ico_state_file_read_header(path, &h) != ICO_STATE_OK) {
         return -1;
     }
-    key->keys = now->settings_hash;
+    key->keys = vd_judged_under(now);
     t0 = ico_thread_now_ms();
     s_legacy_ms = 0;
     out->exact = ico_state_header_check(&h, now, out->detail, sizeof out->detail);
@@ -2946,11 +2962,11 @@ static IcoVerdicts *vd(void)
 }
 
 /* The header copy the work reads, renewed under the work lock when the
-   settings (or the disc) changed.  A load waits for the worker's slot to
-   renew it (wait); the listing never waits: while the worker runs, the
-   verdicts it stores carry the settings they were judged under, which the
-   live key no longer matches, so they are judged again (state_verdicts.h
-   keys), never used. */
+   disc changed (the settings no longer decide a verdict).  A load waits for
+   the worker's slot to renew it (wait); the listing never waits: while the
+   worker runs, the verdicts it stores carry the disc they were judged
+   under, which the live key no longer matches, so they are judged again
+   (state_verdicts.h keys), never used. */
 static void vd_refresh_now(int wait)
 {
     const IcoStateHeader *h;
@@ -2959,8 +2975,7 @@ static void vd_refresh_now(int wait)
         return;
     }
     h = now_header();
-    if (h->settings_hash == s_vd_now.settings_hash &&
-        strncmp(h->disc, s_vd_now.disc, sizeof h->disc) == 0) {
+    if (strncmp(h->disc, s_vd_now.disc, sizeof h->disc) == 0) {
         return;
     }
     if (!wait && ico_vd_running(s_vd)) {
@@ -2969,8 +2984,7 @@ static void vd_refresh_now(int wait)
     ico_vd_lock_work(s_vd);
     s_vd_now = *h;
     ico_vd_unlock_work(s_vd);
-    fprintf(stderr, "state: the slots' verdicts are judged under the settings now (%016llx)\n",
-            (unsigned long long)h->settings_hash);
+    fprintf(stderr, "state: the slots' verdicts are judged for the disc now (%.16s)\n", h->disc);
 }
 
 typedef struct VdTake {
@@ -3267,6 +3281,28 @@ static int keep_code_numbers(int slot, const IcoStateHeader *saved, const Copy *
     return 0;
 }
 
+/* After a state's restore (perform_load, never on the checkpoint's way): it
+   loads under this run's settings (sim_keys.h IcoSimKeyCarry), so what the
+   restore put back of the saving run's settings is set to this run's again,
+   each part logging what it changed: the global variants' debug switches,
+   the doorway fix's grace, the hold type, the game's language and the Debug
+   menu.  The 50/60 Hz mode is the one setting a state keeps: its own runs
+   until the next start, config.toml untouched. */
+static void settings_loaded(int slot, const char *saved_keys)
+{
+    const int boot_pal = ico_boot_video_mode();
+
+    (void)ico_variants_state_loaded();
+    (void)ico_door_grace_state_loaded();
+    (void)ui_settings_reapply_after_state_load(saved_keys);
+    if ((systemStatus[0] != 0) != (boot_pal != 0)) {
+        fprintf(stderr,
+                "state: slot %d runs at %d Hz as it was saved; the video mode set (%d Hz) applies "
+                "from the next start (config.toml unchanged)\n",
+                slot, systemStatus[0] != 0 ? 50 : 60, boot_pal != 0 ? 50 : 60);
+    }
+}
+
 /* A load the exact path refused: the checkpoint's way where
    ico_ckpt_route says so, else the refusal as before.  saved: the state's
    header, NULL when it could not be read. */
@@ -3371,38 +3407,12 @@ static void perform_load(int slot)
         log_fresh_blocks(slot, &xv);
     }
     {
-        char keys[256];
-        const int nk = ico_state_keys_absent(saved.keys, s_now.keys, keys, sizeof keys);
+        /* a state is never refused for a setting: the ones that differ,
+           named once (state_rules.h); it loads under this run's */
+        char line[ICO_STATE_KEYS_MAX + 160];
 
-        if (nk > 0) {
-            fprintf(stderr,
-                    "state: slot %d was saved before the setting%s %s existed: read as %s default, "
-                    "which %s now\n",
-                    slot, nk > 1 ? "s" : "", keys, nk > 1 ? "their" : "its",
-                    nk > 1 ? "they have" : "it has");
-        }
-    }
-    {
-        char keys[256];
-        const int nd = ico_state_keys_defaulted(saved.keys, s_now.keys, keys, sizeof keys);
-
-        if (nd > 0) {
-            fprintf(stderr,
-                    "state: slot %d was saved with the setting%s %s unset and %s written as %s "
-                    "default now, or the other way round: the same setting%s\n",
-                    slot, nd > 1 ? "s" : "", keys, nd > 1 ? "they are" : "it is",
-                    nd > 1 ? "their" : "its", nd > 1 ? "s" : "");
-        }
-    }
-    {
-        char keys[ICO_STATE_KEYS_MAX];
-        const int nr = ico_state_keys_retired(saved.keys, s_now.keys, keys, sizeof keys);
-
-        if (nr > 0) {
-            fprintf(stderr,
-                    "state: slot %d lists %d difficulty row%s among its settings (made before they "
-                    "were its own block): not compared: %s\n",
-                    slot, nr, nr > 1 ? "s" : "", keys);
+        if (ico_state_settings_line(slot, saved.keys, s_now.keys, line, sizeof line) > 0) {
+            fprintf(stderr, "%s\n", line);
         }
     }
     t0 = ico_thread_now_ms();
@@ -3659,6 +3669,7 @@ static void perform_load(int slot)
                        : "the state's record");
         ico_difficulty_state_loaded(absent, saved.keys);
     }
+    settings_loaded(slot, saved.keys);
     ico_ach_host_state_loaded(ico_host_main_ticks());
     ico_input_record_state_loaded(slot, ico_host_main_ticks());
     ico_fpenv_sim_enter();
@@ -3770,7 +3781,7 @@ void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
 {
     static IcoStateSlotInfo cache[ICO_STATE_SLOTS];
     static unsigned cache_gen = ~0u, cache_vd = ~0u;
-    static uint64_t cache_keys;
+    static uint64_t cache_disc;
     const IcoStateHeader *now;
     unsigned vd_gen;
 
@@ -3782,7 +3793,7 @@ void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
     now = now_header();
     vd_refresh_now(0);
     vd_gen = vd() != NULL ? ico_vd_gen(s_vd) : 0;
-    if (cache_gen != s_list_gen || cache_keys != now->settings_hash || cache_vd != vd_gen) {
+    if (cache_gen != s_list_gen || cache_disc != vd_judged_under(now) || cache_vd != vd_gen) {
         int i, pending = 0;
 
         ico_state_list_dir(ico_state_dir(), now, cache);
@@ -3821,7 +3832,7 @@ void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
             }
         }
         cache_gen = s_list_gen;
-        cache_keys = now->settings_hash;
+        cache_disc = vd_judged_under(now);
         cache_vd = vd() != NULL ? ico_vd_gen(s_vd) : 0;
     }
     memcpy(out, cache, sizeof cache);

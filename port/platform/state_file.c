@@ -284,79 +284,11 @@ void ico_state_set_key_retired(IcoStateKeyRetiredFn fn)
     s_key_retired = fn;
 }
 
-int ico_state_keys_retired(const char *saved, const char *now, char *out, size_t size)
-{
-    const char *line = saved != NULL ? saved : "";
-    size_t at = 0;
-    int count = 0;
-
-    if (out != NULL && size > 0) {
-        out[0] = '\0';
-    }
-    while (*line != '\0') {
-        const char *end = strchr(line, '\n');
-        const size_t len = end != NULL ? (size_t)(end - line) : strlen(line);
-        const char *eq = memchr(line, '=', len);
-        const char *v;
-        size_t vn;
-
-        if (eq != NULL && s_key_retired != NULL && s_key_retired(line, (size_t)(eq - line)) &&
-            key_value(now != NULL ? now : "", line, (size_t)(eq - line), &v, &vn) != 0) {
-            if (out != NULL && at + 1 < size) {
-                const int w =
-                    snprintf(out + at, size - at, "%s%.*s", count > 0 ? ", " : "", (int)len, line);
-
-                at = w < 0 ? at : at + (size_t)w < size ? at + (size_t)w : size - 1;
-            }
-            count++;
-        }
-        if (end == NULL) {
-            break;
-        }
-        line = end + 1;
-    }
-    return count;
-}
-
-int ico_state_keys_absent(const char *saved, const char *now, char *out, size_t size)
-{
-    const char *line = now != NULL ? now : "";
-    size_t at = 0;
-    int count = 0;
-
-    if (out != NULL && size > 0) {
-        out[0] = '\0';
-    }
-    while (*line != '\0') {
-        const char *end = strchr(line, '\n');
-        const size_t len = end != NULL ? (size_t)(end - line) : strlen(line);
-        const char *eq = memchr(line, '=', len);
-        const char *v;
-        size_t vn;
-
-        if (eq != NULL &&
-            key_value(saved != NULL ? saved : "", line, (size_t)(eq - line), &v, &vn) != 0) {
-            if (out != NULL && at + 1 < size) {
-                const int w = snprintf(out + at, size - at, "%s%.*s", count > 0 ? ", " : "",
-                                       (int)(eq - line), line);
-
-                at = w < 0 ? at : at + (size_t)w < size ? at + (size_t)w : size - 1;
-            }
-            count++;
-        }
-        if (end == NULL) {
-            break;
-        }
-        line = end + 1;
-    }
-    return count;
-}
-
 /* 1 when the two values (va, na) and (vb, nb) of one key are written
    differently but both mean its default (s_key_default): unset ("") on one
    side, the default's text on the other (issue 218: opening the Debug menu
-   writes gameplay.developer_mode = false, and a state saved while the key
-   was unset was refused as "settings differ") */
+   writes gameplay.developer_mode = false while the state was saved with the
+   key unset) */
 static int same_default(const char *key, size_t key_n, const char *va, size_t na, const char *vb,
                         size_t nb)
 {
@@ -364,63 +296,51 @@ static int same_default(const char *key, size_t key_n, const char *va, size_t na
            s_key_default(key, key_n, va, na) && s_key_default(key, key_n, vb, nb);
 }
 
-int ico_state_keys_defaulted(const char *saved, const char *now, char *out, size_t size)
+/* one difference appended to out as ", " + the formatted text (cut at the
+   buffer's end, NUL-terminated); *at the text's length so far */
+static void diff_add(char *out, size_t size, size_t *at, int count, const char *fmt, ...)
+    __attribute__((format(printf, 5, 6)));
+
+static void diff_add(char *out, size_t size, size_t *at, int count, const char *fmt, ...)
 {
-    const char *line = now != NULL ? now : "";
+    va_list ap;
+    int w;
+
+    if (out == NULL || *at + 1 >= size) {
+        return;
+    }
+    if (count > 0) {
+        w = snprintf(out + *at, size - *at, ", ");
+        *at = w < 0 ? *at : *at + (size_t)w < size ? *at + (size_t)w : size - 1;
+        if (*at + 1 >= size) {
+            return;
+        }
+    }
+    va_start(ap, fmt);
+    w = vsnprintf(out + *at, size - *at, fmt, ap);
+    va_end(ap);
+    *at = w < 0 ? *at : *at + (size_t)w < size ? *at + (size_t)w : size - 1;
+}
+
+int ico_state_keys_diff(const char *saved, const char *now, char *out, size_t size)
+{
     size_t at = 0;
     int count = 0;
+    int pass;
 
     if (out != NULL && size > 0) {
         out[0] = '\0';
     }
-    while (*line != '\0') {
-        const char *end = strchr(line, '\n');
-        const size_t len = end != NULL ? (size_t)(end - line) : strlen(line);
-        const char *eq = memchr(line, '=', len);
-        const char *v;
-        size_t vn;
-
-        if (eq != NULL &&
-            key_value(saved != NULL ? saved : "", line, (size_t)(eq - line), &v, &vn) == 0 &&
-            same_default(line, (size_t)(eq - line), eq + 1, len - (size_t)(eq - line) - 1, v, vn)) {
-            if (out != NULL && at + 1 < size) {
-                const int w = snprintf(out + at, size - at, "%s%.*s", count > 0 ? ", " : "",
-                                       (int)(eq - line), line);
-
-                at = w < 0 ? at : at + (size_t)w < size ? at + (size_t)w : size - 1;
-            }
-            count++;
-        }
-        if (end == NULL) {
-            break;
-        }
-        line = end + 1;
-    }
-    return count;
-}
-
-/* the first key of `now` whose value differs in `saved` (or a key only one
-   of them has): 1 and out = "key=saved (now cur)", else 0.  A key only
-   `now` lists whose value there is its default (s_key_default) is equal:
-   *absent counts those.  A key only `saved` lists that this version
-   retired (s_key_retired: a setting that became part of what a state
-   carries itself) is passed over whatever its value: *absent counts those
-   too.  A key both list, unset on one side and at its default's text on the
-   other (same_default), is equal and counted there as well: the two texts
-   and hashes differ by those lines, so the saved text must then be whole
-   (header_check) */
-static int keys_first_diff(const char *saved, const char *now, char *out, size_t size, int *absent)
-{
-    int pass;
-
-    *absent = 0;
-
+    saved = saved != NULL ? saved : "";
+    now = now != NULL ? now : "";
     for (pass = 0; pass < 2; pass++) {
+        /* pass 0 reads `now` (every key this run lists, in its order), pass
+           1 `saved` for the keys only the state lists */
         const char *a = pass == 0 ? now : saved;
         const char *b = pass == 0 ? saved : now;
         const char *line = a;
 
-        while (line != NULL && *line != '\0') {
+        while (*line != '\0') {
             const char *end = strchr(line, '\n');
             const size_t len = end != NULL ? (size_t)(end - line) : strlen(line);
             const char *eq = memchr(line, '=', len);
@@ -433,46 +353,37 @@ static int keys_first_diff(const char *saved, const char *now, char *out, size_t
                 size_t nb;
 
                 if (key_value(b, line, key_n, &vb, &nb) != 0) {
-                    /* a key only this run lists (a later version's) at its
-                       default: the state was made at that default */
-                    if (pass == 0 && s_key_default != NULL && s_key_default(line, key_n, va, na)) {
-                        (*absent)++;
-                        line = end != NULL ? end + 1 : NULL;
-                        continue;
-                    }
-                    /* a key only the state lists that this version
-                       retired: the state's own block holds what it set */
-                    if (pass == 1 && s_key_retired != NULL && s_key_retired(line, key_n)) {
-                        (*absent)++;
-                        line = end != NULL ? end + 1 : NULL;
-                        continue;
-                    }
-                    /* a key only one side lists */
                     if (pass == 0) {
-                        snprintf(out, size, "%.*s=(absent) (now %.*s)", (int)key_n, line, (int)na,
-                                 va);
-                    } else {
-                        snprintf(out, size, "%.*s=%.*s (now absent)", (int)key_n, line, (int)na,
-                                 va);
+                        /* a key a later version added: the state was made
+                           at its default, equal while it is at its default
+                           now */
+                        if (s_key_default == NULL || !s_key_default(line, key_n, va, na)) {
+                            diff_add(out, size, &at, count, "%.*s=(absent) (now %.*s)", (int)key_n,
+                                     line, (int)na, va);
+                            count++;
+                        }
+                    } else if (s_key_retired == NULL || !s_key_retired(line, key_n)) {
+                        /* a key this version does not list and did not
+                           retire (a retired one is the state's own block) */
+                        diff_add(out, size, &at, count, "%.*s=%.*s (now absent)", (int)key_n, line,
+                                 (int)na, va);
+                        count++;
                     }
-                    return 1;
-                }
-                if (same_default(line, key_n, va, na, vb, nb)) {
-                    (*absent)++;
-                    line = end != NULL ? end + 1 : NULL;
-                    continue;
-                }
-                if (na != nb || memcmp(va, vb, na) != 0) {
-                    /* pass 0 reads `now` first: put the saved value first */
-                    snprintf(out, size, "%.*s=%.*s (now %.*s)", (int)key_n, line, (int)nb, vb,
-                             (int)na, va);
-                    return 1;
+                } else if (pass == 0 && (na != nb || memcmp(va, vb, na) != 0) &&
+                           !same_default(line, key_n, va, na, vb, nb)) {
+                    /* the saved value first */
+                    diff_add(out, size, &at, count, "%.*s=%.*s (now %.*s)", (int)key_n, line,
+                             (int)nb, vb, (int)na, va);
+                    count++;
                 }
             }
-            line = end != NULL ? end + 1 : NULL;
+            if (end == NULL) {
+                break;
+            }
+            line = end + 1;
         }
     }
-    return 0;
+    return count;
 }
 
 static void say(char *detail, size_t n, const char *fmt, const char *s)
@@ -482,6 +393,9 @@ static void say(char *detail, size_t n, const char *fmt, const char *s)
     }
 }
 
+/* the platform, the build and the disc: a state is never refused for a
+   setting (the keys text and settings_hash are still written, for older
+   versions' checks and the load's log line, ico_state_keys_diff) */
 static IcoStateResult header_check(const IcoStateHeader *saved, const IcoStateHeader *now,
                                    char *detail, size_t n, int build)
 {
@@ -498,34 +412,6 @@ static IcoStateResult header_check(const IcoStateHeader *saved, const IcoStateHe
     if (strncmp(saved->disc, now->disc, sizeof saved->disc) != 0) {
         say(detail, n, "%s", saved->disc);
         return ICO_STATE_OTHER_DISC;
-    }
-    {
-        char none[1];
-        int absent = 0;
-
-        if (keys_first_diff(saved->keys, now->keys, detail != NULL && n > 0 ? detail : none,
-                            detail != NULL && n > 0 ? n : sizeof none, &absent)) {
-            return ICO_STATE_OTHER_SETTINGS;
-        }
-        if (absent > 0) {
-            /* a later version's keys at their defaults, an earlier
-               version's keys this one retired, or a key at its default
-               written as "" on one side: the two hashes differ by
-               those lines, so the saved text must be the whole of what its
-               hash covered (not cut, not damaged) */
-            const char *z = (const char *)memchr(saved->keys, '\0', sizeof saved->keys);
-
-            if (z == NULL ||
-                xxh3_64(saved->keys, (size_t)(z - saved->keys)) != saved->settings_hash) {
-                say(detail, n, "%s", "the settings differ");
-                return ICO_STATE_OTHER_SETTINGS;
-            }
-            return ICO_STATE_OK;
-        }
-    }
-    if (saved->settings_hash != now->settings_hash) {
-        say(detail, n, "%s", "the settings differ");
-        return ICO_STATE_OTHER_SETTINGS;
     }
     return ICO_STATE_OK;
 }

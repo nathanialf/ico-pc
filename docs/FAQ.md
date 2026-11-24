@@ -41,7 +41,7 @@ also zooms back out by itself when a cutscene takes over or the game zooms
 the camera itself, and when you go into another room. **Hold** is the
 game's own way. The row shows from the title screen and the pause menu, on
 every disc, and it is kept in your settings. A save state made with the
-other Zoom type will not load until you set it back, as with Hold type.
+other Zoom type loads with the one you have now.
 
 ## The camera is slow to come back to Ico
 
@@ -53,9 +53,7 @@ press of R3 (click the right stick in, or keyboard B) puts the camera right
 back on Ico. If you are still pushing the stick, the camera waits on Ico
 until you let go, so it does not swing straight back out. You can move R3 to
 another button under **Remap controls**. The touch screen has no R3 button.
-A save state made with Camera reset set the other way, and every save state
-made before the row existed, will not load while it is on; turn it off to
-load those.
+Save states load whichever way it is set.
 
 ## The on-screen buttons are in my way
 

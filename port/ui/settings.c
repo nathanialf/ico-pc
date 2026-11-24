@@ -48,6 +48,7 @@
 #include "settings_upscale.h"    /* the Upscaling rows: FSR 3.1, quality */
 #include "settings_pads.h"       /* Controls > Button pictures */
 #include "settings_step.h"       /* held Left/Right, L1/R1 */
+#include "sim_keys.h"            /* a loaded state's keys (reapply after a load) */
 #include "touch_edit_ui.h"       /* the Edit layout page */
 #include "variants.h"            /* the game variants rows (Gameplay and its pages) */
 #include "ui_hint.h"
@@ -70,9 +71,10 @@ extern PadState pad[16];
 extern int NonLinearCameraMove; /* the language, 2..6 */
 extern int systemStatus[12];    /* [0]: 1 PAL 50 Hz, 0 60 Hz */
 extern int gFlagGameClear;
-extern int stage_no;             /* common/src/main.c: the stage running, 1 the title */
-extern int gsResetFunc(int val); /* debug.c: gsb_Init, the boot screen's reset */
-extern void CUR_SE(void);        /* layout_action.c: the menus' sounds */
+extern int stage_no;              /* common/src/main.c: the stage running, 1 the title */
+extern int gsResetFunc(int val);  /* debug.c: gsb_Init, the boot screen's reset */
+extern void debug_Menu_off(void); /* debug.c: the Debug menu closed (developer mode's) */
+extern void CUR_SE(void);         /* layout_action.c: the menus' sounds */
 extern void POSITIVE_SE(void);
 extern void NEGATIVE_SE(void);
 extern void la_host_leave(void); /* layout_action.c (ICO_HOST) */
@@ -1331,6 +1333,44 @@ void ui_settings_apply_language(void)
         s_loggedWordsLang = wordsLang;
     }
     ui_set_menu_words_language(wordsLang);
+}
+
+int ui_settings_reapply_after_state_load(const char *saved_keys)
+{
+    char dev[8];
+    int changed = 0;
+
+    if (optionControlType != ico_opt_hold_type()) {
+        fprintf(stderr,
+                "settings: after the load the hold type is this run's %s again (the "
+                "state had %s)\n",
+                ico_opt_hold_type() == ICO_HOLD_TOGGLE ? "B" : "A",
+                optionControlType == ICO_HOLD_TOGGLE ? "B" : "A");
+        applyHoldType();
+        changed |= UI_REAPPLY_HOLD_TYPE;
+    }
+    if (gameLanguage() >= 0 && gameLanguage() != ico_boot_language()) {
+        /* the Language row's way: the game's text and subtitles follow at
+           their next load, the port's words at once */
+        fprintf(stderr,
+                "settings: after the load the game's language is this run's %d again (the "
+                "state had %d)\n",
+                ico_boot_language(), gameLanguage());
+        setGameLanguage(ico_boot_language());
+        ui_settings_apply_language();
+        changed |= UI_REAPPLY_LANGUAGE;
+    }
+    if (!ico_opt_developer_mode() &&
+        ico_sim_keys_value(saved_keys, "gameplay.developer_mode", dev, sizeof dev) &&
+        strcmp(dev, "true") == 0) {
+        /* debug_Menu runs only in developer mode (main.c): a menu the state
+           left open would come back with it */
+        debug_Menu_off();
+        fprintf(stderr, "settings: after the load developer mode is off in this run: the Debug "
+                        "menu is closed\n");
+        changed |= UI_REAPPLY_DEBUG_MENU;
+    }
+    return changed;
 }
 
 static const char *languageName(int game)

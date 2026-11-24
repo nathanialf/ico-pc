@@ -241,6 +241,14 @@ int soundSeDefPlay(int no, unsigned int a, float *b, int c)
 
 void gflagInit(void) {}
 
+/* debug.c's Debug menu closed (settings.c after a state load) */
+int s_menuOffs;
+
+void debug_Menu_off(void)
+{
+    s_menuOffs++;
+}
+
 void debug_StdPrintfDummy(const char *fmt, ...)
 {
     (void)fmt;

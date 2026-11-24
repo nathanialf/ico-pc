@@ -29,15 +29,21 @@
 # symbols of the game's data and bss and the arena's first ten differing
 # ranges. The dumps are deleted when the test passes.
 #
-# MODE settings (state_roundtrip_headless_settings): a first run saves
-# slot 1 at 440 as above and stops at 460; its states folder is copied
-# into a second run's folder whose config.toml also sets
-# [gameplay] door_fix = true, a simulation key (port/platform/sim_keys.c;
-# until v0.11.3 this was yorda_safe, now a difficulty row each state carries
-# in its own block, which no longer refuses a load), and that run loads
-# slot 1 at tick 600. Passes when the second log shows
-# "state: refused load slot 1: settings differ: gameplay.door_fix=...",
-# no "state: loaded" and the run to its last tick (the game went on).
+# MODE settings (state_roundtrip_headless_settings): a first run whose
+# config.toml also sets [gameplay] hold_type = "toggle" and [variants]
+# ignore_cutscene_cameras = true (two simulation keys,
+# port/platform/sim_keys.c, whose values the restore puts back into the
+# game) saves slot 1 at 440 as above and stops at 460; its states folder is
+# copied into a second run's folder without those two lines, and that run
+# loads slot 1 at tick 600. A state is never refused for a setting: it
+# loads under this run's. Passes when the second log shows the one line
+# naming both ("state: slot 1 was saved with other settings
+# (...gameplay.hold_type=toggle (now ...), ...variants.ignore_cutscene_
+# cameras=true (now ...)...): it loads under this run's"), "state: loaded
+# slot 1", the two fix-ups ("settings: after the load the hold type is this
+# run's A again (the state had B)", "variants: after the load
+# ignore_demo_camera 1 -> ..."), no "state: refused" and the run to its
+# last tick.
 #
 # Skipped without the disc image and on a sanitizer build (save states are
 # off there by design, port/game/state_host.c).
@@ -189,9 +195,11 @@ if(MODE STREQUAL "roundtrip")
     endif()
     message("${_name}: ${_saved}\n${_loaded}\n${_h1} (twice)\n${_masked}")
 else()
-    # the save: the first run stops 20 ticks after it
+    # the save: the first run, with two simulation keys set, stops 20
+    # ticks after it
     math(EXPR _stop "${_save} + 20")
-    state_run("${DIR}/save" "state_save_at=${_save}:1\n" "${_config}" ${_stop} _text1)
+    set(_keys "[gameplay]\nhold_type = \"toggle\"\n[variants]\nignore_cutscene_cameras = true\n")
+    state_run("${DIR}/save" "state_save_at=${_save}:1\n" "${_config}${_keys}" ${_stop} _text1)
     set(_log1 "${DIR}/save/logs/ico-pc.log")
     state_common("${_text1}" "${_log1}" _bad)
     string(REGEX MATCH "state: saved slot 1 \\([^\n]*" _saved "${_text1}")
@@ -202,25 +210,50 @@ else()
     if(_bad)
         message(FATAL_ERROR "${_name}: ${_bad}")
     endif()
-    # the load: the same folder of states, one simulation key changed
+    # the load: the same folder of states, the two keys at this run's
+    # (their defaults)
     file(MAKE_DIRECTORY "${DIR}/load")
     file(COPY "${DIR}/save/states" DESTINATION "${DIR}/load")
-    state_run("${DIR}/load" "state_load_at=600:1\n" "${_config}[gameplay]\ndoor_fix = true\n"
-              660 _text2)
+    state_run("${DIR}/load" "state_load_at=600:1\n" "${_config}" 660 _text2)
     set(_log2 "${DIR}/load/logs/ico-pc.log")
     state_common("${_text2}" "${_log2}" _bad)
-    string(REGEX MATCH "state: refused load slot 1: settings differ: gameplay\\.door_fix=[^\n]*"
-           _refused "${_text2}")
-    if(NOT _refused)
-        string(REGEX MATCH "state: refused load slot 1[^\n]*" _r "${_text2}")
-        string(APPEND _bad "\n  no \"state: refused load slot 1: settings differ:"
-               " gameplay.door_fix=...\" line ${_r}")
+    string(REGEX MATCH "state: slot 1 was saved with other settings \\([^\n]*: it loads under this run's"
+           _differ "${_text2}")
+    if(NOT _differ)
+        string(APPEND _bad "\n  no \"state: slot 1 was saved with other settings (...): it loads"
+               " under this run's\" line")
+    else()
+        if(NOT _differ MATCHES "gameplay\\.hold_type=toggle \\(now ")
+            string(APPEND _bad "\n  the settings line does not name gameplay.hold_type: ${_differ}")
+        endif()
+        if(NOT _differ MATCHES "variants\\.ignore_cutscene_cameras=true \\(now ")
+            string(APPEND _bad "\n  the settings line does not name"
+                   " variants.ignore_cutscene_cameras: ${_differ}")
+        endif()
     endif()
-    if(_text2 MATCHES "state: loaded slot")
-        string(APPEND _bad "\n  the second run loaded the state")
+    string(REGEX MATCH "state: loaded slot 1 \\(saved at Main tick ([0-9]+)[^\n]*" _loaded
+           "${_text2}")
+    if(NOT _loaded)
+        string(APPEND _bad "\n  no \"state: loaded slot 1\" line")
     endif()
+    string(REGEX MATCH "settings: after the load the hold type is this run's A again \\(the state had B\\)"
+           _hold "${_text2}")
+    if(NOT _hold)
+        string(APPEND _bad "\n  no \"settings: after the load the hold type is this run's A again"
+               " (the state had B)\" line")
+    endif()
+    string(REGEX MATCH "variants: after the load ignore_demo_camera 1 -> [0-9]+[^\n]*" _switch
+           "${_text2}")
+    if(NOT _switch)
+        string(APPEND _bad "\n  no \"variants: after the load ignore_demo_camera 1 -> ...\" line")
+    endif()
+    string(REGEX MATCHALL "state: refused [^\n]*" _refused "${_text2}")
+    foreach(_r IN LISTS _refused)
+        string(APPEND _bad "\n  ${_r}")
+    endforeach()
     if(_bad)
         message(FATAL_ERROR "${_name}: ${_bad}\n(logs: ${_log1}, ${_log2})")
     endif()
-    message("${_name}: ${_saved}\n${_refused}; the run went on to its last tick")
+    message("${_name}: ${_saved}\n${_differ}\n${_loaded}\n${_hold}\n${_switch}\nthe run went on to"
+            " its last tick")
 endif()

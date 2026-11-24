@@ -430,6 +430,41 @@ void ico_variants_apply(void)
             kChain[s_value[ICO_VARIANT_CHAIN_SWING_DAMPING]], sw);
 }
 
+int ico_variants_state_loaded(void)
+{
+    /* the switches of the global variants (the difficulty rows' switches
+       follow the state's own record, ico_variants_apply) */
+    static const int kGlobal[] = {DBG_IGNORE_DEMO_CAMERA, DBG_HAND_CAMERA, DBG_CHAIN_CYCLE,
+                                  DBG_CHAIN_SLOW};
+    int changed = 0;
+
+    load();
+    for (size_t k = 0; k < sizeof kGlobal / sizeof kGlobal[0]; k++) {
+        const int i = kGlobal[k];
+        const int w = dbg_wanted(i);
+        /* this run's: the variant's value, or the game's own as this run
+           had it (s_dbg_base: never the restored value, which is the
+           saving run's) */
+        const int to = w >= 0 ? w : s_dbg_base[i];
+        int was;
+
+        if (s_dbg[i] == NULL) {
+            continue;
+        }
+        was = *s_dbg[i];
+        s_dbg_held[i] = w >= 0;
+        if (was != to) {
+            *s_dbg[i] = to;
+            changed++;
+            fprintf(stderr,
+                    "variants: after the load %s %d -> %d (%s in this run; the state was saved "
+                    "with another value)\n",
+                    kDbgNames[i], was, to, w >= 0 ? "its variant's value" : "the game's own value");
+        }
+    }
+    return changed;
+}
+
 void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
                              int *ignore_demo_camera, int *hand_camera, void (*menu_open)(void))
 {

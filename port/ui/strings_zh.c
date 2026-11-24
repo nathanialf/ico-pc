@@ -778,7 +778,6 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_STATES_PAUSE_FIRST_LOAD] = "請先暫停遊戲再讀取這個狀態",
     [UI_STR_STATES_REFUSED_BUILD] = "由其他版本的遊戲儲存",
     [UI_STR_STATES_REFUSED_DISC] = "從其他光碟儲存",
-    [UI_STR_STATES_REFUSED_SETTINGS] = "有一項遊戲設定不同：%s",
     [UI_STR_STATES_REFUSED_BUSY] = "現在無法執行：遊戲正在讀取或儲存",
     [UI_STR_STATES_REFUSED_CHECK] = "無法讀取，遊戲繼續進行",
     [UI_STR_STATES_OFF] = "這個版本已關閉存檔狀態",

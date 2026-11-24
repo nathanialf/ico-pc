@@ -7,7 +7,7 @@
  * Without the game: the work is a callback, the file's identity another.
  *
  * Each slot has at most one result, kept with the key it was worked out
- * for (the file's size and time, the settings' hash).  ico_vd_list (the
+ * for (the file's size and time, what it is judged under).  ico_vd_list (the
  * listing, the game thread) never waits: a fresh result is copied out, a
  * missing or stale one is queued and ico_vd_kick starts the worker on the
  * queue.  ico_vd_with (a load) waits while the worker is on that slot,
@@ -31,14 +31,14 @@ typedef struct IcoVdKey {
     unsigned long long size;
     long long mtime;
     uint64_t file; /* the file's own identity (state_host.c: its header's build id and commit) */
-    uint64_t keys; /* the settings it is judged under */
+    uint64_t keys; /* what it is judged under (state_host.c: the disc running) */
 } IcoVdKey;
 
 typedef struct IcoVdOps {
     /* works slot out into result (result_bytes, zeroed first); *key the key
        it was worked out for; 0, or -1 when there is nothing (no file) */
     int (*compute)(int slot, void *user, void *result, IcoVdKey *key);
-    /* the slot's key now (a stat and the settings): 0, or -1 (no file) */
+    /* the slot's key now (a stat and what it is judged under): 0, or -1 (no file) */
     int (*key_now)(int slot, void *user, IcoVdKey *key);
     /* frees what result owns (may be NULL) */
     void (*release)(void *result, void *user);

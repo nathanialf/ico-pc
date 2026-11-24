@@ -21,7 +21,8 @@
  * (the game's own rule); every other floor works as in the game.  Scripted stage
  * changes never arm it, and an arm is used up by the next stage start.
  *
- * Pure state: no game headers, game frames only, nothing enters a save.
+ * Pure state: no game headers, game frames only; the arm and the grace are
+ * save state blocks (door_grace.c), ended at a load when the option is off.
  */
 #ifndef ICO_PORT_GAME_DOOR_GRACE_H
 #define ICO_PORT_GAME_DOOR_GRACE_H
@@ -43,5 +44,10 @@ void ico_door_grace_tick(void);
 int ico_door_grace_holds(int dest_stage);
 /* No arm, no grace */
 void ico_door_grace_reset(void);
+/* A save state was loaded (state_host.c perform_load; the state's arm and
+   grace are its blocks): with the option off now, a grace it carries ends
+   (ico_door_grace_reset) and is logged; 1 then, else 0 (a pending arm alone
+   begins nothing while the option is off). */
+int ico_door_grace_state_loaded(void);
 
 #endif /* ICO_PORT_GAME_DOOR_GRACE_H */
