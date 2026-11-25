@@ -15,7 +15,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | `port/game/door_grace.h`, `door_grace.c` | the doorway fix's arm and arrival grace |
 | `port/game/zoom_toggle.h`, `zoom_toggle.c` | Zoom type's latch and its save-state block ([Zoom type](#zoom-type)) |
 | `port/game/camera_reset.h`, `camera_reset.c` | Camera reset's press, its stick mute and its save-state block ([Camera reset](#camera-reset)) |
-| `port/game/yorda_look.h`, `yorda_look.c` | Look at Yorda's press, toggle, end rules and save-state block ([Look at Yorda](#look-at-yorda)) |
+| `port/game/yorda_look.h`, `yorda_look.c`, `yorda_look_live.c` | Look at Yorda's press, toggle, end rules and save-state block; its game side ([Look at Yorda](#look-at-yorda)) |
 | `port/game/no_shadows.h`, `no_shadows.c` | No Shadows' counters and log lines for its game-side hooks ([No Shadows](#no-shadows)) |
 | `port/game/ico_rows.h`, `ico_rows.c` | Developer > Free movement and the Ask Yorda for a hint binding: the row's value (Developer mode ANDed in), the hint button's press latch |
 | `port/game/yorda_trip.h`, `yorda_trip.c`, `yorda_trip_live.c`, `yorda_trip_source.c` | Yorda trips: the rule (the main gate scene's 3 s count), the game's side (the stage load's motions, the run-pulled tick), her fall's motions read from the disc |
@@ -75,7 +75,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
 | `[gameplay] zoom_type` | `zoom_toggle.c`, from `camera-root.c` and `camera-ico2.c` |
 | `[gameplay] camera_reset` | `camera_reset.c`, from `camera-ico2.c` |
-| `[gameplay] yorda_look` | `yorda_look.c`, from `boyact.c` |
+| `[gameplay] yorda_look` | `yorda_look.c`, from `yorda_look_live.c` (`trace_host.c`) |
 | `[variants] *` (Gameplay, Gameplay > Chains, Gameplay > Cutscenes, the Debug menu; the ten difficulty rows are the journey's record, read through `variants.c`) | `port/game/variants.c`; the game hooks in `debug.c`, `enemy.c`, `enemy_act.c`, `queen.c`, `lws_kyomi.c`, `girl.c`, `commonact.c`, `boyact.c`, `weapon.c` ([Game variants](#game-variants)); `settings.c` (the Debug menu row); `gamestate.c` (the achievements rule) |
 | `[gameplay] mirror` | `pad_host.c`, `audio_host.c`, rd, `photo_ui.c` |
 | `[developer] free_movement` | `boyact.c` (the four boy control loops), `gamestate.c` |
@@ -534,43 +534,69 @@ rules; `options_<slug>` the hooks (a text scan).
 `[gameplay] yorda_look` is `"off"` (the default on every disc: the game as shipped), `"hold"` or
 `"toggle"`; another word reads as off, logged once, and the value in force is logged when it
 changes (`options: look at yorda <off|hold|toggle>`). The boy's per-tick `subBoyCollision`
-(`ico2/fumi/src/boyact.c`: the European body and `_ntsc`, `_jun26`, `_aug6`) runs the call's look:
-while the call wish is up (the wish bits R1 sets, `act-wish.c`) it turns his head to Yorda
-(`_ACTLookTarget_Set(self, girlGObj, 0, 4, 2)`) and, when she was off the screen as the call began
-(`girlLookInScreen`) and the stage's script allows the call camera (`flags20` bit 23 on the European
-body, 12 on the North American disc, 9 on the August 2001 preview; the June 2001 demo has no such
-flag), makes the camera follow the boy and her together (`Camctrl_SetTarget(self, girlGObj, 1)`,
-or the script's own call-camera target when the script names one); the target holds only while it
-is asked for again each tick, so it drops back to the boy when the look ends (`Camctrl_Exec`, with
-the game's own cut back on the North American and 2001 discs, which passes `ico_video_camera_cut`
-as every cut back does). The call itself is elsewhere: the voice statuses and mail 0x3D (and its
-twins) to her are sent only from inside the call block, and her brain answers those. The port
-already had one look without a call there: the second player's R1 in two-player mode (her
-`flags20` bit 26 on the European body, her pad's R1 in the three twins). The hook ORs
-`ico_yorda_look(pad[0].now & 0x200, live, hand, stage_no)` (`port/game/yorda_look.c`, computed
-once at the top of the look block into a local) into that path's condition, and into the camera's
-`girlLookInScreen == 0` test (so the camera turns with her already on the screen, also during a
-call) and into the R1 test of the branch for her other stage (`girlGObj == 0`: the helper object at
-layout 4 placed along `GetOtherStageGirlOrient`, as R1 does there; never the weapon look, which
-needs R1). `live` is `IsAbleBoyControl() != 0 && ico_free_movement() == 0`, and on the European
-body also `boyPrivInsCamOff()` (its own cut to her capture is not running; a helper at the file's end,
-because naming `privInsCam` inside `subBoyCollision` moved it in the Android build's game data); `hand` is `ACTGame_FLAG_TETSUNAGI()`.
+(`ico2/fumi/src/boyact.c`: the European body and `_ntsc`, `_jun26`, `_aug6`, his collision thread)
+runs the call's look: while the call wish is up (the wish bits R1 sets, `act-wish.c`) it turns his
+head to Yorda (`_ACTLookTarget_Set(self, girlGObj, 0, 4, 2)`) and, when she was off the screen as
+the call began (`girlLookInScreen`) and the stage's script allows the call camera (`flags20` bit 23
+on the European body, 12 on the North American disc, 9 on the August 2001 preview; the June 2001
+demo has no such flag), makes the camera follow the boy and her together
+(`Camctrl_SetTarget(self, girlGObj, 1)`, or layout object 4 at the script's call-camera target when
+the script names one: bits 24-25, 13, 10); the target holds only while it is asked for again each
+tick, so it drops back to the boy when the look ends (`Camctrl_Exec`, with the game's own cut back
+on the North American and 2001 discs, which passes `ico_video_camera_cut` as every cut back does).
+Without her on the stage, R1 there moves layout object 4 toward her other stage
+(`GetOtherStageGirlOrient`) and puts the camera on it. The call itself is elsewhere: the voice
+statuses and mail 0x3D (and its twins) to her are sent only from inside the call block, and her
+brain answers those.
+
+The game's code is not changed for the look. A save state made in play holds the boy's collision
+thread paused inside `subBoyCollision`, and another version resumes such a frame only when that
+function's code hashes alike (`port/platform/state_xbuild.h`, units with a position); a hook inside
+it would send every in-play state made without the hook to its checkpoint. Instead
+`port/game/yorda_look_live.c` makes the look block's calls itself, from `ico_host_main_tick`
+(`port/platform/trace_host.c`, which `main.c` calls at the end of every Main pass, after
+`iosOmMain` and the draw lists, before the tick count moves). The camera takes a request in its
+next step (`SetCameraMatrix*`, an object function of the next pass's first phase: `Camctrl_Exec`,
+then `Camctrl_ExitNormal` drops it), the same step that takes the request the thread makes in the
+pass's second phase: no tick later and taken once. The head turn is cleared at the start of the
+boy's next frame (`ACTGame_BeforeFunc`), as the block's own is. The tick runs only on a pass in
+which the boy's objects ran (his `Act.frame`, which `BeforeFunc` counts under the same pause and
+active tests as his threads, moved since the last call), so a paused game, photo mode or a menu
+asks nothing and sees no L3. Its tests, per disc body: `live` is `IsAbleBoyControl() != 0`, his
+stick not locked by a script (the `flags18` bit `ACTCharctrl_Lock` clears and `subBoyControl`
+tests before it reads the pad: 48, 43 on the North American and August 2001 bodies, 42 on the June
+2001 one; R1 does nothing there either), `ico_free_movement() == 0` and `debug_camera_flag == 0`
+(both have their own L3), and on the European body `PrivInsCamChk() == 0` (boyact.c's accessor:
+its own cut to her capture is not running); `hand` is `ACTGame_FLAG_TETSUNAGI()`. When
+`ico_yorda_look(pad[0].now & 0x200, live, hand, stage_no)` answers 1: with her on the stage the
+head turn and, under the script's flag (always on the June 2001 demo), the camera on the boy and
+her or on the script's target, also with her already on the screen; without her and with R1 not
+held (R1 runs that branch itself), layout object 4 toward her other stage in that body's order of
+reads and the camera on it; never the weapon look, which needs R1. Not the same as a call made in
+the thread: the inputs are read at the pass's end instead of in the middle of its second phase, so
+a script that drops the camera to the boy later in the same phase (`Camctrl_ExitEveRock`) no
+longer cancels that one tick's request, and the helper at layout 4 is placed from the boy's root
+after his geometry ran.
+
 The module answers: Off, 0; not live or holding her hand, 0 (a toggle ends); Hold, the L3 level;
 Toggle, a latch a press (the level against the tick before) turns on and the next turns off. A
-toggle also ends on a new stage number and when Camera reset fires (`ico_yorda_look_drop`,
-`camera_reset.c`); a call (R1) leaves it on. With the Main tick clock as Camera reset's, a call
-whose tick does not follow the last one (after a pause, photo mode, a menu or a load) takes L3 as
-already held. No wish bit is set, no mail is sent, no ico2 global or static is added; the girl's
-brain reads none of what the look writes (the boy's look target, `camctrl`). The capture's insert
-camera on the North American and 2001 discs is not stopped by the look (a target at priority 1
-leaves `insertCamera_isEnable` true). L3 (pad bit `0x200`) is read in play only by debug code
-(`ACTDebugMove`, Developer > Free movement, whose rule keeps the look off; the manual debug camera;
-`motionViewer.c`; `moveColTest.c`); Remap controls' L3 row moves it; the touch overlay has no L3.
-State: one FRESH save-state block, `yorda_look.state` (the last level, the toggle, the stage, the
-last answer). Log: `yorda look: looking at Yorda (<hold|toggle>, N this run)` when a look starts
-and `yorda look: the look ended (<why>)` when a toggle ends, the first 8 looks then every 100th.
-`yorda_look` (`port/game/test/yorda_look_test.c`) holds the rules; `options_<slug>` the hooks (a
-text scan).
+toggle also ends on a new stage number, when Camera reset fires (`ico_yorda_look_drop`,
+`camera_reset.c`) and when a save state loads (`ico_yorda_look_state_loaded`, `state_host.c` and
+`state_checkpoint_live.c`; a state made before the block existed has none and would keep this
+run's bytes); a call (R1) leaves it on. With the Main tick clock as Camera reset's, a call whose tick
+does not follow the last one (after a pause, photo mode, a menu or a load) takes L3 as already
+held. No wish bit is set, no mail is sent; the girl's brain reads none of what the look writes (the
+boy's look target, `camctrl`, layout object 4's root as R1 places it). The capture's insert camera
+on the North American and 2001 discs is not stopped by the look (a target at priority 1 leaves
+`insertCamera_isEnable` true). L3 (pad bit `0x200`) is read in play only by debug code
+(`ACTDebugMove`, Developer > Free movement, and the Debug menu's camera, whose rules keep the look
+off; `motionViewer.c`; `moveColTest.c`); Remap controls' L3 row moves it; the touch overlay has no
+L3. State: one FRESH save-state block, `yorda_look.state` (the last level, the toggle, the stage,
+the last answer). Log: `yorda look: looking at Yorda (<hold|toggle>, N this run)` when a look
+starts and `yorda look: the look ended (<why>)` when a toggle ends, the first 8 looks then every
+100th. `yorda_look` (`port/game/test/yorda_look_test.c`) holds the rules and the game's side with
+the game stubbed; `options_<slug>` checks that `boyact.c` names none of it and that
+`trace_host.c` calls the tick once (text scans).
 
 ### Game variants
 
@@ -770,7 +796,7 @@ hold the rest.
 | Main: Menu language | W | W | W | W | W | W | W | Auto is `ui_lang_default`, the sheets `menu_sheet`; `settings_<slug>`, `settings_render_<slug>` |
 | Controls: Hold type | W | W | W | W | W | W | W | `hold_type_own`, the default `"disc"`: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 (the 2001 arms `_ACTCommonMailTest_<disc>` read `optionControlType` in the port); `settings_discs`, `options_<slug>`, `save` (per disc) |
 | Controls: Camera reset | W | W | W | W | W | W | W | the four `SetCameraMatrix_Ico2` copies (`camera-ico2.c`), default `"off"` on every disc; on the June 2001 demo the hook is live too while only the zoom stops the look-around (`zoomStop`), so R3 ends a toggled zoom there as on the other discs; `settings_discs`, `options_<slug>`, `camera_reset` |
-| Controls: Look at Yorda | W | W | W | W | W | W | W | the four `subBoyCollision` copies (`boyact.c`), default `"off"` on every disc; the call camera's script flag on the three bodies that have one (none on the June 2001 demo); `settings_discs`, `options_<slug>`, `yorda_look` |
+| Controls: Look at Yorda | W | W | W | W | W | W | W | `yorda_look_live.c`, the calls of the four `subBoyCollision` copies (`boyact.c`, unchanged) made at a Main pass's end, default `"off"` on every disc; the call camera's script flag on the three bodies that have one (none on the June 2001 demo); `settings_discs`, `options_<slug>`, `yorda_look` |
 | Controls: Zoom type | W | W | W | W | W | W | W | the four `SetCameraMatrix` copies' zoom blocks (`camera-root.c`) and the June 2001 demo's look-around (`camera-ico2.c`), default `"hold"` on every disc; `settings_discs`, `options_<slug>`, `zoom_toggle` |
 | Controls: Circle goes back | W | H | H | W | W | W | H | `pad_back` is Triangle (`lt_ext_has_circle_back`); the 2001 arms cancel through `LA_BACK` too; `settings_discs`, `settings_<slug>` |
 | Picture: Brightness; Controls: Vibration, Button configuration (pause) | W | W | W | W | W | W | W | `systemStatus[11]`, `iosPadActRequestEnable`, `layout_key_config` (`la_key_config` and its 2001 arms go back to Settings); `settings_discs` |

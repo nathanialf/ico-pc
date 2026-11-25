@@ -78,6 +78,7 @@
 #include "state_checkpoint_live.h"
 #include "variants.h"
 #include "video_options.h"
+#include "yorda_look.h"
 
 #ifndef ICO_HEADLESS
 #include "rd.h"        /* rd_capture_shot, rd_present_box_size */
@@ -3285,8 +3286,8 @@ static int keep_code_numbers(int slot, const IcoStateHeader *saved, const Copy *
    loads under this run's settings (sim_keys.h IcoSimKeyCarry), so what the
    restore put back of the saving run's settings is set to this run's again,
    each part logging what it changed: the global variants' debug switches,
-   the doorway fix's grace, the hold type, the game's language and the Debug
-   menu.  The 50/60 Hz mode is the one setting a state keeps: its own runs
+   the doorway fix's grace, the hold type, the game's language, the Debug
+   menu and a toggled Look at Yorda.  The 50/60 Hz mode is the one setting a state keeps: its own runs
    until the next start, config.toml untouched. */
 static void settings_loaded(int slot, const char *saved_keys)
 {
@@ -3295,6 +3296,7 @@ static void settings_loaded(int slot, const char *saved_keys)
     (void)ico_variants_state_loaded();
     (void)ico_door_grace_state_loaded();
     (void)ui_settings_reapply_after_state_load(saved_keys);
+    ico_yorda_look_state_loaded();
     if ((systemStatus[0] != 0) != (boot_pal != 0)) {
         fprintf(stderr,
                 "state: slot %d runs at %d Hz as it was saved; the video mode set (%d Hz) applies "

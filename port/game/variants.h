@@ -290,6 +290,16 @@ void ico_variants_apply(void);
    logged ("variants: after the load ...").  The number of switches
    changed. */
 int ico_variants_state_loaded(void);
+/* A save state saved with Developer mode on was loaded into a run with it
+   off (settings.c ui_settings_reapply_after_state_load): the run counts as
+   one that used the Debug menu (achievements suspended until the game
+   restarts, as after ico_variants_debug_menu_pressed; logged, nothing
+   shown), and every switch the two binds hold (seven: the four above and
+   One hit per swing, Shadows never dodge and Shadow aggression, whose
+   variant values come from the journey's record) goes back to this run's
+   value as ico_variants_state_loaded puts back its four.  The Debug menu's other switches are not bound and keep
+   the state's values.  The number of switches changed. */
+int ico_variants_developer_state_loaded(void);
 
 /* 1 when the disc has a hint system (not the USA disc nor the two 2001
    builds) and No hints is off: lws_kyomi.c's hint timers and girl.c's hint

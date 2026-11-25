@@ -427,7 +427,8 @@ const char *const
                 "Activé : cliquez le stick droit (R3) pour ramener aussitôt la caméra sur Ico.",
             [UI_STR_OPT_YORDA_LOOK] = "Regarder Yorda",
             [UI_STR_YORDA_LOOK_NOTE] =
-                "Ico et la caméra regardent Yorda sans l’appeler, avec L3 maintenu ou en bascule.",
+                ("Ico et la caméra regardent Yorda sans l’appeler. Maintenir : tant que vous "
+                 "maintenez L3. Bascule : un appui sur L3 lance le regard, un autre l’arrête."),
             [UI_STR_OPT_BUTTON_PICTURES] = "Images des boutons",
             [UI_STR_BUTTON_PICTURES_NOTE] =
                 "Les boutons des menus et du mode photo. Auto suit la dernière manette utilisée.",

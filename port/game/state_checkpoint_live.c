@@ -31,6 +31,7 @@
 #include "ico_gamestate.h" /* the run */
 #include "state_registry.h"
 #include "trace_host.h" /* ico_host_main_ticks, ico_host_set_main_tick_hook */
+#include "yorda_look.h"
 #include "../input/input_record.h"
 
 #include "gamesys.h" /* gameSysMainSaveBuff */
@@ -178,6 +179,7 @@ static void tick(void)
     }
     rec = put_difficulty();
     journey_loaded();
+    ico_yorda_look_state_loaded(); /* a toggled look ends, as on the exact way */
     ico_input_record_state_loaded(s_apply.slot, ico_host_main_ticks());
     fprintf(stderr,
             "state: slot %d continues from its checkpoint at Main tick %u: the game's own load "

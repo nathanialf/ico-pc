@@ -1206,8 +1206,10 @@ Ico about freely:
   the game's own debug menu, made for the people who built the game. Options
   closes and the menu opens over the game, or over the title screen if you
   came from there; it works as the Select button opens it in Developer mode.
-  Switches achievements off. The June 2001 magazine demo has no Debug menu
-  row: the demo's debug menu is not right for it (it is the August 2001
+  Switches achievements off. A save state made with Developer mode on and
+  loaded with it off also switches them off until you restart the game, and
+  some of the menu's settings stay as the state had them until then. The June
+  2001 magazine demo has no Debug menu row: the demo's debug menu is not right for it (it is the August 2001
   preview's).
 - **Free movement** is Off or On. On, pressing L2 (Z on the keyboard) hands
   Ico to the sticks, as the people who built the game moved him about to test
