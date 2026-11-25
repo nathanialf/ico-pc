@@ -102,6 +102,7 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
     void *man = NULL, *gz = NULL, *sec = NULL, *idx = NULL, *runs = NULL;
     size_t man_n = 0, gz_n = 0, sec_n = 0, idx_n = 0, runs_n = 0, text_n = 0, files = 0;
     long text_index = 1; /* a manifest without the line: the first format */
+    int carry_listed = 0;
     char *syms = NULL;
     size_t syms_n = 0, i, k, at;
     const char *p, *end;
@@ -147,6 +148,8 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
                 t->verify_rules = (int)strtol(l + 18, NULL, 10);
             } else if (strncmp(l, "record ", 7) == 0) {
                 t->record = (int)strtol(l + 7, NULL, 10);
+            } else if (strncmp(l, "file carry.z ", 13) == 0) {
+                carry_listed = 1;
             }
         }
         p = next;
@@ -314,6 +317,51 @@ hashes:
         }
         free(hb);
     }
+    if (carry_listed) {
+        /* the ADRPs' verdicts (state_legacy.h carry.z) */
+        void *cz = NULL, *cb = NULL;
+        size_t cz_n = 0, cb_n = 0, j, at = 0, bits = 0;
+
+        if (read_file(rd, user, name, "carry.z", &cz, &cz_n, why, why_n) != 0) {
+            goto fail;
+        }
+        cb = inflate_raw(cz, cz_n, &cb_n);
+        free(cz);
+        t->carry_at = (uint32_t *)malloc((t->n_hash ? t->n_hash : 1) * sizeof *t->carry_at);
+        t->carry_n = (uint16_t *)malloc((t->n_hash ? t->n_hash : 1) * sizeof *t->carry_n);
+        t->carry = (uint8_t *)malloc(cb_n ? cb_n : 1);
+        if (cb == NULL || t->carry_at == NULL || t->carry_n == NULL || t->carry == NULL) {
+            free(cb);
+            say(why, why_n, "its ADRPs' verdicts carry.z are damaged");
+            goto fail;
+        }
+        for (j = 0; j < t->n_hash; j++) {
+            uint16_t c;
+
+            if (at + 2 > cb_n) {
+                break;
+            }
+            c = (uint16_t)(((const uint8_t *)cb)[at] | ((const uint8_t *)cb)[at + 1] << 8);
+            at += 2;
+            t->carry_n[j] = c;
+            t->carry_at[j] = (uint32_t)bits;
+            if (c != ICO_LEGACY_UNJUDGED) {
+                const size_t nb = ((size_t)c + 7u) / 8u;
+
+                if (at + nb > cb_n) {
+                    break;
+                }
+                memcpy(t->carry + bits / 8u, (const uint8_t *)cb + at, nb);
+                at += nb;
+                bits += nb * 8u;
+            }
+        }
+        free(cb);
+        if (j != t->n_hash || at != cb_n) {
+            say(why, why_n, "its ADRPs' verdicts carry.z do not hold a row per code hash");
+            goto fail;
+        }
+    }
     free(man);
     free(gz);
     free(sec);
@@ -343,7 +391,36 @@ void ico_legacy_free(IcoLegacyTable *t)
     free(t->run);
     free(t->lstart);
     free(t->hash);
+    free(t->carry);
+    free(t->carry_at);
+    free(t->carry_n);
     free(t);
+}
+
+int ico_legacy_carried(const IcoLegacyTable *t, uint64_t off, uint32_t ord, uint32_t all)
+{
+    size_t lo = 0, hi;
+    uint32_t bit;
+
+    if (t == NULL || t->carry == NULL) {
+        return -1;
+    }
+    hi = t->n_hash;
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (t->hash[3 * mid] < off) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo >= t->n_hash || t->hash[3 * lo] != off || t->carry_n[lo] == ICO_LEGACY_UNJUDGED ||
+        t->carry_n[lo] != all || ord >= all) {
+        return -1;
+    }
+    bit = t->carry_at[lo] + ord;
+    return (t->carry[bit / 8u] >> (bit % 8u)) & 1u;
 }
 
 IcoSymTab *ico_legacy_symtab(const IcoLegacyTable *t, const IcoSymTabEnv *env, char *why,

@@ -29,10 +29,16 @@ repository's 256 KiB file cap:
   manifest's `text_index 2` names this format and `lstarts` counts the
   marked runs. The game refuses a table without `text_index 2` and says it
   must be rebuilt;
-- its functions' code hashes.
+- its functions' code hashes;
+- every ADRP's verdict (`carry.z`): whether a paused thread can hold the page
+  it makes, judged on the version's own instructions (an ADD's immediate,
+  which the code hash masks, decides whether it copies the page). When the
+  ADRPs a state names make two pages in this build, the load keeps only
+  those.
 
 A format 3 table (`record 3`, `hash_verify_rules 2` in its manifest) holds the
-code hashes alone, about 160 KB (`build --hashes-only`). The newest release's
+code hashes and the ADRPs' verdicts alone, about 170 KB (`build
+--hashes-only`). The newest release's
 also keeps its symbol file (about 240 KB more): the package gate names the
 functions by it. `check` enforces both.
 
@@ -114,7 +120,7 @@ gone keeps its rules with a `hash_rules_kept <why>` line in its manifest
 After every Android release, add its `--record 3` table: the next release's
 package gate compares with it, and its states compare through it when the
 rules change again. The previous newest release's table then drops its symbol
-file (`build --hashes-only` again); each table adds about 160 KB to the
+file (`build --hashes-only` again); each table adds about 170 KB to the
 APK.
 
 ## The package gate on the game's code

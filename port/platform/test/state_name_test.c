@@ -1392,8 +1392,9 @@ static void test_pages(void)
        moves to the next: f_a's two ADRPs make two pages */
     if (pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x900, 0x14000) == 0 && sec != NULL) {
         k = pg_check(sec, n, &b, &a, &v);
-        CHECK(k == ICO_XB_DATA && strstr(v.why, "f_a+0x0 and f_a+0x8") != NULL &&
-                  strstr(v.why, "cannot be told") != NULL,
+        CHECK(k == ICO_XB_DATA &&
+                  strstr(v.why, "2 ADRPs (f_a+0x0, f_a+0x8) make: here they make two pages") !=
+                      NULL,
               "the two producers disagree: refused: %d %s", k, v.why);
         ico_xb_verdict_free(&v);
     }
@@ -2195,12 +2196,59 @@ static void pp_code(Pg *g, int kind)
     }
 }
 
-/* the owner's rc10 log, line 1004 (iosMcManager+0x2c and +0x78): a page word
-   on fiber 1 that two ADRPs of the function it waits in make there, and that
-   are two pages here.  The one whose page dies in place (an ADD consumes it
-   before any call) cannot be what the thread holds: taken from the other,
-   logged; both live: refused, both named; both die in place: refused.  A
-   refusal goes on: a window found nowhere and the page are both named */
+/* a legacy table that judges f_p's two ADRPs (state_legacy.h carry.z): bit 0
+   the first's, bit 1 the second's */
+typedef struct PpTab {
+    IcoLegacyTable lt;
+    uint64_t hash[3];
+    uint8_t bits[1];
+    uint32_t at[1];
+    uint16_t n[1];
+} PpTab;
+
+static void pp_table(PpTab *t, const Pg *a, unsigned bits)
+{
+    memset(t, 0, sizeof *t);
+    t->hash[0] = a->f_b + 0x100; /* f_p's offset from A's image start */
+    t->bits[0] = (uint8_t)bits;
+    t->n[0] = 2;
+    t->lt.hash = t->hash;
+    t->lt.n_hash = 1;
+    t->lt.carry = t->bits;
+    t->lt.carry_at = t->at;
+    t->lt.carry_n = t->n;
+}
+
+static int pp_check(const void *sec, size_t n, const Pg *b, const Pg *a, const PpTab *t,
+                    IcoXbVerdict *v)
+{
+    IcoXbNow now;
+
+    memset(&now, 0, sizeof now);
+    now.tab = b->tab;
+    pg_image(b, &now.image);
+    now.game_lo[1] = b->lo + b->bss;
+    now.game_hi[1] = now.game_lo[1] + PG_BSS_N;
+    now.old_game_lo[1] = a->lo + a->bss;
+    now.old_game_hi[1] = now.old_game_lo[1] + PG_BSS_N;
+    now.old_image_lo = a->lo;
+    now.carry_lt = t != NULL ? &t->lt : NULL;
+    return ico_xb_check(sec, n, &now, v);
+}
+
+/* the producers of a page word (code_hash.h ico_code_a64_page_carried): a
+   two-ADRP function f_p whose ADRPs make one page in A and two in B, its
+   thread paused in its call.  The save records only the ADRPs whose page a
+   paused thread can hold, judged on A's own words: the first's page an ADD
+   consumes (not recorded) and x25 kept across the call: the page by x25's
+   ADRP here, nothing to resolve; both held (the first stored too): refused
+   (the saving build found both held); neither held: no producer, the word
+   an ordinary address of the bss.  A record of an earlier build (no
+   ICO_XB_CARRIED) whose producers split here goes by its version's table's
+   verdicts on its own words, never this build's: the first judged dead
+   there (though B stores it), taken from x25's; both held: refused; no
+   table: refused.  And more than 16 producers: every one counts (the 17th
+   making another page refuses) */
 static void test_page_split(void)
 {
     static const char ea[] = "0000000000001200 T f_p\n";
@@ -2208,9 +2256,10 @@ static void test_page_split(void)
     Pg a, b;
     IcoXbVerdict v;
     uint64_t regs[2];
-    void *sec;
+    uint8_t *sec;
     size_t n = 0;
     IcoXbStats st;
+    PpTab tab;
     int k, kind;
 
     for (kind = 0; kind < 3; kind++) {
@@ -2228,32 +2277,110 @@ static void test_page_split(void)
         pp_code(&b, kind);
         regs[0] = a.lo + a.f_b + 0x100 + 20; /* the return address after f_p's call */
         regs[1] = a.lo + PG_BSS;             /* the page both ADRPs make in A */
-        sec = pg_save(&a, regs, 2, NULL, 0, NULL, 0, &n, &st);
-        CHECK(sec != NULL && st.pages == 1 && st.producers == 2,
-              "kind %d: one page word, two producers (%u, %u)", kind, st.pages, st.producers);
+        sec = (uint8_t *)pg_save(&a, regs, 2, NULL, 0, NULL, 0, &n, &st);
+        CHECK(sec != NULL &&
+                  st.producers == (kind == 0   ? 1u
+                                   : kind == 1 ? 2u
+                                               : 0u) &&
+                  (sec[8] & ICO_XB_CARRIED) != 0,
+              "kind %d: the producers a paused thread can hold (%u of 2), flagged", kind,
+              st.producers);
         k = sec != NULL ? pg_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
         if (kind == 0) {
-            CHECK(k == ICO_XB_OK && v.page_resolved == 1 &&
-                      pg_xlate(&v, regs[1], 1) == b.lo + PG_BSS + 0x1000u &&
-                      strcmp(v.pres[0].by, "f_p+0x8") == 0 &&
-                      strstr(v.pres[0].all, "f_p+0x0 (its page dies in place)") != NULL,
-                  "the first's page dies in place: taken from x25's ADRP: %d %u %s / %s", k,
-                  v.page_resolved, v.why, v.pres[0].all);
+            CHECK(k == ICO_XB_OK && v.page_resolved == 0 &&
+                      pg_xlate(&v, regs[1], 1) == b.lo + PG_BSS + 0x1000u,
+                  "the first's page consumed in place: x25's ADRP alone made it: %d %s", k, v.why);
         } else if (kind == 1) {
             CHECK(k == ICO_XB_DATA && v.page_resolved == 0 &&
-                      strstr(v.why, "f_p+0x0 and f_p+0x8 make: here they make two pages") != NULL,
-                  "both live: refused, both named: %d %s", k, v.why);
-        } else {
+                      strstr(v.why, "2 ADRPs (f_p+0x0, f_p+0x8) make: here they make two pages") !=
+                          NULL &&
+                      strstr(v.why, "the saving build found each of them can be held") != NULL,
+                  "both held: refused: %d %s", k, v.why);
+            ico_xb_verdict_free(&v);
+            /* as an earlier build's record: its table's verdicts decide */
+            sec[8] &= (uint8_t)~ICO_XB_CARRIED;
+            pp_table(&tab, &a, 2u); /* the first dead there, x25's held */
+            k = pp_check(sec, n, &b, &a, &tab, &v);
+            CHECK(k == ICO_XB_OK && v.page_resolved == 1 && v.pres[0].n_prod == 2 &&
+                      v.pres[0].n_live == 1 && v.pres[0].n_dead == 1 &&
+                      strcmp(v.pres[0].by, "f_p+0x8") == 0 &&
+                      pg_xlate(&v, regs[1], 1) == b.lo + PG_BSS + 0x1000u,
+                  "an earlier record: by its table, x25's ADRP (this build's store of the first "
+                  "never judged): %d %u %s",
+                  k, v.page_resolved, v.why);
+            ico_xb_verdict_free(&v);
+            pp_table(&tab, &a, 3u);
+            k = pp_check(sec, n, &b, &a, &tab, &v);
             CHECK(k == ICO_XB_DATA &&
-                      strstr(v.why, "none of them can keep it past its own uses") != NULL,
-                  "both die in place: refused: %d %s", k, v.why);
+                      strstr(v.why, "2 of them can be held by a paused thread") != NULL,
+                  "an earlier record, both held by its table: refused: %d %s", k, v.why);
+            ico_xb_verdict_free(&v);
+            k = pp_check(sec, n, &b, &a, NULL, &v);
+            CHECK(k == ICO_XB_DATA && strstr(v.why, "no legacy table here says") != NULL,
+                  "an earlier record, no table: refused: %d %s", k, v.why);
+        } else {
+            CHECK(k == ICO_XB_OK && pg_xlate(&v, regs[1], 1) == b.lo + PG_BSS + 0x400u,
+                  "no producer a paused thread can hold: an ordinary address of the bss: %d %s", k,
+                  v.why);
         }
         ico_xb_verdict_free(&v);
         free(sec);
         pg_free(&a);
         pg_free(&b);
     }
-    printf("state_name: a page two ADRPs made, two pages here: by which page lives\n");
+    /* 17 producers: f_q's ADRPs of the bss's first page into x19-x28 and
+       x0-x6, all held at its call; the 17th 0xe00 into it (in B the next
+       page) */
+    {
+        static const char qa[] = "0000000000001200 T f_q\n";
+        static const char qb[] = "0000000000001400 T f_q\n";
+        int i;
+
+        s_pg_extra = qa;
+        k = pg_make(&a, 0x1000, 0x1100, PG_BSS, 0x13000);
+        s_pg_extra = qb;
+        if (k != 0 || pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) != 0) {
+            s_pg_extra = NULL;
+            pg_free(&a);
+            pg_free(&b);
+            return;
+        }
+        s_pg_extra = NULL;
+        for (i = 0; i < 2; i++) {
+            Pg *g = i == 0 ? &a : &b;
+            const uint64_t f = g->f_b + 0x100;
+            int j;
+
+            for (j = 0; j < 17; j++) {
+                const uint64_t tg = g->bss + (j == 16 ? 0xE00u : 0x100u);
+
+                put32le(g->mem + f + 4u * (uint64_t)j,
+                        adrp(g->lo + f + 4u * (uint64_t)j, g->lo + tg,
+                             j < 10 ? 19u + (unsigned)j : (unsigned)j - 10u));
+            }
+            for (j = 17; j < 20; j++) {
+                put32le(g->mem + f + 4u * (uint64_t)j, 0xD503201Fu); /* nop */
+            }
+            put32le(g->mem + f + 80,
+                    0x94000000u |
+                        (uint32_t)(((int64_t)0x1800 - (int64_t)(f + 80)) / 4 & 0x3FFFFFF));
+            put32le(g->mem + f + 84, 0xD65F03C0u);
+        }
+        regs[0] = a.lo + a.f_b + 0x100 + 84;
+        regs[1] = a.lo + PG_BSS;
+        sec = (uint8_t *)pg_save(&a, regs, 2, NULL, 0, NULL, 0, &n, &st);
+        k = sec != NULL ? pg_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+        CHECK(sec != NULL && st.producers == 17 && k == ICO_XB_DATA &&
+                  strstr(v.why, "17 ADRPs (f_q+0x0, f_q+0x4,") != NULL &&
+                  strstr(v.why, "...) make: here they make two pages") != NULL,
+              "17 producers, the 17th another page here: every one counts, refused: %u %d %s",
+              st.producers, k, v.why);
+        ico_xb_verdict_free(&v);
+        free(sec);
+        pg_free(&a);
+        pg_free(&b);
+    }
+    printf("state_name: a page two ADRPs made, two pages here: by the saving build's verdicts\n");
 }
 
 /* one page word on two fibers: fiber 1 holds the page f_s's ADRP of s_big

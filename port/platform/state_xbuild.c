@@ -984,6 +984,7 @@ static int plan_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEnt 
         }
         for (i = 0; i < nu; i++) {
             const IcoSymUnit *u;
+            uint32_t *uws = NULL; /* its words, patch sites replaced (made on first need) */
 
             if (i > 0 && units[i] == units[i - 1]) {
                 continue;
@@ -1008,11 +1009,33 @@ static int plan_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEnt 
                 if (lo == b || r->fw[lo].w != page) {
                     continue;
                 }
+                /* only an ADRP whose page a paused thread can hold is a
+                   producer (code_hash.h ico_code_a64_page_carried), judged on
+                   this, the saving build's, own words */
+                if (uws == NULL) {
+                    IcoA64Text tx;
+
+                    uws =
+                        (uint32_t *)malloc((u->size / 4 ? (size_t)(u->size / 4) : 1) * sizeof *uws);
+                    if (uws == NULL) {
+                        free(units);
+                        return -1;
+                    }
+                    tx.bytes = (const void *)(uintptr_t)t->env.text_lo;
+                    tx.lo = t->env.text_lo;
+                    tx.hi = t->env.text_hi;
+                    (void)ico_code_a64_unpatch((const void *)(uintptr_t)u->start,
+                                               (size_t)(u->size / 4), u->start, &tx, uws);
+                }
+                if (ico_code_a64_page_carried(uws, (size_t)(u->size / 4), (size_t)(k / 4)) == 0) {
+                    continue;
+                }
                 if (*npr == cap_pr) {
                     const size_t c = cap_pr ? cap_pr * 2 : 64;
                     Prod *q = (Prod *)realloc(*pr, c * sizeof *q);
 
                     if (q == NULL) {
+                        free(uws);
                         free(units);
                         return -1;
                     }
@@ -1025,6 +1048,7 @@ static int plan_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEnt 
                 (*pr)[*npr].fiber = f;
                 (*npr)++;
             }
+            free(uws);
         }
     }
     free(units);
@@ -1254,6 +1278,26 @@ static int old_pages_of(const IcoXbRefs *r, const IcoSymTab *ot, uint64_t T, int
     return 0;
 }
 
+/* by the version's legacy table, whether the page the ADRP at offset off
+   of this build's function [now, now + size) makes can be held by a paused
+   thread in that version, whose same function lies at image offset old_off
+   (its ADRPs where this build's are: its hash compared): 1, 0, or -1 when
+   the table does not say (state_legacy.h ico_legacy_carried) */
+static int adrp_carried_old(const IcoLegacyTable *lt, uint64_t old_off, uint64_t now, uint64_t size,
+                            uint64_t off)
+{
+    uint32_t ord = 0, all = 0;
+    uint64_t at;
+
+    for (at = 0; at + 4 <= size; at += 4) {
+        if ((code32(now + at) & 0x9F000000u) == 0x90000000u) {
+            ord += at < off;
+            all++;
+        }
+    }
+    return ico_legacy_carried(lt, old_off, ord, all);
+}
+
 typedef struct LProd {
     uint64_t ustart; /* the version's unit */
     uint32_t off;
@@ -1368,6 +1412,14 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
                 LProd *e;
 
                 if (P == 1) {
+                    continue;
+                }
+                /* the version's own verdict, when its table holds them: an
+                   ADRP whose page no paused thread can hold there makes no
+                   page word (code_hash.h ico_code_a64_page_carried) */
+                if (r->p.legacy->lt->carry != NULL && u->start >= r->p.legacy->old_lo &&
+                    adrp_carried_old(r->p.legacy->lt, u->start - r->p.legacy->old_lo, u2->start,
+                                     u2->size, k) == 0) {
                     continue;
                 }
                 if (nlp == cap_lp) {
@@ -1661,7 +1713,12 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
         flags |= ICO_XB_OVERFLOW;
     }
     if (r->a64) {
+        /* a legacy read carries the version's own verdicts only when its
+           table holds them (legacy_pages) */
         flags |= ICO_XB_PAGES;
+        if (p->legacy == NULL || p->legacy->lt->carry != NULL) {
+            flags |= ICO_XB_CARRIED;
+        }
     }
     if (r->fw_failed ||
         (t != NULL && p->legacy == NULL && plan_pages(r, t, uflag, &pe, &npe, &pr, &npr) != 0) ||
@@ -2186,11 +2243,24 @@ __attribute__((format(printf, 3, 4)))
 static void verdict(IcoXbVerdict *v, int kind, const char *fmt, ...)
 {
     va_list ap;
+    char m[200];
 
-    v->kind = kind;
     va_start(ap, fmt);
-    vsnprintf(v->why, sizeof v->why, fmt, ap);
+    vsnprintf(m, sizeof m, fmt, ap);
     va_end(ap);
+    if (v->blocked > 0) {
+        /* a later stop after obstacles named: the first stays the
+           refusal's, this one joins the others */
+        const size_t k = strlen(v->more);
+
+        if (k + 4 < sizeof v->more) {
+            snprintf(v->more + k, sizeof v->more - k, "%s%s", k > 0 ? "; " : "", m);
+        }
+        v->blocked++;
+        return;
+    }
+    v->kind = kind;
+    snprintf(v->why, sizeof v->why, "%s", m);
 }
 
 typedef struct Spans {
@@ -2412,8 +2482,6 @@ static int forward_place(const IcoStateImage *im, const uint32_t *freq, const un
 }
 
 /* a producer of a page word, for the page pass */
-#define PAGE_CANDS 16
-
 typedef struct PageCand {
     const UMap *m;
     uint32_t off;
@@ -2421,98 +2489,17 @@ typedef struct PageCand {
     int live;
 } PageCand;
 
-/* 1 when the word, entered with the page in the registers `regs`, may carry
-   it beyond its function's own base uses: a call (the page held across it,
-   where a thread can pause), any branch by register (a return, a tail
-   call), a store of it, an ADD of 0 (a copy the flow does not follow), and
-   any other instruction one of whose register fields names it; 0 for a base
-   use (an ADD of an offset, a load or store through it), a MOV (the flow
-   follows the copy), an ADRP or ADR, a test and branch on it, and an
-   instruction none of whose source register fields (by its class) names it */
-static int page_escapes(uint32_t w, uint32_t regs)
+/* by the saving version's legacy table (IcoXbNow.carry_lt), whether the
+   page the ADRP at offset off of the function m (this build's copy, whose
+   ADRPs lie where the version's do: its hash compared) makes can be held by
+   a paused thread there: 1, 0, or -1 when the table does not judge it (no
+   table, no row, not judged, another count of ADRPs) */
+static int carried_by_table(const IcoLegacyTable *lt, uint64_t old_lo, const UMap *m, uint32_t off)
 {
-    const unsigned rt = w & 31u, rn = (w >> 5) & 31u, rt2 = (w >> 10) & 31u, rm = (w >> 16) & 31u;
-#define HELD(r) (((regs >> (r)) & 1u) != 0)
-
-    if ((w & 0x7C000000u) == 0x14000000u) {
-        return (w & 0x80000000u) != 0; /* BL: across the call; B: no */
+    if (lt == NULL || m->old < old_lo) {
+        return -1;
     }
-    if ((w & 0xFE000000u) == 0xD6000000u) {
-        return 1;
-    }
-    if ((w & 0x7E000000u) == 0x34000000u || (w & 0x7E000000u) == 0x36000000u ||
-        (w & 0xFF000000u) == 0x54000000u) {
-        return 0;
-    }
-    if ((w & 0xFFE0FFE0u) == 0xAA0003E0u) {
-        return 0;
-    }
-    if ((w & 0x7F800000u) == 0x11000000u) {
-        return HELD(rn) && ((w >> 10) & 0xFFFu) == 0 && ((w >> 22) & 1u) == 0;
-    }
-    if ((w & 0x9F000000u) == 0x90000000u || (w & 0x9F000000u) == 0x10000000u) {
-        return 0;
-    }
-    if ((w & 0x3B000000u) == 0x39000000u || (w & 0x3B200000u) == 0x38000000u) {
-        return ((w >> 22) & 3u) == 0 && ((w >> 26) & 1u) == 0 && HELD(rt);
-    }
-    if ((w & 0x3A000000u) == 0x28000000u) {
-        return ((w >> 22) & 1u) == 0 && ((w >> 26) & 1u) == 0 && (HELD(rt) || HELD(rt2));
-    }
-    if ((w & 0x1C000000u) == 0x10000000u) {
-        /* data processing, immediate: MOVZ and MOVN read nothing, MOVK its
-           Rd, logical, bitfield and extract their Rn (and EXTR its Rm) */
-        if ((w & 0x1F800000u) == 0x12800000u) {
-            return ((w >> 29) & 3u) == 3u && HELD(rt);
-        }
-        return HELD(rn) || ((w & 0x1F800000u) == 0x13800000u && HELD(rm));
-    }
-    if ((w & 0x0E000000u) == 0x0A000000u) {
-        /* data processing, register: Rn, Rm, and the 3-source class's Ra */
-        return HELD(rn) || HELD(rm) || ((w & 0x1F000000u) == 0x1B000000u && HELD(rt2));
-    }
-    if ((w & 0x0E000000u) == 0x0E000000u) {
-        return HELD(rn); /* SIMD and FP: a general register is read only as Rn */
-    }
-    return HELD(rt) || HELD(rn) || HELD(rt2) || HELD(rm);
-#undef HELD
-}
-
-/* 1 when the page the ADRP at offset off of this build's function m makes
-   can outlive its own uses (page_escapes on some word its page reaches
-   through the function's branches, the code hash's flow from that ADRP
-   alone: ico_code_a64_flow); 1 too when the memory for it is lacking.  A
-   page that dies in place is never in a register or a slot while the
-   function waits in a call, so no paused thread holds it.  The function's
-   code is the saving build's (its hash compared above), so its flow is
-   too */
-static int producer_live(const IcoSymTab *t, const UMap *m, uint32_t off)
-{
-    const size_t words = (size_t)(m->size / 4), k = off / 4;
-    uint32_t *ws = (uint32_t *)malloc((words ? words : 1) * sizeof *ws);
-    uint32_t *into = (uint32_t *)malloc((words ? words : 1) * sizeof *into);
-    uint8_t *seen = (uint8_t *)malloc(words ? words : 1);
-    IcoA64Text tx;
-    size_t j;
-    int live = 1;
-
-    if (ws != NULL && into != NULL && seen != NULL && k < words && t != NULL) {
-        tx.bytes = (const void *)(uintptr_t)t->env.text_lo;
-        tx.lo = t->env.text_lo;
-        tx.hi = t->env.text_hi;
-        (void)ico_code_a64_unpatch((const void *)(uintptr_t)m->now, words, m->now, &tx, ws);
-        if (ico_code_a64_flow((const void *)(uintptr_t)m->now, words, m->now, &tx, k,
-                              1u << (ws[k] & 31u), 0, into, seen) == 0) {
-            live = 0;
-            for (j = 0; j < words && !live; j++) {
-                live = seen[j] && into[j] != 0 && page_escapes(ws[j], into[j]);
-            }
-        }
-    }
-    free(ws);
-    free(into);
-    free(seen);
-    return live;
+    return adrp_carried_old(lt, m->old - old_lo, m->now, m->size, off);
 }
 
 /* IcoXbVerdict.code_patch for this build's function w compared under
@@ -2544,6 +2531,8 @@ static int code_patch_of(const IcoSymTab *t, const IcoSymUnit *w, int rules)
 
 int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *v)
 {
+    PageCand *cand = NULL; /* a page word's producers (the page pass) */
+    size_t cap_cand = 0;
     const unsigned char *sec = (const unsigned char *)secv;
     uint32_t flags, nu, nd, np, nb, ns, ver, npool = 0, nl = 0, npg = 0, npr = 0;
     size_t dbytes, pbytes, hbytes, n_umap = 0;
@@ -2941,7 +2930,10 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                 uint64_t fw = 0;
                 unsigned fc = 0;
 
-                if (found == 0 && stored == len &&
+                /* Android (arm64) records alone: the owner's choice was made for
+                   the Android states; the desktop programs' records were never
+                   in it, so they keep the proven reading only */
+                if (found == 0 && stored == len && (int)get32(sec + H_ARCH) == ICO_CODE_A64 &&
                     forward_place(&im, freq, pool + pool_at, stored, at, text, hashed, pg, npg, old,
                                   &fw, &fc)) {
                     /* placed by its bytes from the word on alone (not proven) */
@@ -3050,8 +3042,8 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             uint32_t off0 = 0;
             int have_q = 0, have_n;
 
-            int nc = 0, split = 0;
-            PageCand cand[PAGE_CANDS];
+            size_t nc = 0, j;
+            int split = 0;
 
             for (k = 0; k < npr; k++) {
                 const unsigned char *pp = prd + (size_t)k * PROD_BYTES;
@@ -3087,31 +3079,68 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                     nm0 = m->name;
                     off0 = get32(pp + 16);
                 } else if (np2 != q) {
-                    split = 1;
+                    split |= 1;
                 }
-                if (nc < PAGE_CANDS) {
-                    cand[nc].m = m;
-                    cand[nc].off = get32(pp + 16);
-                    cand[nc].page = np2;
-                    nc++;
-                } else {
-                    split |= 2; /* more than the check keeps: never resolved */
+                if (nc == cap_cand) {
+                    const size_t c = cap_cand ? cap_cand * 2 : 32;
+                    PageCand *qq = (PageCand *)realloc(cand, c * sizeof *qq);
+
+                    if (qq == NULL) {
+                        FAIL(v, ICO_XB_BAD, "no memory for the page words");
+                    }
+                    cand = qq;
+                    cap_cand = c;
                 }
+                cand[nc].m = m;
+                cand[nc].off = get32(pp + 16);
+                cand[nc].page = np2;
+                nc++;
             }
             if (split) {
-                /* the producers make two or more pages here: only those whose
-                   page can outlive their own uses (reach a call, a return, a
-                   store of it, an indirect branch, any other use than a base:
-                   page_escapes) can have made a word a paused thread holds;
-                   when those agree, the page is theirs (logged), else refused
-                   with every candidate named */
-                char names[160];
-                int nl = 0, j, agree = 1, at = 0;
+                /* the producers make two or more pages here: only those
+                   whose page a paused thread can hold can have made the
+                   word (code_hash.h ico_code_a64_page_carried), judged on
+                   the saving build's own words: by the save itself
+                   (ICO_XB_CARRIED: every producer of the record is one), or
+                   by its version's legacy table (IcoXbNow.carry_lt); an
+                   ADRP the table does not judge counts as one; with
+                   neither, refused */
+                size_t nl = 0, ndead = 0, nunk = 0;
+                int agree = 1, at = 0;
                 uint64_t lq = 0;
+                char names[96];
 
+                /* the producers, as many as fit, every one counted */
                 names[0] = '\0';
+                for (j = 0; j < nc && at + 24 < (int)sizeof names; j++) {
+                    const int wr = snprintf(names + at, sizeof names - (size_t)at, "%s%s+0x%x",
+                                            j ? ", " : "", cand[j].m->name, (unsigned)cand[j].off);
+
+                    at = wr < 0                        ? at
+                         : at + wr < (int)sizeof names ? at + wr
+                                                       : (int)sizeof names - 1;
+                }
+                if (j < nc) {
+                    snprintf(names + at, sizeof names - (size_t)at, ", ...");
+                }
+                if ((flags & ICO_XB_CARRIED) != 0 || now->carry_lt == NULL) {
+                    BLOCK(v, ICO_XB_DATA,
+                          "fiber slot %u holds the page 0x%llx, which %zu ADRPs (%s) make: here "
+                          "they make two pages or more, and %s",
+                          (unsigned)(fib - 1u), (unsigned long long)w, nc, names,
+                          (flags & ICO_XB_CARRIED) != 0
+                              ? "the saving build found each of them can be held by a paused "
+                                "thread"
+                              : "no legacy table here says which of them a paused thread can "
+                                "hold");
+                }
                 for (j = 0; j < nc; j++) {
-                    cand[j].live = (split & 2) != 0 || producer_live(t, cand[j].m, cand[j].off);
+                    const int c =
+                        carried_by_table(now->carry_lt, now->old_image_lo, cand[j].m, cand[j].off);
+
+                    cand[j].live = c != 0;
+                    ndead += c == 0;
+                    nunk += c < 0;
                     if (cand[j].live) {
                         if (nl == 0) {
                             lq = cand[j].page;
@@ -3122,27 +3151,20 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                         }
                         nl++;
                     }
-                    if (at + 2 < (int)sizeof names) {
-                        const int wr = snprintf(
-                            names + at, sizeof names - (size_t)at, "%s%s+0x%x%s",
-                            j > 0 ? (j + 1 == nc ? " and " : ", ") : "", cand[j].m->name,
-                            (unsigned)cand[j].off, cand[j].live ? "" : " (its page dies in place)");
-                        at = wr < 0                        ? at
-                             : at + wr < (int)sizeof names ? at + wr
-                                                           : (int)sizeof names - 1;
-                    }
                 }
                 if (nl == 0) {
                     BLOCK(v, ICO_XB_DATA,
-                          "fiber slot %u holds the page 0x%llx, which ADRPs in %s make: none of "
-                          "them can keep it past its own uses",
-                          (unsigned)(fib - 1u), (unsigned long long)w, names);
+                          "fiber slot %u holds the page 0x%llx, which %zu ADRPs make: by its "
+                          "version's table none of them can be held by a paused thread",
+                          (unsigned)(fib - 1u), (unsigned long long)w, nc);
                 }
                 if (!agree) {
                     BLOCK(v, ICO_XB_DATA,
-                          "fiber slot %u holds the page 0x%llx, which ADRPs in %s make: here they "
-                          "make two pages, and which one it came from cannot be told",
-                          (unsigned)(fib - 1u), (unsigned long long)w, names);
+                          "fiber slot %u holds the page 0x%llx, which %zu ADRPs make (%zu of them "
+                          "can be held by a paused thread, %zu not judged by its table): here "
+                          "those make two pages or more, and which one it came from cannot be "
+                          "told",
+                          (unsigned)(fib - 1u), (unsigned long long)w, nc, nl, nunk);
                 }
                 q = lq;
                 if (v->page_resolved < ICO_XB_PAGE_LOG) {
@@ -3152,7 +3174,10 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                     e->old = w;
                     e->now = q;
                     snprintf(e->by, sizeof e->by, "%s+0x%x", nm0, (unsigned)off0);
-                    snprintf(e->all, sizeof e->all, "%s", names);
+                    e->n_prod = (unsigned)nc;
+                    e->n_live = (unsigned)nl;
+                    e->n_dead = (unsigned)ndead;
+                    e->n_unknown = (unsigned)nunk;
                 }
                 v->page_resolved++;
             }
@@ -3196,11 +3221,13 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
     v->point = points.p;
     v->n_point = points.n;
     v->kind = ICO_XB_OK;
+    free(cand);
     free(umap);
     free(fsp);
     return ICO_XB_OK;
 fail:
 #undef FAIL
+    free(cand);
     free(umap);
     for (f_i = 0; f_i < n_fsp; f_i++) {
         free(fsp[f_i].p);

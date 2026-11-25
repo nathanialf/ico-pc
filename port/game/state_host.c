@@ -2095,13 +2095,13 @@ static void xb_log_extra(const IcoXbVerdict *v)
     for (i = 0; i < v->page_resolved && i < ICO_XB_PAGE_LOG; i++) {
         const IcoXbPageRes *e = &v->pres[i];
 
-        fprintf(
-            stderr,
-            "state: fiber slot %u's page 0x%llx is taken here as 0x%llx, from the ADRP in %s: of "
-            "the ADRPs that made it there (%s), the others' pages die in place (used only as a "
-            "base before any call, return or store of it), so no paused thread holds them\n",
-            (unsigned)e->fiber, (unsigned long long)e->old, (unsigned long long)e->now, e->by,
-            e->all);
+        fprintf(stderr,
+                "state: fiber slot %u's page 0x%llx is taken here as 0x%llx, from the ADRP in %s: "
+                "of the %u ADRPs that made it there, its version's table says %u can be held by a "
+                "paused thread (all making this page here; %u of them not judged, counted as held) "
+                "and %u cannot\n",
+                (unsigned)e->fiber, (unsigned long long)e->old, (unsigned long long)e->now, e->by,
+                e->n_prod, e->n_live, e->n_unknown, e->n_dead);
     }
     if (v->blocked > 1) {
         fprintf(
@@ -2241,6 +2241,7 @@ static int xb_probe_locked(const char *path, const char *commit, IcoXbVerdict *v
                 now.n_xlate = lt->n_hash;
                 now.xlate_rules = lt->verify_rules;
                 now.xlate_name = lt->name;
+                now.carry_lt = lt->carry != NULL ? lt : NULL;
             }
         }
         k = ico_xb_check(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], &now, v);
@@ -3507,7 +3508,7 @@ static void perform_load(int slot)
                 "values and texts, %zu spans, %zu points; %u dead-frame words without one; %u "
                 "words naming nothing kept as numbers, first 0x%llx; %u texts had identical "
                 "twins, the first taken; %u words placed by forward bytes alone, not proven; %u "
-                "page words taken from the ADRPs whose page lives)\n",
+                "page words taken from the ADRPs a paused thread can hold)\n",
                 slot, sv, tv, xv.units, xv.data, xv.points, xv.n_span, xv.n_point, xv.soft_left,
                 xv.left, (unsigned long long)xv.first_left, xv.twins, xv.forward, xv.page_resolved);
         log_fresh_blocks(slot, &xv);

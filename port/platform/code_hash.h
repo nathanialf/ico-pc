@@ -120,6 +120,28 @@ uint64_t ico_code_hash_text(int rules, int arch, const void *code, size_t n, uin
 size_t ico_code_a64_unpatch(const void *code, size_t words, uint64_t addr, const IcoA64Text *tx,
                             uint32_t *ws);
 
+/* Whether the page the ADRP at word k of a function (its `words` words ws,
+   erratum patch sites replaced: ico_code_a64_unpatch) makes can be held by
+   a paused thread: 1 when it may, 0 when it surely cannot, -1 when there is
+   no memory (the caller then takes it as 1).  A thread pauses in a call
+   (the fiber switch is one, minicoro's, and saves x19-x30, sp and d8-d15),
+   and AAPCS64 lets a call destroy x9-x18 and lets the callee keep what its
+   arguments hold.  So the page can reach a paused thread only through a call
+   or branch out of the function (BL, BLR, BR, RET, a B or conditional
+   branch leaving it: a tail call) with the page in x0-x8 or x19-x28, a store
+   of it, or any use this rule does not understand (an unknown word, a read
+   of it by another instruction than a base use, a MOV or an ADD of 0, which
+   it follows as copies).  The flow follows the function's own branches (a
+   BR leads to every word); a register stops holding the page only where an
+   instruction surely writes it (the classes the hash's decoder over-claims,
+   exclusive and ordered accesses, CAS, PRFM, atomics, count as writing
+   nothing; a call ends x0-x18 and x30).  It reads the immediate of an ADD
+   (0: a copy), which the code hash masks: it is judged on the SAVING build's
+   own words (the save, or the legacy table made from that build's
+   package), never on another build's.  tools/code_hash_a64.py page_carried
+   is the same in Python. */
+int ico_code_a64_page_carried(const uint32_t *ws, size_t words, size_t k);
+
 /* --- the decoders (tests) ----------------------------------------------------- */
 
 enum { ICO_X64_BRANCH = 1, ICO_X64_RIP, ICO_X64_DISP, ICO_X64_IMM };

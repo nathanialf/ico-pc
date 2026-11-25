@@ -193,6 +193,10 @@
 #define ICO_XB_UNNAMED 4u   /* words nothing in the table names: kept as numbers */
 #define ICO_XB_LOW_IMAGE 8u /* the saving program's image lies below 4 GB */
 #define ICO_XB_PAGES 16u    /* arm64: the fibers' page words were recorded (state_xbuild.c) */
+/* arm64: the producers are only the ADRPs whose page a paused thread can
+   hold, judged on the saving build's own words (code_hash.h
+   ico_code_a64_page_carried) */
+#define ICO_XB_CARRIED 32u
 
 /* why a word is named by nothing (IcoXbUnnamed.reason) */
 enum {
@@ -350,6 +354,10 @@ typedef struct IcoXbNow {
     size_t n_xlate;
     int xlate_rules;
     const char *xlate_name; /* the table's name, for the log */
+    /* the saving version's legacy table when it judges its ADRPs (its
+       carry.z: IcoLegacyTable.carry), or NULL: for a page word whose
+       producers make two pages here (a record without ICO_XB_CARRIED) */
+    const IcoLegacyTable *carry_lt;
 } IcoXbNow;
 
 /* what blocks a state (the first blocker found) */
@@ -379,14 +387,18 @@ typedef struct IcoXbForward {
 } IcoXbForward;
 
 /* a page word whose producers make two pages here, taken from the ones
-   whose page can outlive their own uses (ico_xb_check; proven, logged) */
+   whose page a paused thread can hold by the saving version's legacy table
+   (code_hash.h ico_code_a64_page_carried on that build's words; logged) */
 #define ICO_XB_PAGE_LOG 16
 
 typedef struct IcoXbPageRes {
     uint32_t fiber;    /* the fiber's slot */
     uint64_t old, now; /* the page in the saving build, here */
-    char by[64];       /* the ADRP it is taken from (function+offset) */
-    char all[160];     /* every producer, those whose page dies in place marked */
+    char by[64];       /* the first ADRP it is taken from (function+offset) */
+    /* its producers: all, those the version's table says a paused thread can
+       hold (all of them make the page taken), those it says cannot, and
+       those it does not judge (counted among the held) */
+    unsigned n_prod, n_live, n_dead, n_unknown;
 } IcoXbPageRes;
 
 typedef struct IcoXbVerdict {

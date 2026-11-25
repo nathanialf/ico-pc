@@ -432,6 +432,131 @@ def code_hash(code, addr, rules=3, text=None):
     return xxh3_64(mask_a64(code, addr, rules, text)) if code else xxh3_64(b"")
 
 
+# --- what a paused thread can hold (code_hash.c ico_code_a64_page_carried) ---
+
+A64_CARRY = 0x1FF | (0x3FF << 19)  # x0-x8 (arguments, indirect result) and x19-x28
+A64_CALL_KILL = 0x7FFFF | 1 << 30   # a call: x0-x18 and x30 hold nothing of the caller's after it
+
+def a64_must_writes(w):
+    """the registers the word surely writes (liveness: an over-claimed write would end tracking
+    of a page that lives); 0 for the classes the hash's decoder over-claims"""
+    if w & 0x7C000000 == 0x14000000:
+        return 0
+    if w & 0x0A000000 == 0x08000000:
+        if w & 0x3E000000 == 0x08000000 or w & 0x3B000000 == 0x19000000:
+            return 0  # exclusive, ordered, CAS; RCpc unscaled, MTE, MOPS
+        if (w & 0xFFC00000) == 0xF9800000 or (w & 0xFFE00400) == 0xF8800000 or \
+                (w & 0xFFE00C00) == 0xF8A00800 or (w & 0xFF000000) == 0xD8000000:
+            return 0  # PRFM, PRFUM
+        if w & 0x3B200C00 == 0x38200000:
+            return 0  # atomics
+    r = a64_writes_v3(w)
+    return 0 if r == 0xFFFFFFFF else r
+
+def a64_carries(w, regs, n, j):
+    """1 when word j (entered with the page in regs) may hand it to a paused thread"""
+    f = lambda b: (regs >> b) & 1
+    rt, rn, rt2, rm = w & 31, (w >> 5) & 31, (w >> 10) & 31, (w >> 16) & 31
+    carry = regs & A64_CARRY
+    if a64_writes_v3(w) == 0xFFFFFFFF:
+        return regs != 0  # not understood
+    if w & 0x7C000000 == 0x14000000:
+        if w & 0x80000000:
+            return carry != 0  # BL
+        t = j + sext(w & 0x3FFFFFF, 26)
+        return not (0 <= t < n) and carry != 0  # B out of the function: a tail call
+    if w & 0xFF000000 == 0x54000000 or w & 0x7E000000 == 0x34000000:
+        t = j + sext((w >> 5) & 0x7FFFF, 19)
+        return not (0 <= t < n) and carry != 0
+    if w & 0x7E000000 == 0x36000000:
+        t = j + sext((w >> 5) & 0x3FFF, 14)
+        return not (0 <= t < n) and carry != 0
+    if w & 0xFE000000 == 0xD6000000:
+        return carry != 0  # BLR, BR (tail call or jump table), RET
+    if w & 0xFFE0FFE0 == 0xAA0003E0:
+        return False  # MOV: followed
+    if w & 0x7F800000 == 0x11000000:  # ADD/SUB (immediate), 64-bit
+        if f(rn) and ((w >> 10) & 0xFFF) == 0 and not (w >> 30) & 1:
+            return False  # ADD #0: a copy, followed (copies)
+        return False      # a base use: the result is no page
+    if w & 0x9F000000 in (0x90000000, 0x10000000):
+        return False
+    if w & 0x3B000000 == 0x39000000 or w & 0x3B200000 == 0x38000000:
+        store = ((w >> 22) & 3) == 0
+        return bool(store and not (w >> 26) & 1 and f(rt))
+    if w & 0x3B200C00 == 0x38200800:
+        store = ((w >> 22) & 3) == 0
+        return bool(store and not (w >> 26) & 1 and f(rt)) or bool(f(rm))
+    if w & 0x3A000000 == 0x28000000:
+        store = not (w >> 22) & 1
+        return bool(store and not (w >> 26) & 1 and (f(rt) or f(rt2)))
+    if w & 0x0A000000 == 0x08000000:
+        return bool(f(rt) or f(rt2) or f(rm) or f(rn))  # other loads and stores
+    if w & 0x1C000000 == 0x10000000:
+        if w & 0x1F800000 == 0x12800000:
+            return ((w >> 29) & 3) == 3 and bool(f(rt))
+        return bool(f(rn) or (w & 0x1F800000 == 0x13800000 and f(rm)))
+    if w & 0x0E000000 == 0x0A000000:
+        return bool(f(rn) or f(rm) or (w & 0x1F000000 == 0x1B000000 and f(rt2)))
+    if w & 0x0E000000 == 0x0E000000:
+        return bool(f(rn))
+    if w & 0xFFC00000 == 0xD5000000:
+        return bool(f(rt))  # MSR, SYS read Rt
+    return bool(f(rt) or f(rn) or f(rt2) or f(rm))
+
+def page_carried(ws, k):
+    """code_hash.c ico_code_a64_page_carried: 1 when the page the ADRP at word k of the function
+    (its words ws, patch sites replaced) makes may be held by a paused thread (code_hash.h)"""
+    n = len(ws)
+    rd = ws[k] & 31
+    into = [0] * n
+    seen = [False] * n
+    queued = [False] * n
+    work = []
+
+    def push(j, v):
+        if 0 <= j < n and (not seen[j] or v & ~into[j]):
+            seen[j] = True
+            into[j] |= v
+            if not queued[j]:
+                queued[j] = True
+                work.append(j)
+    # after the ADRP
+    push(k + 1, 1 << rd)
+    while work:
+        j = work.pop()
+        queued[j] = False
+        w, v = ws[j], into[j]
+        if v == 0:
+            continue
+        if a64_carries(w, v, n, j):
+            return True
+        if w & 0xFC000000 == 0x94000000 or (w & 0xFE000000 == 0xD6000000 and (w >> 21) & 3 == 1):
+            out = v & ~A64_CALL_KILL & ~a64_must_writes(w)
+        else:
+            out = v & ~a64_must_writes(w)
+            d = w & 31
+            if w & 0xFFE0FFE0 == 0xAA0003E0 and (v >> ((w >> 16) & 31)) & 1 and d not in (29, 31):
+                out |= 1 << d
+            if w & 0xFF800000 == 0x91000000 and (v >> ((w >> 5) & 31)) & 1 and ((w >> 10) & 0xFFF) == 0 and d not in (29, 31):
+                out |= 1 << d  # ADD Xd, Xn, #0
+        nxt = [j + 1]
+        if w & 0xFC000000 == 0x14000000:
+            nxt = [j + sext(w & 0x3FFFFFF, 26)]
+        elif w & 0xFF000010 == 0x54000000 or w & 0x7E000000 == 0x34000000:
+            nxt.append(j + sext((w >> 5) & 0x7FFFF, 19))
+            if w & 0xFF00001F == 0x5400000E: nxt = nxt[1:]
+        elif w & 0x7E000000 == 0x36000000:
+            nxt.append(j + sext((w >> 5) & 0x3FFF, 14))
+        elif w & 0xFE000000 == 0xD6000000 and (w >> 21) & 3 != 1:
+            # BR: a jump table's case, any word (a carrying register there escaped already);
+            # RET, ERET: none
+            nxt = list(range(n)) if ((w >> 21) & 0xF) == 0 else []
+        for t in nxt:
+            push(t, out)
+    return False
+
+
 CORPUS = "test/code_hash_a64_corpus.txt"  # beside this tool: the twins' corpus
 
 
@@ -478,6 +603,8 @@ def read_corpus(path):
             rel.append((t[0], t[1], t[2], int(t[3])))
         elif t[0] == "writes":
             rel.append((t[0], int(t[1], 16), int(t[2], 16), int(t[3], 16)))
+        elif t[0] == "carried":
+            rel.append((t[0], t[1], int(t[2]), int(t[3])))
         else:
             raise ValueError("code_hash_a64: corpus line %r" % line)
     return ent, rel
@@ -492,6 +619,12 @@ def check_corpus(path):
         if got[nm] != want:
             bad.append("corpus %s: %s, the file says %s" % (nm, got[nm], want))
     for kind, x, y, r in rel:
+        if kind == "carried":
+            addr, ws, stubs, _ = ent[x]
+            uw = unpatch(ws, addr, corpus_text(stubs))[0]
+            if int(page_carried(uw, y)) != r:
+                bad.append("corpus: carried %s %d: %d, the file says %d" % (x, y, int(page_carried(uw, y)), r))
+            continue
         if kind == "writes":
             if a64_writes_v3(x) != y or a64_writes_v2(x) != r:
                 bad.append("corpus: writes %08x: %08x %08x, the file says %08x %08x" %

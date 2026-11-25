@@ -50,7 +50,7 @@ cdvd_host 0.49
 charfile_image 0.00
 clock_trap 0.00
 code_hash_a64_selftest 0.60  # estimate: 0.38 s local (HASH3), Python XXH3 vectors and the twins' corpus of 28 functions under three rules
-code_hash_corpus 0.10  # estimate: 0.02 s local under ASan/UBSan (HASH3), C over the twins' corpus of 28 functions
+code_hash_corpus 0.15  # estimate: 0.07 s local under ASan/UBSan (HASH3E), C over the twins' corpus of 44 functions and 649 carry verdicts
 collision_carrier 0.01
 collision_carrier_disc 0.00
 collision_carrier_disc_aug6 0.00
@@ -1192,7 +1192,7 @@ state_host 0.01
 state_legacy 1.00  # estimate: 0.4 s local under ASan/UBSan (HASH3B), it inflates and parses eleven legacy tables
 state_legacy_gate 0.80  # estimate: 0.44 s local (HASH3), Python gate over a fake release and new library, eight runs of the tool
 state_legacy_tables 0.40  # estimate: 0.13 s local (HASH3B), Python over eleven legacy tables
-state_name 0.01  # estimate: 0.0x s local (STATENAME's merge check), a unit test like state_port
+state_name 1.00  # estimate: 0.86 s local under ASan/UBSan (HASH3E), the synthetic builds incl. the page and window cases
 state_port 0.02
 state_recover 0.02
 state_recover_aug6 0.02
