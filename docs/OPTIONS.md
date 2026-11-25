@@ -1142,6 +1142,11 @@ it was saved in has not changed and the game can be sure it resumes it
 exactly. On Linux, the Steam Deck and Mac count on a state resuming where it
 was saved only in the version that saved it.
 
+Until version 1.0 a save state is not guaranteed to resume where it was saved
+in another version of the game. It often does; it cannot when the newer
+version changed a part of the game the state was in the middle of. From 1.0
+on, states are meant to keep resuming exactly in later versions.
+
 A state that the game cannot resume where it was saved (one made by another
 version of the game, or on another kind of device) still loads: the game
 continues from the last checkpoint the state holds, the place a game over
