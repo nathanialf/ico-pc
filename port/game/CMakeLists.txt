@@ -16,7 +16,7 @@
 # camera_reset.h), called by the four SetCameraMatrix_Ico2 copies in
 # ico2/omori/src/camera-ico2.c
 # yorda_look.c: Look at Yorda's press, toggle and end rules ([gameplay] yorda_look,
-# yorda_look.h), called by the four subBoyCollision copies in ico2/fumi/src/boyact.c
+# yorda_look.h), called by its game side yorda_look_live.c below (no game code calls it)
 # zoom_toggle.c: Zoom type's latch ([gameplay] zoom_type, zoom_toggle.h) and its
 # save-state block, called by the camera's zoom blocks in
 # ico2/omori/src/camera-root.c and camera-ico2.c
@@ -53,7 +53,7 @@ endif()
 # answer, count and log lines, its hook and eleven callers in enemy_act.c and its simulation key
 # (text scans), and zoom_type's key and the camera's four R2 tests, two resets and the June
 # 2001 look-around's test in camera-root.c and camera-ico2.c (text scans), and yorda_look's
-# key and the four subBoyCollision hooks in boyact.c (text scans).
+# key, boyact.c naming none of it and trace_host.c's one call (text scans).
 add_executable(options_test test/options_test.c ../platform/host_config.c)
 ico_include_dirs(omori _ico_options_incs)
 target_include_directories(options_test PRIVATE ${_ico_options_incs}
@@ -68,7 +68,8 @@ target_compile_definitions(options_test PRIVATE ${ICO_GAME_DEFINITIONS}
     ICO_ICOMISC_SRC="${CMAKE_SOURCE_DIR}/ico2/common/src/icoMisc.c"
     ICO_CAMERA_ROOT_SRC="${CMAKE_SOURCE_DIR}/ico2/omori/src/camera-root.c"
     ICO_CAMERA_ICO2_SRC="${CMAKE_SOURCE_DIR}/ico2/omori/src/camera-ico2.c"
-    ICO_BOYACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/boyact.c")
+    ICO_BOYACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/boyact.c"
+    ICO_TRACE_HOST_SRC="${CMAKE_SOURCE_DIR}/port/platform/trace_host.c")
 target_compile_options(options_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS} -Wno-unused-parameter -Wno-unused-variable
                        -Wno-unused-function)
@@ -522,13 +523,19 @@ endif()
 
 # Look at Yorda (yorda_look.h): off answers 0 over pseudo-random input; Hold
 # while L3 is held; Toggle on a press, off on the next; a toggled look ends
-# without control, with her hand taken, on a new stage and with a Camera reset
-# (the real camera_reset.c); the Main tick clock; a copy of the arms' use; the
-# FRESH save-state block copied back. CPU only, no game sources.
-add_executable(yorda_look_test test/yorda_look_test.c ../platform/host_config.c)
-target_include_directories(yorda_look_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
-target_compile_options(yorda_look_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_link_libraries(yorda_look_test PRIVATE ico_options)
+# without control, with her hand taken, on a new stage, with a Camera reset
+# (the real camera_reset.c) and with a state's load; the Main tick clock; the
+# game's side (yorda_look_live.c, compiled in with the game stubbed) on each
+# disc body: its tests, its calls and their order; the FRESH save-state block
+# copied back. CPU only, no game sources.
+add_executable(yorda_look_test test/yorda_look_test.c yorda_look_live.c ../platform/host_config.c)
+ico_include_dirs(fumi _ico_yorda_look_incs)
+target_include_directories(yorda_look_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/port/platform" "${CMAKE_SOURCE_DIR}/port/include" ${_ico_yorda_look_incs})
+target_compile_definitions(yorda_look_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(yorda_look_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(yorda_look_test PRIVATE ico_options ico_region)
 if(ICO_RUN_TESTS)
     add_test(NAME yorda_look COMMAND yorda_look_test)
 endif()
@@ -883,6 +890,16 @@ if(TARGET ico_pc)
     target_compile_options(ico_state_checkpoint_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
                            ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_state_checkpoint_live>)
+    # Look at Yorda: the game's side (yorda_look_live.c), the look block's
+    # calls at a Main pass's end (trace_host.c ico_host_main_tick); no game
+    # function changes, so earlier versions' states resume in the same code
+    add_library(ico_yorda_look_live OBJECT yorda_look_live.c)
+    target_include_directories(ico_yorda_look_live PRIVATE "${_ico_gs_include}"
+                               "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_gs_game_incs})
+    target_compile_definitions(ico_yorda_look_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    target_compile_options(ico_yorda_look_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_yorda_look_live>)
 endif()
 
 # Save states (port/platform/state.h): state_host.c takes and puts back a

@@ -2847,9 +2847,8 @@ static void test_camera_reset(const char *dir)
 
 /* [gameplay] yorda_look (options.h, yorda_look.h): off on every disc by
    default, "hold" and "toggle" read, any other word off, the setter, the
-   reload; the four subBoyCollision copies' hook (a text scan of boyact.c:
-   the call, the look block, the camera with her on the screen, her other
-   stage) and the simulation key */
+   reload; boyact.c names none of it and trace_host.c calls the port's tick
+   once (text scans), and the simulation key */
 static void test_yorda_look(const char *dir)
 {
     static const char *const words[5] = {"off", "hold", "toggle", "Hold", "on"};
@@ -2894,38 +2893,23 @@ static void test_yorda_look(const char *dir)
     ico_opt_reload();
     CHECK(ico_opt_yorda_look() == ICO_YORDA_LOOK_OFF);
 
+    /* the game's code names none of it: the look is the port's, at a Main
+       pass's end, so states of earlier versions paused in subBoyCollision
+       resume in the same code (yorda_look_live.c, state_xbuild.h) */
     src = read_source(ICO_BOYACT_SRC);
     CHECK(src != NULL);
     if (src != NULL) {
-        CHECK(count_of(src, "ico_yorda_look(") == 4 + 1 /* the declaration */);
-        CHECK(count_of(src, "look = ico_yorda_look(pad[0].now & 0x200,\n") == 4);
-        /* live: under control, no Free movement; the European body also not
-           in its own cut to her capture (privInsCam) */
-        CHECK(count_of(src, "IsAbleBoyControl() != 0 && ico_free_movement() == 0,\n") == 3);
-        CHECK(count_of(src, "IsAbleBoyControl() != 0 && ico_free_movement() == 0 &&\n"
-                            "                                      boyPrivInsCamOff(),\n") == 1);
-        /* privInsCam named only through the helper at the file's end: a
-           mention inside subBoyCollision moved it in the Android build's
-           game data (v0.11.16-rc3's layout gate) */
-        CHECK(count_of(src, "static int boyPrivInsCamOff(void)") == 2);
-        CHECK(count_of(src, "    return privInsCam.on == 0;\n}\n") == 1);
-        CHECK(count_of(src, "ACTGame_FLAG_TETSUNAGI() != 0, stage_no);") == 4);
-        /* the look block: the second player's R1 or the look (three twins),
-           the European body's call, her R1 or the look */
-        CHECK(count_of(src, "((girlControlMode != 0 && (GOBJ_ACT(girlGObj)->pad.now & 8)) || "
-                            "look)) {") == 3);
-        CHECK(count_of(src,
-                       "girlControlMode != 0 && girlGObj != 0 && (GOBJ_ACT(girlGObj)->pad.now & "
-                       "8)) {") == 0);
-        CHECK(count_of(src, "(looking || ((int)(GOBJ_ACT(girlGObj)->flags20.ll >> 26) & 1) || "
-                            "look)) {") == 1);
-        /* the camera also with her on the screen, under the script's flag */
-        CHECK(count_of(src, "if ((girlLookInScreen == 0 || look) && ((int)(sub->flags20.ll >> ") ==
-              3);
-        CHECK(count_of(src, "if (girlLookInScreen == 0 || look) {\n") == 1);
-        /* her other stage, as R1 there */
-        CHECK(count_of(src, "if (((sub->pad.now & 0x8) || look) && lo != 0) {") == 4);
-        CHECK(count_of(src, "if ((sub->pad.now & 0x8) && lo != 0) {") == 0);
+        CHECK(count_of(src, "yorda_look") == 0);
+        CHECK(count_of(src, "boyPrivInsCamOff") == 0);
+        CHECK(count_of(src, "|| look") == 0);
+        CHECK(count_of(src, "if ((sub->pad.now & 0x8) && lo != 0) {") == 4);
+        free(src);
+    }
+    src = read_source(ICO_TRACE_HOST_SRC);
+    CHECK(src != NULL);
+    if (src != NULL) {
+        CHECK(count_of(src, "    ico_yorda_look_tick();\n") == 1);
+        CHECK(count_of(src, "ico_yorda_look_tick(") == 2 /* the declaration and the call */);
         free(src);
     }
     src = read_source(ICO_SIM_KEYS_SRC);

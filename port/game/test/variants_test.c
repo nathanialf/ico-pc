@@ -952,6 +952,48 @@ static void test_state_loaded(void)
     use_config(NULL);
 }
 
+/* a state saved in developer mode loaded with it off now
+   (ico_variants_developer_state_loaded): the run counts as one that used
+   the Debug menu (achievements off until the game restarts) and every bound
+   switch the Debug menu changed in the saving run is this run's again, the
+   difficulty rows' switches too */
+static void test_developer_state_loaded(void)
+{
+    int cycle = 4, slow = 4;
+
+    use_config(NULL);
+    bind_retail();
+    ico_variants_bind_debug_chain(&cycle, &slow);
+    ico_variants_debug_menu_clear();
+    CHECK(retail() && ico_variants_suspend_achievements() == 0);
+    /* the restore: the saving run's Debug menu values */
+    s_one_hit = 1;
+    s_dodge = 1;
+    s_battle = 0;
+    s_demo_cam = 1;
+    s_hand = 0;
+    cycle = 9;
+    slow = 1;
+    CHECK(ico_variants_developer_state_loaded() == 7);
+    CHECK(retail() && cycle == 4 && slow == 4);
+    CHECK(ico_variants_suspend_achievements() == 1);
+    /* nothing left to put back; still suspended */
+    CHECK(ico_variants_developer_state_loaded() == 0 && ico_variants_suspend_achievements() == 1);
+    /* a variant on now: its value, not the game's */
+    ico_variants_debug_menu_clear();
+    use_config("[variants]\nignore_cutscene_cameras = true\n");
+    bind_retail();
+    ico_variants_bind_debug_chain(&cycle, &slow);
+    s_demo_cam = 0;
+    CHECK(ico_variants_developer_state_loaded() == 1 && s_demo_cam == 1);
+    ico_variants_debug_menu_clear();
+    use_config(NULL);
+    bind_retail();
+    CHECK(ico_variants_suspend_achievements() == 0);
+    ico_variants_bind_debug(NULL, NULL, NULL, NULL, NULL, NULL);
+    ico_variants_bind_debug_chain(NULL, NULL);
+}
+
 /* Shadow toughness American is offered on every disc but the June 2001 demo
    (its enemy rows are its own): there a config "american" reads as Original,
    a set of it gives Original, and the row steps Original <-> Not tougher
@@ -1043,6 +1085,7 @@ int main(int argc, char **argv)
     test_peaceful();
     test_chain();
     test_state_loaded();
+    test_developer_state_loaded();
     remove(s_path);
     if (failures != 0) {
         fprintf(stderr, "variants_test: %d failure(s)\n", failures);

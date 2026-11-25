@@ -118,6 +118,15 @@ void ico_yorda_look_drop(void)
     endToggle("camera reset");
 }
 
+/* any load: a state of an earlier version has no block (FRESH: this run's
+   bytes stay), and one of this version would bring back a look the player
+   did not start in this run */
+void ico_yorda_look_state_loaded(void)
+{
+    endToggle("a state loaded");
+    s_yl.on = 0;
+}
+
 void ico_yorda_look_clear(void)
 {
     s_yl.prev = 0;
