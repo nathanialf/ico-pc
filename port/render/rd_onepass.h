@@ -73,8 +73,15 @@
  * passes only with every frame the same, at least one pair of its class
  * in one pass (B: at least one command unfused, or nothing fused on this
  * device at all) and its control seen to differ.  In use: the plain class
- * where A passed; the cut class where C passed and A passed and B passed
- * (or nothing fused here).  Logged per case and per arm.
+ * where A passed, and only for draws whose every corner reaches the
+ * rasteriser at w = 1 (rd_op_safe_draw: clip mode none, a kick drawn
+ * apart, a prelit mesh proven wholly in front of the eye).  The cut class
+ * is never used: where a corner reaches the GPU's clipper behind the eye
+ * the noperspective colour extrapolates past its corners, so As can pass
+ * 128 where the alpha plan says not, and the carry stores 128 where the
+ * alpha pass stores As (measured on lavapipe: arm C at case 7, As 129 from
+ * corners of at most 127).  B and C are logged measurements.  Logged per
+ * case and per arm.
  *
  * The ways back (each logged, none written to the settings):
  *   - the check (above): an arm that does not pass keeps its class in two
@@ -107,7 +114,10 @@
  * ICO_RD_ONEPASS_SABOTAGE=constant (the constant 127/255 in arms A and C:
  * both fail), =cut (127/255 on the code 36 frames' C alone: C fails, A
  * stays), =unmade (every one-pass pipeline taken as not made in the check:
- * "not checked"). */
+ * "not checked"), =sliver (arm C's picture given a texel on a code 36 frame
+ * where today's two passes drew nothing: C must differ), =read (the first
+ * frame's reference read taken as failed without a device loss: not
+ * checked, no verdict). */
 #ifndef PORT_RENDER_RD_ONEPASS_H
 #define PORT_RENDER_RD_ONEPASS_H
 
@@ -156,6 +166,7 @@ enum {
     RD_OP_PABE,
     RD_OP_FIX,    /* the factor is FIX (LERP FIX), not As */
     RD_OP_OTHER,  /* Cd*FIX + Cs, Z GREATER with Z write, the target, a read, MSAA */
+    RD_OP_EYE,    /* a corner may reach the rasteriser behind the eye (rd_op_safe_draw) */
     RD_OP_FUSED,  /* a fused code 36 pair (its kick, or a fused command's cut) */
     RD_OP_CLASS,  /* its class not in use on this device */
     RD_OP_UNMADE, /* its pipeline not made yet (asked for in the background) */
@@ -177,8 +188,23 @@ int rd_op_why(const struct RdDrawPass *colour, const struct RdDrawPass *alpha, u
    (a cut or kick drawn apart), 0 (a fused kick, or the cut of a command
    that fused: cmdFused) */
 uint32_t rd_op_class_of(uint32_t vuBits, bool cmdFused);
-/* the classes in use from the arms' verdicts (RD_OP_V_*) */
+/* the classes in use from the arms' verdicts (RD_OP_V_*): the plain class
+   where A passed, never the cut class (its one-pass form is inexact by
+   construction, rd_op_safe_draw: B and C are logged measurements only) */
 uint32_t rd_op_classes(int a, int b, int c);
+/* Whether every corner of the draw reaches the rasteriser at w = 1 (its GS
+   position), so the noperspective colour, and with it As, interpolates
+   within its corners' values and the alpha plan's hi bounds every pixel:
+   clip mode none (vu_gs_position, w 1), a code 36 kick drawn apart (its
+   triangles have no clip flag: their GS positions), or a mesh the CPU
+   proved wholly in front of the eye (proven: rd_vis.c
+   rd__vis_mesh_gs_proof); never particles.  A corner at w <= 0 goes to
+   the GPU's clipper, whose new vertices' noperspective values are taken
+   in window coordinates, where a corner behind the eye projects through
+   it: the colour extrapolates past its corners (the check measured As 129
+   from corners of at most 127 at case 7, code 36, on lavapipe), and the
+   carry clamps As above 128 to 128 where the alpha pass stores As */
+bool rd_op_safe_draw(uint32_t vuBits, bool particle, bool proven);
 /* the stored alpha of the carry and of the alpha pass under a blender
    model (rd_onepass_test's table): each value quantised to an unsigned
    normalised fixed point of bits (8..24) or to a float of 16 or 32 bits
@@ -218,7 +244,8 @@ void rd__op_replay_begin(void);
    key takes RD_NODUAL_ONEPASS and A, its alpha pass is dropped (the passes
    after it moved down, *np lowered).  hi the alpha plan's largest As,
    vuBits the VuCB's draw[2], count the draw's index count */
-void rd__op_take(struct RdDrawPass *dp, int *np, uint8_t hi, uint32_t vuBits, uint32_t count);
+void rd__op_take(struct RdDrawPass *dp, int *np, uint8_t hi, uint32_t vuBits, uint32_t count,
+                 bool particle, bool proven);
 /* rd_replay_vu.c vuFuseVerdict: a code 36 command whose cut pair (cut[0],
    cut[1]) would go to one pass is not fused with its kick (kick: the kick's
    one planned pass), the pipelines of both made (or asked for); the check's
@@ -264,7 +291,9 @@ void rd__op_check_take(uint64_t one[2], uint64_t *unfused, uint64_t *unmade);
 void rd__op_verdict(uint32_t classes, bool measured, const char *why);
 /* the check's mark "trying" (synced; false: not written, not tried) */
 bool rd__op_try_begin(void);
-/* the tests' sabotage words: 0 none, 1 constant, 2 cut, 3 unmade */
+/* the tests' sabotage words: 0 none, 1 constant, 2 cut, 3 unmade, 4 sliver
+   (arm C's picture changed on a code 36 frame today's drew nothing on),
+   5 read (the first frame's reference read taken as failed, no loss) */
 int rd__op_sabotage(void);
 /* the tests' forced state (ICO_RD_ONEPASS=plain|full): no check */
 bool rd__op_forced(void);
@@ -281,6 +310,9 @@ uint32_t rd__pipeline_count_onepass(void);
    frame w x h GS pixels (model space), its name */
 int rd__nd_clip_case_count(void);
 const char *rd__nd_clip_case(int k, uint32_t w, uint32_t h, float out[3][3]);
+/* the texel centres case k should cover on SCENE t (the clipper check's
+   estimate; code32 the whole triangle, else the one cut at GS Z 0) */
+uint64_t rd__nd_clip_case_expected(int k, const struct RdTargetRec *t, bool code32);
 
 /* The 10 s VU line's clause (port/platform/window_host.c, after the fast
    pixel build's), the block's n replays: "; one-pass blend: P pairs a

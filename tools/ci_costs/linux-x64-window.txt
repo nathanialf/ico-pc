@@ -959,7 +959,9 @@ rd_vuprepass_selftest_onepass 17.70  # estimate: rd_vuprepass_selftest_fastps x 
 rd_vuprepass_selftest_onepass_cut 17.70  # estimate: rd_vuprepass_selftest_onepass (not run here)
 rd_vuprepass_selftest_onepass_dynamic 17.70  # estimate: rd_vuprepass_selftest_onepass (the same check with dynamic blend state; not run here)
 rd_vuprepass_selftest_onepass_marked 11.80  # estimate: rd_vuprepass_selftest_fastps (the check not run; not run here)
+rd_vuprepass_selftest_onepass_readfail 17.70  # estimate: rd_vuprepass_selftest_onepass (not run here)
 rd_vuprepass_selftest_onepass_sabotage 17.70  # estimate: rd_vuprepass_selftest_onepass (every frame drawn, no control replays; not run here)
+rd_vuprepass_selftest_onepass_sliver 17.70  # estimate: rd_vuprepass_selftest_onepass (not run here)
 rd_vuprepass_selftest_onepass_unchecked 21.24  # estimate: rd_vuprepass_selftest_fastps x 1.8 (every arm replay of the check drawn again after its retry; not run here)
 rd_vuprepass_selftest_plain 1.57
 rd_vuprepass_selftest_plain_gl 3.70

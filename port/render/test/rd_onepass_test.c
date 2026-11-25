@@ -176,8 +176,10 @@ static void classes(void)
     CHECK(rd_op_class_of((uint32_t)ICO_VU_KICK_ONLY, false) == RD_OP_CUT);
     CHECK(rd_op_class_of((uint32_t)(ICO_VU_KICK_ONLY | ICO_VU_FUSED), true) == 0u);
     const int P = RD_OP_V_PASS;
-    CHECK(rd_op_classes(P, P, P) == (RD_OP_PLAIN | RD_OP_CUT));
-    CHECK(rd_op_classes(P, RD_OP_V_NOTHING, P) == (RD_OP_PLAIN | RD_OP_CUT));
+    /* the cut class never: its form is inexact where a corner reaches the
+       GPU behind the eye (rd_op_safe_draw), B and C are measurements */
+    CHECK(rd_op_classes(P, P, P) == RD_OP_PLAIN);
+    CHECK(rd_op_classes(P, RD_OP_V_NOTHING, P) == RD_OP_PLAIN);
     CHECK(rd_op_classes(P, RD_OP_V_DIFFERS, P) == RD_OP_PLAIN); /* the suspect alone failed */
     CHECK(rd_op_classes(P, RD_OP_V_UNTESTED, P) == RD_OP_PLAIN);
     CHECK(rd_op_classes(P, RD_OP_V_UNCHECKED, P) == RD_OP_PLAIN);
@@ -188,6 +190,18 @@ static void classes(void)
     CHECK(rd_op_classes(RD_OP_V_UNCHECKED, P, P) == 0u);
     CHECK(rd_op_classes(RD_OP_V_BLIND, P, P) == 0u);
     CHECK(rd_op_classes(RD_OP_V_DEVICE, RD_OP_V_DEVICE, RD_OP_V_DEVICE) == 0u);
+    /* the draws whose corners all reach the rasteriser at w = 1 */
+    CHECK(rd_op_safe_draw((uint32_t)ICO_VU_CLIP_NONE, false, false));
+    CHECK(!rd_op_safe_draw((uint32_t)ICO_VU_CLIP_NONE, true, false)); /* particles never */
+    CHECK(!rd_op_safe_draw((uint32_t)ICO_VU_CLIP_REGION, false, false));
+    CHECK(rd_op_safe_draw((uint32_t)ICO_VU_CLIP_REGION, false, true)); /* proven in front */
+    CHECK(
+        !rd_op_safe_draw((uint32_t)ICO_VU_CLIP_SCISSOR | (uint32_t)ICO_VU_CUT_ONLY, false, false));
+    CHECK(
+        rd_op_safe_draw((uint32_t)ICO_VU_CLIP_SCISSOR | (uint32_t)ICO_VU_KICK_ONLY, false, false));
+    CHECK(!rd_op_safe_draw((uint32_t)ICO_VU_CLIP_SCISSOR | (uint32_t)ICO_VU_KICK_ONLY |
+                               (uint32_t)ICO_VU_FUSED,
+                           false, false));
     CHECK(strcmp(rd_op_classes_name(0u), "none") == 0);
     CHECK(strcmp(rd_op_classes_name(RD_OP_PLAIN), "the pairs outside code 36") == 0);
 }
@@ -206,6 +220,9 @@ static int plan(RdDrawPass dp[8])
     return n + 1;
 }
 
+/* a plain draw of clip mode none (every corner at its GS position) */
+#define N ((uint32_t)ICO_VU_CLIP_NONE)
+
 static void take(void)
 {
     char buf[1024], st[1024];
@@ -222,7 +239,7 @@ static void take(void)
     int np = plan(dp);
     const RdDrawPass third = dp[2];
     rd__op_replay_begin();
-    rd__op_take(dp, &np, 120, 0u, 30u);
+    rd__op_take(dp, &np, 120, N, 30u, false, false);
     CHECK(np == 2);
     CHECK(dp[0].key.gs.colorMask == 0xF);
     CHECK(dp[0].key.gs.nodual == (RD_NODUAL_ON | RD_NODUAL_ONEPASS));
@@ -230,27 +247,40 @@ static void take(void)
     CHECK(memcmp(&dp[1], &third, sizeof(third)) == 0);
     /* a fused kick, a fused command's cut: kept */
     np = plan(dp);
-    rd__op_take(dp, &np, 120, (uint32_t)(ICO_VU_KICK_ONLY | ICO_VU_FUSED), 30u);
+    rd__op_take(dp, &np, 120, (uint32_t)(ICO_VU_KICK_ONLY | ICO_VU_FUSED), 30u, false, false);
     CHECK(np == 3);
     rd__op_cut_fused(true);
     np = plan(dp);
-    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CUT_ONLY, 30u);
+    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CUT_ONLY, 30u, false, false);
     CHECK(np == 3);
     /* the cut of a command drawn apart: taken */
     rd__op_cut_fused(false);
     np = plan(dp);
-    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CUT_ONLY, 30u);
+    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CUT_ONLY, 30u, false, false);
     CHECK(np == 2);
     /* As above 128: kept */
     np = plan(dp);
-    rd__op_take(dp, &np, 129, 0u, 30u);
+    rd__op_take(dp, &np, 129, N, 30u, false, false);
     CHECK(np == 3);
+    /* the plain class only where every corner is at its GS position: the
+       region test not proven in front of the eye and particles kept, the
+       region test proven in front taken */
+    np = plan(dp);
+    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CLIP_REGION, 30u, false, false);
+    CHECK(np == 3);
+    np = plan(dp);
+    rd__op_take(dp, &np, 120, N, 30u, true, false);
+    CHECK(np == 3);
+    np = plan(dp);
+    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CLIP_REGION, 30u, false, true);
+    CHECK(np == 2);
     (void)rd_op_text(buf, sizeof(buf), 1);
-    CHECK(strcmp(buf, "; one-pass blend (both classes): 2 pairs a picture in one pass (1 of code "
-                      "36), 20 triangles, 0 code 36 commands unfused (3 pairs kept two-pass a "
-                      "picture: alpha above 128 1, FBA 0, PABE 0, a FIX factor 0, other 0, fused "
-                      "2, class not in use 0, not made yet 0, timed without it 0)") == 0);
-    if (strstr(buf, "2 pairs a picture") == NULL) {
+    CHECK(strcmp(buf, "; one-pass blend (both classes): 3 pairs a picture in one pass (1 of code "
+                      "36), 30 triangles, 0 code 36 commands unfused (5 pairs kept two-pass a "
+                      "picture: alpha above 128 1, FBA 0, PABE 0, a FIX factor 0, other 0, not "
+                      "proven in front of the eye 2, fused 2, class not in use 0, not made yet 0, "
+                      "timed without it 0)") == 0);
+    if (strstr(buf, "3 pairs a picture") == NULL) {
         printf("  clause: %s\n", buf);
     }
     /* the unfuse of a code 36 command: its cut pair and the kick's one pass */
@@ -265,9 +295,9 @@ static void take(void)
     CHECK(!rd__op_unfuse(cut, 2, kick, 2, 120));
     (void)rd__op_stats_text(st, sizeof(st));
     CHECK(strstr(st, "one-pass blend on (the pairs outside code 36 and code 36's cut and kick "
-                     "pairs drawn apart): 2 pairs in one pass of 5 (1 of code 36), 20 triangles, "
+                     "pairs drawn apart): 3 pairs in one pass of 8 (1 of code 36), 30 triangles, "
                      "1 code 36 commands unfused; kept two-pass: alpha above 128 1,") != NULL);
-    if (strstr(st, "2 pairs in one pass of 5") == NULL) {
+    if (strstr(st, "3 pairs in one pass of 8") == NULL) {
         printf("  stats: %s\n", st);
     }
     /* =plain: the cut refused for its class, nothing unfused */
@@ -275,34 +305,34 @@ static void take(void)
     rd__op_init();
     rd__op_cut_fused(false);
     np = plan(dp);
-    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CUT_ONLY, 30u);
+    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CUT_ONLY, 30u, false, false);
     CHECK(np == 3);
     CHECK(!rd__op_unfuse(cut, 2, kick, 1, 120));
     np = plan(dp);
-    rd__op_take(dp, &np, 120, 0u, 30u);
+    rd__op_take(dp, &np, 120, N, 30u, false, false);
     CHECK(np == 2);
     /* the check's arms (its pipelines made in the draw under =plain) */
     rd__op_check_arm(RD_OP_ARM_REF, false);
     np = plan(dp);
-    rd__op_take(dp, &np, 120, 0u, 30u);
+    rd__op_take(dp, &np, 120, N, 30u, false, false);
     CHECK(np == 3);
     CHECK(!rd__op_unfuse(cut, 2, kick, 1, 120));
     rd__op_check_arm(RD_OP_ARM_B, false);
     np = plan(dp);
-    rd__op_take(dp, &np, 120, 0u, 30u);
+    rd__op_take(dp, &np, 120, N, 30u, false, false);
     CHECK(np == 3);
     CHECK(rd__op_unfuse(cut, 2, kick, 1, 120)); /* B: unfused, two passes kept */
     rd__op_check_arm(RD_OP_ARM_A, false);
     np = plan(dp);
-    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CUT_ONLY, 30u);
+    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CUT_ONLY, 30u, false, false);
     CHECK(np == 3);
     CHECK(!rd__op_unfuse(cut, 2, kick, 1, 120));
     np = plan(dp);
-    rd__op_take(dp, &np, 120, 0u, 30u);
+    rd__op_take(dp, &np, 120, N, 30u, false, false);
     CHECK(np == 2);
     rd__op_check_arm(RD_OP_ARM_C, false);
     np = plan(dp);
-    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CUT_ONLY, 30u);
+    rd__op_take(dp, &np, 120, (uint32_t)ICO_VU_CUT_ONLY, 30u, false, false);
     CHECK(np == 2);
     CHECK(rd__op_unfuse(cut, 2, kick, 1, 120));
     rd__op_check_arm(-1, false);
@@ -315,12 +345,12 @@ static void take(void)
     rd__op_init();
     CHECK(strcmp(rd__op_state_text(), "held") == 0 && rd__op_on() == false);
     np = plan(dp);
-    rd__op_take(dp, &np, 120, 0u, 30u);
+    rd__op_take(dp, &np, 120, N, 30u, false, false);
     CHECK(np == 3); /* held: nothing */
     rd__op_check_arm(RD_OP_ARM_C, false);
     CHECK(rd__op_on());
     np = plan(dp);
-    rd__op_take(dp, &np, 120, 0u, 30u);
+    rd__op_take(dp, &np, 120, N, 30u, false, false);
     CHECK(np == 3);
     CHECK(!rd__op_unfuse(cut, 2, kick, 1, 120));
     rd__op_check_arm(-1, false);

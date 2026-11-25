@@ -146,7 +146,9 @@ static RdMesh makeMesh(const float (*c)[3], int n, float shade, bool probe)
         qw(q[at++], c[v][0], c[v][1], c[v][2], 1.0f);
         qw(q[at++], (float)(v % 2), (float)((v / 2) % 2), 1.0f, v % 3 == 0 ? 0.0f : 1.0f);
         qw(q[at++], shade + (float)(12 * v), 230.0f - shade, (float)(40 + 30 * v),
-           probe ? 127.0f : (float)((23 * v + 9) % 128));
+           probe    ? 127.0f
+           : v == 5 ? 127.0f
+                    : (float)((23 * v + 9) % 128));
     }
     const RdVuBatchDesc batch = {0, 0, 0};
     const RdVuMeshDesc d = {(const float (*)[4])q,
@@ -316,11 +318,15 @@ static size_t appendf(char *out, size_t size, size_t at, const char *fmt, ...)
 /* one arm's replay of a frame read into px: its counts; a replay that found
    a pipeline not made (its own, a twin's, the fast build's) drawn again
    once the background queue is made.  0 drawn, 1 still without a pipeline
-   (not checked), -1 the device failed */
+   or a replay or read that failed without a device loss (not checked), -1
+   the device lost */
 typedef struct OcTake {
     uint64_t one[2], unfused, fused;
     bool retried;
 } OcTake;
+
+/* the tests' =read: the next replay's read taken as failed, no loss */
+static bool s_failNextRead;
 
 static int armRead(const RdFrame *f, RdTargetRec *t, uint8_t *px, size_t size, int arm, bool sab,
                    OcTake *o)
@@ -333,8 +339,12 @@ static int armRead(const RdFrame *f, RdTargetRec *t, uint8_t *px, size_t size, i
     rd__op_check_arm(arm, sab);
     int rc = 0;
     for (int round = 0; round < 2; round++) {
-        if (!replayRead(f, t, px, size)) {
-            rc = -1;
+        const bool sabRead = s_failNextRead;
+        s_failNextRead = false;
+        if (sabRead || !replayRead(f, t, px, size)) {
+            /* a device loss is the device's (measured); any other failed
+               replay or read compares nothing: not checked */
+            rc = !sabRead && rhi_device_lost() ? -1 : 1;
             break;
         }
         o->fused = g_rdPerf.vuFusePairs;
@@ -361,6 +371,8 @@ static int armRead(const RdFrame *f, RdTargetRec *t, uint8_t *px, size_t size, i
 /* an arm's verdict over its frames */
 typedef struct OcArm {
     uint32_t frames, drawn, differ, unchecked;
+    uint32_t empty;    /* drawn through neither, the geometry expected to cover nothing */
+    uint32_t untested; /* drawn through neither, expected to cover something */
     uint64_t took, unfused, fused;
     int firstK;     /* the first differing frame (-1 none) */
     size_t firstAt; /* its first differing byte */
@@ -371,7 +383,7 @@ typedef struct OcArm {
     char uncheckedAt[160];
 } OcArm;
 
-static int armVerdict(const OcArm *a, int arm, bool device)
+static int armVerdict(const OcArm *a, int arm, bool device, bool noFuse)
 {
     if (!device) {
         return RD_OP_V_DEVICE;
@@ -384,7 +396,11 @@ static int armVerdict(const OcArm *a, int arm, bool device)
     }
     if (arm == RD_OP_ARM_B) {
         if (a->fused == 0u) {
-            return RD_OP_V_NOTHING; /* nothing fused here: nothing to unfuse */
+            /* nothing fused: "nothing to unfuse" only where the device fuses
+               no command at all (the fuse or the merge builds off); else the
+               check's frames did not fuse where play's may: not tested, and
+               the cut class stays off */
+            return noFuse ? RD_OP_V_NOTHING : RD_OP_V_UNTESTED;
         }
         return a->unfused != 0u ? RD_OP_V_PASS : RD_OP_V_UNTESTED;
     }
@@ -396,8 +412,10 @@ static int armVerdict(const OcArm *a, int arm, bool device)
 
 static const char *const kArmWords[RD_OP_ARMS] = {
     "", "A (one pass on the pairs outside code 36)",
-    "B (code 36 unfused where C unfuses it, its two passes kept)",
-    "C (A, and code 36 unfused with its cut and kick pairs in one pass)"};
+    "B (code 36 unfused where C unfuses it, its two passes kept; a measurement, never used in "
+    "play)",
+    "C (A, and code 36 unfused with its cut and kick pairs in one pass; a measurement, never used "
+    "in play)"};
 
 static void armLine(int arm, const OcArm *a, int v, int nCases, uint32_t tw, char *sum, size_t ss)
 {
@@ -419,10 +437,11 @@ static void armLine(int arm, const OcArm *a, int v, int nCases, uint32_t tw, cha
                      a->unchecked, a->uncheckedAt);
     }
     (void)appendf(tail, sizeof(tail), at,
-                  " (%u frames, %u of them drawn; %llu pairs in one pass, %llu code 36 commands "
-                  "fused today, %llu unfused%s",
-                  a->frames, a->drawn, (unsigned long long)a->took, (unsigned long long)a->fused,
-                  (unsigned long long)a->unfused,
+                  " (%u frames, %u of them drawn, %u drawing nothing as expected, %u drawing "
+                  "nothing not tested; %llu pairs in one pass, %llu code 36 commands fused "
+                  "today, %llu unfused%s",
+                  a->frames, a->drawn, a->empty, a->untested, (unsigned long long)a->took,
+                  (unsigned long long)a->fused, (unsigned long long)a->unfused,
                   arm == RD_OP_ARM_B ? ")"
                   : a->control       ? "; its control differed"
                                      : ")");
@@ -518,7 +537,13 @@ void rd__op_selftest(RdTargetRec *t)
     size_t caseAt = 0;
     caseText[0] = '\0';
     uint32_t replays = 0, retried = 0;
-    const int sab = rd__op_sabotage(); /* 1 constant, 2 cut, 3 unmade */
+    const int sab = rd__op_sabotage(); /* 1 constant, 2 cut, 3 unmade, 4 sliver, 5 read */
+    /* the device fuses no code 36 command at all (vuFuseVerdict's OFF and
+       BUILD): B's "nothing fused" is then a property of the device */
+    const bool noFuse = !g_rd.vuFuse || !g_rd.vuMerge || !g_rd.vsMerge[RD_VS_VU_MAIN].id ||
+                        !g_rd.vsMerge[RD_VS_VU_PRELIT].id;
+    bool lost = false;      /* a device loss (measured), not a failed read */
+    uint32_t slivered = 0u; /* the tests' =sliver: C's frames changed */
     if (!made) {
         snprintf(why, sizeof(why), "its frames could not be built");
         device = false;
@@ -565,8 +590,11 @@ void rd__op_selftest(RdTargetRec *t)
             const bool built = buildFrame(&f, scene, t->w, t->h, kNone, x, tex, probe);
             OcTake o;
             replays++;
-            if (!built || armRead(&f, t, alone[x], size, RD_OP_ARM_REF, false, &o) < 0) {
-                snprintf(why, sizeof(why), "the device failed in the probe's frame");
+            const int prc = built ? armRead(&f, t, alone[x], size, RD_OP_ARM_REF, false, &o) : 1;
+            if (prc != 0) {
+                lost = prc < 0;
+                snprintf(why, sizeof(why), "%s in the probe's frame",
+                         lost ? "the device was lost" : "a replay or read failed (not the device)");
                 device = false;
             }
             rd__frame_free(&f);
@@ -599,11 +627,13 @@ void rd__op_selftest(RdTargetRec *t)
             const bool s = (sab == 1 && (a == RD_OP_ARM_A || a == RD_OP_ARM_C)) ||
                            (sab == 2 && a == RD_OP_ARM_C);
             replays++;
+            s_failNextRead = sab == 5 && k == 0 && a == RD_OP_ARM_REF;
             rc[a] = armRead(&f, t, buf[a], size, a, s, &take[a]);
             retried += take[a].retried ? 1u : 0u;
             if (rc[a] < 0) {
-                snprintf(why, sizeof(why), "the device failed in its replays (case %d at %s)",
+                snprintf(why, sizeof(why), "the device was lost in its replays (case %d at %s)",
                          c + 1, kForm[x].word);
+                lost = true;
                 device = false;
             }
         }
@@ -622,7 +652,11 @@ void rd__op_selftest(RdTargetRec *t)
             }
         }
         const uint8_t *only = alone[kForm[x].tex ? 1 : 0];
-        const bool drawn = texelsDiffer(buf[RD_OP_ARM_REF], only, size, NULL) != 0u;
+        const bool refDrawn = texelsDiffer(buf[RD_OP_ARM_REF], only, size, NULL) != 0u;
+        /* the texels the case should cover (the clipper check's estimate):
+           0 for the cases whose plane runs through the eye, by design */
+        const uint64_t expect = rd__nd_clip_case_expected(c, t, kForm[x].code == 32);
+        bool drawn = refDrawn;
         uint64_t differ[RD_OP_ARMS] = {0, 0, 0, 0};
         for (int a = 1; a < RD_OP_ARMS; a++) {
             if (!formArm(x, a)) {
@@ -638,9 +672,24 @@ void rd__op_selftest(RdTargetRec *t)
                               n ? ", " : "", c + 1, kForm[x].word);
                 continue;
             }
-            if (!drawn) {
-                continue; /* a case that drew nothing tests nothing */
+            if (sab == 4 && a == RD_OP_ARM_C && !refDrawn) {
+                /* the tests' sliver: C draws where today's drew nothing */
+                buf[a][size / 2u] ^= 0x40u;
+                slivered++;
             }
+            /* compared whenever either form drew (the clipper check's rule:
+               nothing through today's two passes and something through the
+               arm is a difference, the shape of v0.11.10's slivers) */
+            const bool armDrawn = texelsDiffer(buf[a], only, size, NULL) != 0u;
+            if (!refDrawn && !armDrawn) {
+                if (expect == 0u) {
+                    o->empty++; /* the same: neither covers a texel, as expected */
+                } else {
+                    o->untested++; /* expected to draw, drew through neither: not tested */
+                }
+                continue;
+            }
+            drawn = true;
             o->drawn++;
             o->took += take[a].one[0] + take[a].one[1];
             o->unfused += take[a].unfused;
@@ -662,8 +711,9 @@ void rd__op_selftest(RdTargetRec *t)
                 replays++;
                 const int src = armRead(&f, t, sabPx, size, a, true, &s);
                 if (src < 0) {
-                    snprintf(why, sizeof(why), "the device failed in its control (case %d at %s)",
+                    snprintf(why, sizeof(why), "the device was lost in its control (case %d at %s)",
                              c + 1, kForm[x].word);
+                    lost = true;
                     device = false;
                     break;
                 }
@@ -685,7 +735,8 @@ void rd__op_selftest(RdTargetRec *t)
         if (rc[RD_OP_ARM_REF] != 0) {
             caseAt = appendf(caseText, sizeof(caseText), caseAt, "%s%s not checked", sep, w);
         } else if (!drawn) {
-            caseAt = appendf(caseText, sizeof(caseText), caseAt, "%s%s drew nothing", sep, w);
+            caseAt = appendf(caseText, sizeof(caseText), caseAt, "%s%s drew nothing%s", sep, w,
+                             expect == 0u ? " (none expected)" : " (not tested)");
         } else if (kForm[x].code != 36) {
             caseAt = appendf(caseText, sizeof(caseText), caseAt,
                              "%s%s A %llu pairs, %llu texels differ%s", sep, w, oneA,
@@ -722,7 +773,7 @@ void rd__op_selftest(RdTargetRec *t)
     char sum[256] = "";
     if (device) {
         for (int a = 1; a < RD_OP_ARMS; a++) {
-            v[a] = armVerdict(&arm[a], a, device);
+            v[a] = armVerdict(&arm[a], a, device, noFuse);
             armLine(a, &arm[a], v[a], nCases, t->tw, sum, sizeof(sum));
         }
         rd__log("one-pass blend: the check's arm D (one pass on a fused code 36 pair): none: a "
@@ -731,13 +782,13 @@ void rd__op_selftest(RdTargetRec *t)
                 "passes");
     }
     const uint32_t classes = device ? rd_op_classes(v[1], v[2], v[3]) : 0u;
-    /* measured: an arm differed, its control did not, nothing of its
-       class drawn, the device failed; only arms not checked: no verdict */
-    bool measured = !device;
-    for (int a = 1; a < RD_OP_ARMS && device; a++) {
-        measured = measured ||
-                   (v[a] != RD_OP_V_PASS && v[a] != RD_OP_V_NOTHING && v[a] != RD_OP_V_UNCHECKED);
-    }
+    /* measured: a device loss, or arm A (the one class that can play)
+       differed, its control did not or nothing of its class drew; A not
+       checked: no verdict.  B and C are measurements of the code 36 form
+       (inexact by construction where a corner reaches the GPU behind the
+       eye: rd_onepass.h rd_op_safe_draw) and decide nothing */
+    const bool measured =
+        (!device && lost) || (device && v[1] != RD_OP_V_PASS && v[1] != RD_OP_V_UNCHECKED);
     rd__op_verdict(classes, measured, device ? (sum[0] ? sum : "nothing in use") : why);
     const uint32_t released = rd__pipeline_forget_since(pipeMark);
     for (int k = 0; k < nCases; k++) {
@@ -755,20 +806,32 @@ void rd__op_selftest(RdTargetRec *t)
         free(buf[i]);
     }
     t->clearPending = 1; /* the next replay starts SCENE from its clear */
+    if (sab == 4) {
+        rd__log("one-pass blend: ICO_RD_ONEPASS_SABOTAGE=sliver: arm C's picture changed on %u "
+                "frames where today's two passes drew nothing",
+                (unsigned)slivered);
+    }
+    /* the state the verdict left (a background fault during the check
+       turns it off whatever the arms said) */
+    const bool inUse = classes != 0u && strcmp(rd__op_state_text(), "on") == 0;
     if (!device) {
-        rd__log("one-pass blend: off for the run (check: %s) on SCENE %ux%u at %ux%u texels in "
+        rd__log("one-pass blend: off for the run (check: %s%s) on SCENE %ux%u at %ux%u texels in "
                 "%.1f ms; its %u pipelines released",
-                why, t->w, t->h, t->tw, t->th, rd__now_ms() - t0, (unsigned)released);
+                why,
+                lost ? ""
+                     : "; no verdict: its mark removed, nothing written as failed, the check "
+                       "runs again at the next start",
+                t->w, t->h, t->tw, t->th, rd__now_ms() - t0, (unsigned)released);
     } else {
         rd__log("one-pass blend: %s (check: %s%s; arms %s, D none%s) on SCENE %ux%u at %ux%u "
                 "texels, the VU record at %u rows (play's), %u replays (%d frames gathered once, "
                 "%u drawn again once the background queue was made) in %.1f ms; its %u pipelines "
                 "released",
-                classes ? "on" : "off for the run", classes ? "in use: " : "nothing in use",
-                classes ? rd_op_classes_name(classes) : "", sum,
-                classes || measured ? ""
-                                    : "; no verdict: its mark removed, nothing written as "
-                                      "failed, the check runs again at the next start",
+                inUse ? "on" : "off for the run", inUse ? "in use: " : "nothing in use",
+                inUse ? rd_op_classes_name(classes) : "", sum,
+                inUse || measured ? ""
+                                  : "; no verdict: its mark removed, nothing written as "
+                                    "failed, the check runs again at the next start",
                 t->w, t->h, t->tw, t->th, (unsigned)rows, (unsigned)replays, nFrames,
                 (unsigned)retried, rd__now_ms() - t0, (unsigned)released);
     }
