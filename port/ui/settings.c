@@ -1364,10 +1364,13 @@ int ui_settings_reapply_after_state_load(const char *saved_keys)
         ico_sim_keys_value(saved_keys, "gameplay.developer_mode", dev, sizeof dev) &&
         strcmp(dev, "true") == 0) {
         /* debug_Menu runs only in developer mode (main.c): a menu the state
-           left open would come back with it */
+           left open would come back with it; the run counts as one that
+           used it (achievements off) and the bound switches are this run's
+           again (variants.h) */
         debug_Menu_off();
         fprintf(stderr, "settings: after the load developer mode is off in this run: the Debug "
                         "menu is closed\n");
+        (void)ico_variants_developer_state_loaded();
         changed |= UI_REAPPLY_DEBUG_MENU;
     }
     return changed;

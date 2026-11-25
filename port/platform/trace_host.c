@@ -26,6 +26,8 @@ extern char gameSysMainSaveBuff[]; /* common/src/gamesys.c:79 */
 int gflagChk(int bit_idx);         /* script/src/gflag.c:58 */
 /* port/game/options.h: developer mode */
 int ico_opt_developer_mode(void);
+/* port/game/yorda_look.h: Look at Yorda's tick (yorda_look_live.c) */
+void ico_yorda_look_tick(void);
 /* read by the heartbeat (ico_host_status) */
 extern int fadeStatus;                   /* seki/src/Basic.c:124 */
 extern int mpegPlay;                     /* common/src/StageManager.c:73 */
@@ -70,6 +72,10 @@ int ico_trace_state_register(void)
 
 void ico_host_main_tick(void)
 {
+    /* Look at Yorda (yorda_look_live.c): after the pass's objects, before
+       the count moves, as the boy's collision thread looked in the tick;
+       the camera's next step takes its request */
+    ico_yorda_look_tick();
     if (main_ticks == 0) {
         ico_diag_milestone("first Main tick done (stage_no %d)", stage_no);
     }

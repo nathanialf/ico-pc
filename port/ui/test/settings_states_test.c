@@ -22,6 +22,7 @@
 #include "popup.h"
 #include "ico_unused.h"
 #include "ui_mouse.h"
+#include "variants.h"
 
 #include <time.h>
 
@@ -1270,23 +1271,43 @@ static void testPauseSquare(void)
 static void testReapplyAfterLoad(void)
 {
     const int lang = ico_region_cur()->has_game_language;
+    /* the game's Debug-menu switches the variants bind (debug.c
+       debug_VariableInit), here plain ints at their retail values */
+    int oneHit = 0, dodge = 0, battle = 3, demoCam = 0, handCam = 1;
     int got;
 
     useConfig("version = 1\n[game]\nlanguage = \"fr\"\n[gameplay]\nhold_type = \"toggle\"\n");
     CHECK(ico_opt_hold_type() == ICO_HOLD_TOGGLE, "this run: toggle");
     CHECK(!lang || ico_boot_language() == 3, "this run: French (%d)", ico_boot_language());
     CHECK(!ico_opt_developer_mode(), "this run: no developer mode");
+    ico_variants_bind_debug(&oneHit, &dodge, &battle, &demoCam, &handCam, NULL);
+    ico_variants_debug_menu_clear();
+    CHECK(!ico_variants_suspend_achievements(), "this run: achievements on");
+    /* a state saved without developer mode: the Debug menu not counted */
+    s_menuOffs = 0;
+    CHECK((ui_settings_reapply_after_state_load("gameplay.developer_mode=false\n") &
+           UI_REAPPLY_DEBUG_MENU) == 0 &&
+              s_menuOffs == 0 && !ico_variants_suspend_achievements(),
+          "no developer mode in the state: achievements on");
     /* the restore: the saving run's hold type A and German, a state saved in
-       developer mode */
+       developer mode with Debug-menu switches changed (BrainOnOff and the
+       others are not bound: they keep the state's) */
     optionControlType = ICO_HOLD_HOLD;
     NonLinearCameraMove = 4;
-    s_menuOffs = 0;
+    oneHit = 1;
+    battle = 0;
+    demoCam = 1;
     got = ui_settings_reapply_after_state_load("gameplay.mirror=\ngameplay.developer_mode=true\n");
     CHECK(got == (UI_REAPPLY_HOLD_TYPE | (lang ? UI_REAPPLY_LANGUAGE : 0) | UI_REAPPLY_DEBUG_MENU),
           "what changed: %d", got);
     CHECK(optionControlType == ICO_HOLD_TOGGLE, "the hold type: %d", optionControlType);
     CHECK(NonLinearCameraMove == (lang ? 3 : 4), "the game's language: %d", NonLinearCameraMove);
     CHECK(s_menuOffs == 1, "the Debug menu closed: %d", s_menuOffs);
+    /* the run counts as one that used the Debug menu: achievements off, as
+       after the row's press; the bound switches are this run's */
+    CHECK(ico_variants_suspend_achievements(), "developer-mode state: achievements off");
+    CHECK(oneHit == 0 && dodge == 0 && battle == 3 && demoCam == 0 && handCam == 1,
+          "the bound switches put back: %d %d %d %d %d", oneHit, dodge, battle, demoCam, handCam);
     /* already this run's, a state saved without developer mode: nothing */
     got = ui_settings_reapply_after_state_load("gameplay.developer_mode=false\n");
     CHECK(got == 0 && s_menuOffs == 1, "nothing to do: %d", got);
@@ -1307,6 +1328,8 @@ static void testReapplyAfterLoad(void)
     useConfig("version = 1\n");
     NonLinearCameraMove = 2;
     ui_set_language(UI_LANG_EN);
+    ico_variants_debug_menu_clear();
+    ico_variants_bind_debug(NULL, NULL, NULL, NULL, NULL, NULL);
 }
 
 int main(int argc, char **argv)

@@ -45,13 +45,22 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   a toggle ends without control, with her hand taken, on a new stage and with a Camera reset (Hold
   keeps looking; Camera reset off changes nothing), and an L3 held through each is no press; the
   Main tick clock (a pause keeps the toggle, L3 down at the first tick back is held, a load's
-  rewind); a copy of the arms' head and camera decisions (unchanged when off; the camera with her
-  on the screen; the script's flag; her other stage); `yorda_look.state` one FRESH block of four
-  ints whose bytes copied back resume the toggle (`yorda_look`).
-- `options_test.c`, added: `yorda_look`'s default, words, setter and reload; a text scan of
-  `boyact.c` (four `ico_yorda_look(` hooks and their live tests, the look block's three Players 2
-  conditions and the European body's, the four camera tests, the four tests for her other stage)
-  and the simulation key (`options` and its six disc runs).
+  rewind); a state's load ends a toggle; the game's side (`yorda_look_live.c`, compiled in with
+  the game stubbed) on every disc body: the head turn and the camera on her or on the script's
+  call-camera target in the look block's order, the script's flag (none on the June 2001 demo),
+  her other stage in that body's order of reads, nothing while R1 runs that itself, nothing off,
+  without control, with the stick locked by a script (a toggle ends), Free movement, the Debug
+  camera, her hand, the European body's capture cut, on a pass the boy's objects did not run or
+  without him; `yorda_look.state` one FRESH block of four ints whose bytes copied back resume the
+  toggle (`yorda_look`).
+- `variants_test.c`, its developer-mode load (`variants` and its disc runs): a state saved with
+  Developer mode on, loaded with it off (`ico_variants_developer_state_loaded`): achievements off
+  as after the Debug menu's use, all seven bound switches back at this run's values (seven
+  changed, none the second time), a variant on now giving its own value.
+- `options_test.c`, added: `yorda_look`'s default, words, setter and reload; text scans: `boyact.c`
+  names none of it (no `yorda_look`, no helper, no `|| look`, the four R1 tests for her other stage
+  as shipped), `trace_host.c` calls `ico_yorda_look_tick` once; the simulation key (`options` and
+  its six disc runs).
 - `camera_reset_test.c`: Camera reset's press and stick mute (`port/game/camera_reset.h`,
   [GAME_FEATURES.md](GAME_FEATURES.md#camera-reset)), CPU only: off passes the stick through tick
   for tick over 2000 pseudo-random ticks (no reset, no cut); a press resets once with the cut
@@ -378,6 +387,9 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   cursor, leaving the page saves `yorda_look = "toggle"`, Left back to Hold and Off, round from
   Toggle to Off); every disc shows it on the title reading Off (`settings`, `settings_extra`,
   `settings_discs` and their disc runs).
+- `settings_states_test.c`, its reapply case (`settings_states` and its disc runs): a state saved
+  in developer mode loaded with it off also marks the run (achievements off) and puts the bound
+  Debug-menu switches back; one saved without it marks nothing.
 - `pad_glyphs_test.c`: the button pictures' core (`port/ui/pad_glyphs.c`,
   [UI.md](UI.md#button-pictures)), CPU only: the 24 embedded files read, each set complete, each
   piece's aspect, fill colour and black stroke present at 96 rows, the alpha never past 0x80; the

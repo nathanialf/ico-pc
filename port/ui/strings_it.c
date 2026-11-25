@@ -433,7 +433,7 @@ const char *const
                     "Attivato: premi la levetta destra (R3) per riportare subito la visuale su Ico.",
                 [UI_STR_OPT_YORDA_LOOK] = "Guarda Yorda",
                 [UI_STR_YORDA_LOOK_NOTE] =
-                    "Ico e la visuale guardano Yorda senza chiamarla. Tieni premuto: finché tieni premuto L3. Alterna: L3 avvia e ferma.",
+                    "Ico e la visuale guardano Yorda senza chiamarla. Tieni premuto: finché premi L3. Alterna: L3 avvia e ferma la vista.",
                 [UI_STR_OPT_BUTTON_PICTURES] = "Immagini dei tasti",
                 [UI_STR_BUTTON_PICTURES_NOTE] =
                     "I tasti mostrati nei menu e nella modalità foto. Automatico segue l’ultimo controller usato.",

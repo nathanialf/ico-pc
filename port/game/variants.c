@@ -430,6 +430,31 @@ void ico_variants_apply(void)
             kChain[s_value[ICO_VARIANT_CHAIN_SWING_DAMPING]], sw);
 }
 
+/* switch i back to this run's value after a load: the variant's, or the
+   game's own as this run had it (s_dbg_base: never the restored value,
+   which is the saving run's); 1 when it changed, logged */
+static int put_back(int i)
+{
+    const int w = dbg_wanted(i);
+    const int to = w >= 0 ? w : s_dbg_base[i];
+    int was;
+
+    if (s_dbg[i] == NULL) {
+        return 0;
+    }
+    was = *s_dbg[i];
+    s_dbg_held[i] = w >= 0;
+    if (was == to) {
+        return 0;
+    }
+    *s_dbg[i] = to;
+    fprintf(stderr,
+            "variants: after the load %s %d -> %d (%s in this run; the state was saved with "
+            "another value)\n",
+            kDbgNames[i], was, to, w >= 0 ? "its variant's value" : "the game's own value");
+    return 1;
+}
+
 int ico_variants_state_loaded(void)
 {
     /* the switches of the global variants (the difficulty rows' switches
@@ -440,27 +465,21 @@ int ico_variants_state_loaded(void)
 
     load();
     for (size_t k = 0; k < sizeof kGlobal / sizeof kGlobal[0]; k++) {
-        const int i = kGlobal[k];
-        const int w = dbg_wanted(i);
-        /* this run's: the variant's value, or the game's own as this run
-           had it (s_dbg_base: never the restored value, which is the
-           saving run's) */
-        const int to = w >= 0 ? w : s_dbg_base[i];
-        int was;
+        changed += put_back(kGlobal[k]);
+    }
+    return changed;
+}
 
-        if (s_dbg[i] == NULL) {
-            continue;
-        }
-        was = *s_dbg[i];
-        s_dbg_held[i] = w >= 0;
-        if (was != to) {
-            *s_dbg[i] = to;
-            changed++;
-            fprintf(stderr,
-                    "variants: after the load %s %d -> %d (%s in this run; the state was saved "
-                    "with another value)\n",
-                    kDbgNames[i], was, to, w >= 0 ? "its variant's value" : "the game's own value");
-        }
+int ico_variants_developer_state_loaded(void)
+{
+    int changed = 0;
+
+    load();
+    s_debug_menu_used = 1;
+    fprintf(stderr, "variants: the state was saved in developer mode: achievements are off for "
+                    "this run (debug_menu), as after a use of the Debug menu\n");
+    for (int i = 0; i < DBG_COUNT; i++) {
+        changed += put_back(i);
     }
     return changed;
 }

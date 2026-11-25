@@ -515,7 +515,9 @@ void ui_settings_sync_after_state_load(void);
    it), the game's language on a disc that has one (as the Language row
    sets it), and the Debug menu closed (debug.c debug_Menu_off) when
    developer mode is off now and saved_keys (the state header's keys text,
-   sim_keys.h) say it was on.  What changed: UI_REAPPLY_* bits. */
+   sim_keys.h) say it was on; then also the run marked as one that used the
+   Debug menu and the bound debug switches put back
+   (ico_variants_developer_state_loaded).  What changed: UI_REAPPLY_* bits. */
 #define UI_REAPPLY_HOLD_TYPE 1
 #define UI_REAPPLY_LANGUAGE 2
 #define UI_REAPPLY_DEBUG_MENU 4

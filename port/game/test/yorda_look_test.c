@@ -8,13 +8,33 @@
  * taken, on a new stage and with a Camera reset (camera_reset.h, the real
  * call), and an L3 held through any of those is no press afterwards; the
  * Main tick clock (a pause keeps the toggle, L3 down at the first tick back
- * is held); a copy of the arms' use (boyact.c subBoyCollision: the head and
- * the camera); the save-state block (one FRESH block whose bytes copied
- * back resume the toggle).
+ * is held); a state's load ends a toggled look; the game's side
+ * (yorda_look_live.c, compiled in, the game stubbed below) on every disc
+ * body: the head turn and the camera (or the script's call-camera target)
+ * in the look block's order, her other stage as R1 does there, nothing
+ * while R1 runs that itself, each live test (control, a script's stick
+ * lock ending a toggle, Free movement, the Debug camera, her hand, the
+ * European body's capture cut), nothing on a pass the boy's objects did
+ * not run; the save-state block (one FRESH block whose bytes copied back
+ * resume the toggle).
  */
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "typedef.h"
+#include "main.h"
+#include "boyact.h"
+#include "act-game.h"
+#include "camera-root.h"
+#include "commonact.h"
+#include "debug.h"
+#include "geometryManager.h"
+#include "gobj.h"
+#include "gv.h"
+#include "script.h"
+
+#include "../../core/region.h"
 #include "camera_reset.h"
 #include "config.h"
 #include "options.h"
@@ -218,58 +238,305 @@ static void test_clock(void)
     ico_yorda_look_set_clock(NULL);
 }
 
-/* A copy of the arms' use (boyact.c, the four subBoyCollision copies:
-   options_test finds the call four times).  With Yorda on the stage the boy
-   turns his head to her when the call looks (call), the second player's R1
-   asks (p2) or the look asks; the camera follows when she was off the screen
-   as the call began (inScreen 0) or the look asks, and the stage's script
-   allows the call camera (camFlag).  Without her the camera turns toward her
-   other stage when R1 or the look asks.  No call: no wish, no mail. */
-typedef struct {
-    int head, camera, other;
-} Arm;
+/* --- the game's side (yorda_look_live.c), the game stubbed ---------------- */
+GObj *boyGObj;
+GObj *girlGObj;
+PadState pad[16];
+int stage_no = 3;
+int debug_camera_flag;
 
-static Arm arm(int look, int girl, int call, int p2, int inScreen, int camFlag, int r1)
+static GObj s_boyObj, s_girlObj, s_lo;
+static Act s_boyAct;
+static unsigned char s_able = 1;
+static int s_pinch, s_hand, s_haveLo = 1;
+
+unsigned char IsAbleBoyControl(void)
 {
-    Arm a = {0, 0, 0};
-
-    if (girl && (call || p2 || look)) {
-        a.head = 1;
-        a.camera = (inScreen == 0 || look) && camFlag;
-    }
-    if (!girl && (r1 || look)) {
-        a.other = 1;
-    }
-    return a;
+    return s_able;
 }
 
-static void test_arm(void)
+int PrivInsCamChk(void)
 {
-    Arm a;
-    int i, same = 0;
+    return s_pinch;
+}
 
-    /* off: the arms decide as the game does, over every input */
-    for (i = 0; i < 64; i++) {
-        const int girl = i & 1, call = (i >> 1) & 1, p2 = (i >> 2) & 1, in = (i >> 3) & 1,
-                  cf = (i >> 4) & 1, r1 = (i >> 5) & 1;
-        const Arm g = arm(0, girl, call, p2, in, cf, r1);
+unsigned char ACTGame_FLAG_TETSUNAGI(void)
+{
+    return (unsigned char)s_hand;
+}
 
-        same += g.head == (girl && (call || p2)) &&
-                g.camera == (girl && (call || p2) && in == 0 && cf) && g.other == (!girl && r1);
+/* the calls the side makes, in order */
+enum { C_HEAD = 1, C_CAM, C_TARGET, C_ROOT, C_ORIENT, C_ROOTREAD };
+
+typedef struct {
+    int kind;
+    const void *a, *b;
+    int n;
+    float v[3];
+} Call;
+
+static Call s_calls[16];
+static int s_ncalls;
+
+static void note(int kind, const void *a, const void *b, int n, const float *v)
+{
+    if (s_ncalls < 16) {
+        Call *c = &s_calls[s_ncalls];
+
+        c->kind = kind;
+        c->a = a;
+        c->b = b;
+        c->n = n;
+        c->v[0] = v != NULL ? v[0] : 0.0f;
+        c->v[1] = v != NULL ? v[1] : 0.0f;
+        c->v[2] = v != NULL ? v[2] : 0.0f;
     }
-    CHECK(same == 64);
-    /* the look: head and camera, also with her already on the screen */
-    a = arm(1, 1, 0, 0, 1, 1, 0);
-    CHECK(a.head && a.camera && !a.other);
-    /* the script's call camera off: the head only */
-    a = arm(1, 1, 0, 0, 0, 0, 0);
-    CHECK(a.head && !a.camera);
-    /* during a call with her on the screen: the look moves the camera */
-    a = arm(1, 1, 1, 0, 1, 1, 0);
-    CHECK(a.head && a.camera);
-    /* she is not on the stage: toward her other stage, as R1 */
-    a = arm(1, 0, 0, 0, 0, 1, 0);
-    CHECK(!a.head && a.other);
+    s_ncalls++;
+}
+
+int _ACTLookTarget_Set(GObj *self, GObj *target, float *pos, int pri, int mode)
+{
+    note(C_HEAD, self, target, pri * 10 + mode, pos);
+    return 1;
+}
+
+void Camctrl_SetTarget(GObj *gobj, GObj *subGObj, int pri)
+{
+    note(C_CAM, gobj, subGObj, pri, NULL);
+}
+
+void *isysGObjSearchFromObjLayoutID(int layoutId)
+{
+    return layoutId == 4 && s_haveLo ? &s_lo : NULL;
+}
+
+void ScpCallCameraGetTarget(float *dst)
+{
+    dst[0] = 7.0f;
+    dst[1] = 8.0f;
+    dst[2] = 9.0f;
+    note(C_TARGET, NULL, NULL, 0, NULL);
+}
+
+void SetRootPosition(GObj *obj, void *pos)
+{
+    note(C_ROOT, obj, NULL, 0, (const float *)pos);
+}
+
+static float s_camSet[4] = {100.0f, 0.0f, 0.0f, 0.0f};
+static float s_root[4] = {100.0f, 0.0f, 40.0f, 0.0f};
+
+int *GetCurrentCameraSet2(void)
+{
+    return (int *)s_camSet;
+}
+
+void GetOtherStageGirlOrient(float *orient, float *root)
+{
+    (void)root;
+    orient[0] = 0.0f;
+    orient[1] = 0.0f;
+    orient[2] = 1.0f;
+    orient[3] = 0.0f;
+    note(C_ORIENT, NULL, NULL, 0, NULL);
+}
+
+float *test_CURRENTROOT(GObj *self)
+{
+    note(C_ROOTREAD, self, NULL, 0, NULL);
+    return s_root;
+}
+
+/* the VU0 vector library's two, as port/math/libvu0.c computes them */
+void sceVu0ScaleVector(void *dst, void *src, float scale)
+{
+    float *d = dst;
+    const float *v = src;
+
+    for (int i = 0; i < 4; i++) {
+        d[i] = v[i] * scale;
+    }
+}
+
+void sceVu0AddVector(void *dst, void *a, void *b)
+{
+    float *d = dst;
+    const float *p = a, *q = b;
+
+    for (int i = 0; i < 4; i++) {
+        d[i] = p[i] + q[i];
+    }
+}
+
+float _DistGV(void *a, void *b)
+{
+    const float *p = a, *q = b;
+    const float dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2];
+
+    return dx * dx + dy * dy + dz * dz == 1600.0f ? 40.0f : -1.0f;
+}
+
+/* the disc body's numbers (boyact.c's four subBoyCollision copies and
+   subBoyControl's stick test) */
+typedef struct {
+    const char *slug;
+    int cam, target, stick, pinch, orientFirst;
+} Disc;
+
+static const Disc kDiscs[] = {
+    {"pal", 23, 24, 48, 1, 0},   {"jpn", 23, 24, 48, 1, 0},  {"kor", 23, 24, 48, 1, 0},
+    {"cn", 23, 24, 48, 1, 0},    {"ntsc", 12, 13, 43, 0, 0}, {"aug6", 9, 10, 43, 0, 1},
+    {"jun26", -1, -1, 42, 0, 1},
+};
+
+/* one Main pass with the boy's objects run (his frame counted) and L3 as
+   given; the calls it made */
+static int pass(int l3)
+{
+    s_boyAct.frame++;
+    pad[0].now = l3 ? L3 : 0;
+    s_ncalls = 0;
+    ico_yorda_look_tick();
+    return s_ncalls;
+}
+
+static void sideReset(const Disc *d)
+{
+    memset(&s_boyAct, 0, sizeof s_boyAct);
+    s_boyObj.act = &s_boyAct;
+    boyGObj = &s_boyObj;
+    girlGObj = &s_girlObj;
+    s_boyAct.flags18.ll = 1ULL << d->stick;                 /* the stick not locked */
+    s_boyAct.flags20.ll = d->cam >= 0 ? 1ULL << d->cam : 0; /* the call camera allowed */
+    s_able = 1;
+    s_pinch = s_hand = 0;
+    s_haveLo = 1;
+    debug_camera_flag = 0;
+    ico_yorda_look_tick_clear();
+    fresh(ICO_YORDA_LOOK_HOLD);
+}
+
+static int isCall(int i, int kind, const void *a, const void *b, int n)
+{
+    return i < s_ncalls && i < 16 && s_calls[i].kind == kind && s_calls[i].a == a &&
+           s_calls[i].b == b && s_calls[i].n == n;
+}
+
+static void sideDisc(const Disc *d)
+{
+    int n;
+
+    CHECK(ico_region_select(d->slug) == 0);
+    sideReset(d);
+    /* off: nothing asked, whatever L3 does */
+    ico_opt_set_yorda_look(ICO_YORDA_LOOK_OFF);
+    CHECK(pass(1) == 0 && pass(0) == 0);
+    ico_opt_set_yorda_look(ICO_YORDA_LOOK_HOLD);
+    CHECK(pass(0) == 0);
+    /* her on the stage, the call camera allowed: the head turn at priority
+       4, then the camera on the boy and her at priority 1 */
+    CHECK(pass(1) == 2);
+    CHECK(isCall(0, C_HEAD, &s_boyObj, &s_girlObj, 42));
+    CHECK(isCall(1, C_CAM, &s_boyObj, &s_girlObj, 1));
+    /* the same pass again (his objects did not run: a pause, photo mode):
+       nothing, and the rule not asked */
+    s_ncalls = 0;
+    ico_yorda_look_tick();
+    CHECK(s_ncalls == 0);
+    /* the script's call camera off: the head only (the June 2001 body has
+       no such flag: the camera too) */
+    s_boyAct.flags20.ll = 0;
+    n = pass(1);
+    CHECK(isCall(0, C_HEAD, &s_boyObj, &s_girlObj, 42));
+    CHECK(d->cam >= 0 ? n == 1 : n == 2 && isCall(1, C_CAM, &s_boyObj, &s_girlObj, 1));
+    /* the script names its call-camera target: layout object 4 put there,
+       the camera on it */
+    if (d->cam >= 0) {
+        s_boyAct.flags20.ll = (1ULL << d->cam) | (1ULL << d->target);
+        CHECK(pass(1) == 4);
+        CHECK(isCall(0, C_HEAD, &s_boyObj, &s_girlObj, 42));
+        CHECK(isCall(1, C_TARGET, NULL, NULL, 0));
+        CHECK(isCall(2, C_ROOT, &s_lo, NULL, 0) && s_calls[2].v[0] == 7.0f &&
+              s_calls[2].v[2] == 9.0f);
+        CHECK(isCall(3, C_CAM, &s_boyObj, &s_lo, 1));
+        s_boyAct.flags20.ll = 1ULL << d->cam;
+    }
+    /* not under control, the stick locked by a script, Free movement's or
+       the Debug camera's L3, her hand: nothing */
+    s_able = 0;
+    CHECK(pass(1) == 0);
+    s_able = 1;
+    s_boyAct.flags18.ll = 0;
+    CHECK(pass(1) == 0);
+    s_boyAct.flags18.ll = 1ULL << d->stick;
+    debug_camera_flag = 1;
+    CHECK(pass(1) == 0);
+    debug_camera_flag = 0;
+    s_hand = 1;
+    CHECK(pass(1) == 0);
+    s_hand = 0;
+    /* his own cut to her capture: the European body's alone */
+    s_pinch = 1;
+    CHECK(pass(1) == (d->pinch ? 0 : 2));
+    s_pinch = 0;
+    CHECK(pass(1) == 2);
+    /* a Toggle ends when a script locks his stick, as without control */
+    ico_opt_set_yorda_look(ICO_YORDA_LOOK_TOGGLE);
+    CHECK(pass(0) == 0 && pass(1) == 2 && pass(0) == 2);
+    s_boyAct.flags18.ll = 0;
+    CHECK(pass(0) == 0);
+    s_boyAct.flags18.ll = 1ULL << d->stick;
+    CHECK(pass(0) == 0);
+    ico_opt_set_yorda_look(ICO_YORDA_LOOK_HOLD);
+    /* her not on the stage: layout object 4 toward her other stage, from
+       the camera by the boy's distance, then the camera on it; the body's
+       own order of reads */
+    girlGObj = NULL;
+    n = pass(1);
+    CHECK(n == 6);
+    CHECK(isCall(d->orientFirst ? 0 : 3, C_ORIENT, NULL, NULL, 0));
+    for (int i = 0; i < 3; i++) {
+        CHECK(isCall(d->orientFirst + i, C_ROOTREAD, &s_boyObj, NULL, 0));
+    }
+    CHECK(isCall(4, C_ROOT, &s_lo, NULL, 0) && s_calls[4].v[0] == 100.0f &&
+          s_calls[4].v[2] == 40.0f);
+    CHECK(isCall(5, C_CAM, &s_boyObj, &s_lo, 1));
+    /* R1 held there: the game's own branch runs it, the look adds nothing */
+    s_boyAct.pad.now = 0x8;
+    CHECK(pass(1) == 0);
+    s_boyAct.pad.now = 0;
+    /* no layout object 4: nothing */
+    s_haveLo = 0;
+    CHECK(pass(1) == 0);
+    s_haveLo = 1;
+    /* no boy: nothing */
+    boyGObj = NULL;
+    CHECK(pass(1) == 0);
+    boyGObj = &s_boyObj;
+    girlGObj = &s_girlObj;
+}
+
+static void test_side(void)
+{
+    for (size_t i = 0; i < sizeof kDiscs / sizeof kDiscs[0]; i++) {
+        sideDisc(&kDiscs[i]);
+    }
+    CHECK(ico_region_select("pal") == 0);
+    fresh(ICO_YORDA_LOOK_OFF);
+}
+
+/* a state's load ends a toggled look (any state: one of an earlier version
+   has no block and keeps this run's bytes) */
+static void test_loaded(void)
+{
+    fresh(ICO_YORDA_LOOK_TOGGLE);
+    CHECK(tick(0) == 0 && tick(1) == 1 && tick(0) == 1);
+    ico_yorda_look_state_loaded();
+    CHECK(tick(0) == 0 && tick(1) == 1);
+    /* Hold: L3 still held after the load looks at once */
+    ico_opt_set_yorda_look(ICO_YORDA_LOOK_HOLD);
+    ico_yorda_look_state_loaded();
+    CHECK(tick(1) == 1);
 }
 
 static void test_block(void)
@@ -315,7 +582,8 @@ int main(int argc, char **argv)
     test_ends();
     test_camera_reset();
     test_clock();
-    test_arm();
+    test_side();
+    test_loaded();
     test_block();
     if (failures != 0) {
         fprintf(stderr, "yorda_look_test: %d failure(s)\n", failures);
