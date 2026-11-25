@@ -2186,9 +2186,16 @@ one-pass blend draws a proven pair once. `port/render/rd_onepass.h` says it all.
   is compared whenever either form drew: nothing through today's two passes and something through
   the arm is a difference (the shape of the stretched slivers); nothing through either is the same
   where the case covers no texel by design (an edge on a view ray) and "not tested" where it should
-  have drawn. In use: the plain class where A passed; the cut class where C, A and B passed, B with
-  "nothing fused" only where the device fuses no command at all (the fuse or its merge builds
-  off): frames that did not fuse on a device that fuses leave B not tested and the cut class off.
+  have drawn. In use: the plain class where A passed, and there only for a draw whose every corner
+  reaches the rasteriser at w = 1 (`rd_op_safe_draw`: clip mode none, a code 36 kick drawn apart,
+  a prelit mesh the CPU proved wholly in front of the eye; never particles; refused as "not proven
+  in front of the eye"). The cut class is never used, and B and C are logged measurements only: a
+  corner at w <= 0 goes to the GPU's clipper, whose new vertices take their noperspective colour in
+  window coordinates, where a corner behind the eye projects through it, so As extrapolates past
+  its corners and can pass 128 where the alpha plan says it cannot; the carry then stores 128 where
+  the alpha pass stores As. Lavapipe measured it: arm C differed at case 7 (a corner at w = -1290),
+  code 36 untextured, alpha 129 against 128, from corners of at most 127. A device check of 13
+  cases cannot prove such pixels absent in play.
   Only arms not checked, a failed read or a frame that could not be built: no verdict, the mark
   removed, the check again at the next start; a device loss is measured (`failed`).
 - **Never waited for:** its pipelines go through the twins' background queue: a pair whose

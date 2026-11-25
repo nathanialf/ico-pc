@@ -412,8 +412,10 @@ static int armVerdict(const OcArm *a, int arm, bool device, bool noFuse)
 
 static const char *const kArmWords[RD_OP_ARMS] = {
     "", "A (one pass on the pairs outside code 36)",
-    "B (code 36 unfused where C unfuses it, its two passes kept)",
-    "C (A, and code 36 unfused with its cut and kick pairs in one pass)"};
+    "B (code 36 unfused where C unfuses it, its two passes kept; a measurement, never used in "
+    "play)",
+    "C (A, and code 36 unfused with its cut and kick pairs in one pass; a measurement, never used "
+    "in play)"};
 
 static void armLine(int arm, const OcArm *a, int v, int nCases, uint32_t tw, char *sum, size_t ss)
 {
@@ -780,13 +782,13 @@ void rd__op_selftest(RdTargetRec *t)
                 "passes");
     }
     const uint32_t classes = device ? rd_op_classes(v[1], v[2], v[3]) : 0u;
-    /* measured: an arm differed, its control did not, nothing of its
-       class drawn, the device failed; only arms not checked: no verdict */
-    bool measured = !device && lost;
-    for (int a = 1; a < RD_OP_ARMS && device; a++) {
-        measured = measured ||
-                   (v[a] != RD_OP_V_PASS && v[a] != RD_OP_V_NOTHING && v[a] != RD_OP_V_UNCHECKED);
-    }
+    /* measured: a device loss, or arm A (the one class that can play)
+       differed, its control did not or nothing of its class drew; A not
+       checked: no verdict.  B and C are measurements of the code 36 form
+       (inexact by construction where a corner reaches the GPU behind the
+       eye: rd_onepass.h rd_op_safe_draw) and decide nothing */
+    const bool measured =
+        (!device && lost) || (device && v[1] != RD_OP_V_PASS && v[1] != RD_OP_V_UNCHECKED);
     rd__op_verdict(classes, measured, device ? (sum[0] ? sum : "nothing in use") : why);
     const uint32_t released = rd__pipeline_forget_since(pipeMark);
     for (int k = 0; k < nCases; k++) {

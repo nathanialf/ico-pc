@@ -77,11 +77,11 @@ endif()
 #                                         the mark not written
 if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
     set(_opA "the check's arm A \\(one pass on the pairs outside code 36\\) over 13 cases: ")
-    set(_opB "the check's arm B \\(code 36 unfused where C unfuses it, its two passes kept\\) over 13 cases: ")
-    set(_opC "the check's arm C \\(A, and code 36 unfused with its cut and kick pairs in one pass\\) over 13 cases: ")
+    set(_opB "the check's arm B \\(code 36 unfused where C unfuses it, its two passes kept, a measurement, never used in play\\) over 13 cases: ")
+    set(_opC "the check's arm C \\(A, and code 36 unfused with its cut and kick pairs in one pass, a measurement, never used in play\\) over 13 cases: ")
     set(_opD "rd: one-pass blend: the check's arm D \\(one pass on a fused code 36 pair\\): none")
     set(_opMeasured "(the same bytes|differs)")
-    set(_opDrawn "rd: one-pass blend: the check, case [0-9]+ of 13 [^:]*: 32 A [1-9][0-9]* pairs, [0-9]+ texels differ[^:]*, 36 fused [1-9][0-9]*, B unfused [1-9][0-9]*, [0-9]+ texels differ, C unfused [1-9][0-9]*, [1-9][0-9]* pairs, [0-9]+ texels differ")
+    set(_opDrawn "rd: one-pass blend: the check, case [0-9]+ of 13 [^:]*: 32 A 0 pairs, [0-9]+ texels differ[^:]*, 34 A [1-9][0-9]* pairs, [0-9]+ texels differ[^:]*, 36 fused [1-9][0-9]*, B unfused [1-9][0-9]*, [0-9]+ texels differ, C unfused [1-9][0-9]*, [1-9][0-9]* pairs, [0-9]+ texels differ")
     set(_opMark "test: the one-pass blend's mark after the self-test: ")
     set(_opNot "over 13 cases: (not checked|not tested|nothing fused|its control did not differ|the device failed)")
     set(_openv ${_env_mali_pre} "ICO_VK_FAKE_NO_DUAL=1")
@@ -90,8 +90,8 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
         add_test(NAME rd_vuprepass_selftest_${_op}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test>
                          -DMODE=on "-DLINE=${_vst_on}"
-                         "-DEXTRA=${_opDrawn}.*${_opA}the same bytes.*${_opB}the same bytes.*${_opC}the same bytes.*${_opD}.*rd: one-pass blend: on \\(check: in use: the pairs outside code 36 and code 36's cut and kick pairs drawn apart, arms A the same bytes, B the same bytes, C the same bytes, D none\\).*rd: one-pass blend: on \\(the pairs outside code 36 and code 36's cut and kick pairs drawn apart\\), 0 of its pipelines alive.*${_opMark}counting v0.0.0"
-                         "-DNOT_=${_opNot}" -P "${_vst}")
+                         "-DEXTRA=${_opDrawn}.*${_opA}the same bytes.*${_opB}the same bytes.*${_opC}${_opMeasured}.*${_opD}.*rd: one-pass blend: on \\(check: in use: the pairs outside code 36, arms A the same bytes, B the same bytes, C ${_opMeasured}, D none\\).*rd: one-pass blend: on \\(the pairs outside code 36\\), 0 of its pipelines alive.*${_opMark}counting v0.0.0"
+                         "-DNOT_=${_opNot}|in use: the pairs outside code 36 and code 36" -P "${_vst}")
     endforeach()
     add_test(NAME rd_vuprepass_selftest_onepass_sabotage
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
@@ -111,12 +111,12 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
     add_test(NAME rd_vuprepass_selftest_onepass_sliver
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=${_opA}the same bytes.*${_opC}differs: [1-9][0-9]* of [0-9]+ frames.*rd: one-pass blend: ICO_RD_ONEPASS_SABOTAGE=sliver: arm C's picture changed on [1-9][0-9]* frames where today's two passes drew nothing.*rd: one-pass blend: on \\(check: in use: the pairs outside code 36, arms A the same bytes, B the same bytes, C differs, D none\\).*${_opMark}counting v0.0.0"
+                     "-DEXTRA=${_opA}the same bytes.*${_opC}differs: [1-9][0-9]* of [0-9]+ frames, the first case 5 at 36, .*rd: one-pass blend: ICO_RD_ONEPASS_SABOTAGE=sliver: arm C's picture changed on [1-9][0-9]* frames where today's two passes drew nothing.*rd: one-pass blend: on \\(check: in use: the pairs outside code 36, arms A the same bytes, B the same bytes, C differs, D none\\).*${_opMark}counting v0.0.0"
                      "-DNOT_=in use: the pairs outside code 36 and code 36" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_onepass_readfail
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=${_opA}not checked: [1-9][0-9]* frames still without a pipeline after a retry \\(case 1 at 32.*rd: one-pass blend: off for the run \\(check: nothing in use, arms A not checked, B the same bytes, C the same bytes, D none, no verdict: its mark removed, nothing written as failed, the check runs again at the next start\\).*${_opMark}none"
+                     "-DEXTRA=${_opA}not checked: [1-9][0-9]* frames still without a pipeline after a retry \\(case 1 at 32.*rd: one-pass blend: off for the run \\(check: nothing in use, arms A not checked, B the same bytes, C ${_opMeasured}, D none, no verdict: its mark removed, nothing written as failed, the check runs again at the next start\\).*${_opMark}none"
                      "-DNOT_=over 13 cases: differs|rd: one-pass blend: on \\(|device was lost" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_onepass_marked
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on

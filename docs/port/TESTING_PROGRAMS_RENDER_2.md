@@ -629,9 +629,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   dual-source blending, the mark in a file of each test's own): the device check with every state
   in the pipeline keys and with dynamic blend state: a code 32 frame with pairs in one pass under
   A, a code 36 frame fused today and unfused under B and C with pairs in one pass (the reporter's
-  pattern drawn), A, B and C the same bytes over the 13 cases, arm D none, both classes in use and
-  the mark `counting`; a texel added to C on the frames today's drew nothing on (`sliver`): C
-  differs, the plain class alone; the first reference read failed without a loss (`read`): A not
+  pattern drawn), the code 32 frames refused for A (not proven in front of the eye) and the code
+  34 frames taken, A and B the same bytes, C measured ("the same bytes" or "differs": its form is
+  inexact by construction where a corner reaches the GPU behind the eye, lavapipe measures
+  "differs" at case 7), arm D none, the plain class alone in use and the mark `counting`; a texel
+  added to C on the frames today's drew nothing on (`sliver`): C differs first at case 5 at 36 (a
+  frame empty through two passes, compared); the first reference read failed without a loss (`read`): A not
   checked, no verdict, the mark removed; the
   constant 127/255 in A and C caught: nothing in use, the mark `failed`; 127/255 in C alone: the
   plain class alone in use; every one-pass pipeline not made: A and C not checked, no verdict, the

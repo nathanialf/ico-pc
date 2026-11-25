@@ -295,7 +295,8 @@ static bool madeOrAsked(const RdPipeKeyInt *t)
     return rd__pipeline_twin(t).id != 0;
 }
 
-void rd__op_take(RdDrawPass *dp, int *np, uint8_t hi, uint32_t vuBits, uint32_t count3)
+void rd__op_take(RdDrawPass *dp, int *np, uint8_t hi, uint32_t vuBits, uint32_t count3,
+                 bool particle, bool proven)
 {
     const bool check = s_o.arm >= 0;
     if (!check && s_o.state != O_ON) {
@@ -318,6 +319,9 @@ void rd__op_take(RdDrawPass *dp, int *np, uint8_t hi, uint32_t vuBits, uint32_t 
             why = RD_OP_FUSED;
         } else if (why == RD_OP_ONE && (use & cls) == 0u) {
             why = RD_OP_CLASS;
+        } else if (why == RD_OP_ONE && cls == RD_OP_PLAIN &&
+                   !rd_op_safe_draw(vuBits, particle, proven)) {
+            why = RD_OP_EYE; /* the plain class, in play and in arm A alike */
         }
         const RdPipeKeyInt t = onepassKey(&dp[i].key);
         if (why == RD_OP_ONE && !madeOrAsked(&t)) {

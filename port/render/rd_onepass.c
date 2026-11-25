@@ -61,11 +61,24 @@ uint32_t rd_op_class_of(uint32_t vuBits, bool cmdFused)
 
 uint32_t rd_op_classes(int a, int b, int c)
 {
-    if (a != RD_OP_V_PASS) {
-        return 0u; /* the plain class is C's too: nothing without it */
+    /* the cut class is never used: its cut draws send corners behind the
+       eye to the GPU's clipper, where As is not bounded by the alpha plan
+       (rd_op_safe_draw), so no device check of 13 cases proves it for play;
+       B and C stay measurements */
+    (void)b;
+    (void)c;
+    return a == RD_OP_V_PASS ? RD_OP_PLAIN : 0u;
+}
+
+bool rd_op_safe_draw(uint32_t vuBits, bool particle, bool proven)
+{
+    if (particle) {
+        return false;
     }
-    const bool bOk = b == RD_OP_V_PASS || b == RD_OP_V_NOTHING;
-    return RD_OP_PLAIN | (c == RD_OP_V_PASS && bOk ? RD_OP_CUT : 0u);
+    const uint32_t clip = vuBits & (uint32_t)ICO_VU_CLIP_MASK;
+    const bool kickApart =
+        (vuBits & (uint32_t)ICO_VU_KICK_ONLY) != 0u && (vuBits & (uint32_t)ICO_VU_FUSED) == 0u;
+    return clip == (uint32_t)ICO_VU_CLIP_NONE || kickApart || proven;
 }
 
 /* ------------------------------------------------------------ the model */
@@ -132,6 +145,7 @@ static const char *const kReason[RD_OP_REASONS] = {
     [RD_OP_PABE] = "PABE",
     [RD_OP_FIX] = "a FIX factor",
     [RD_OP_OTHER] = "other",
+    [RD_OP_EYE] = "not proven in front of the eye",
     [RD_OP_FUSED] = "fused",
     [RD_OP_CLASS] = "class not in use",
     [RD_OP_UNMADE] = "not made yet",

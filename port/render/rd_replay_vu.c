@@ -94,6 +94,9 @@ static void vuVelBegin(void);
    front of the eye (EYEBOX: rd__vis_mesh_gs_proof, set per command in
    doVuDraw before its vuDraw calls) */
 static bool s_ndFront;
+/* the one-pass blend's (rd_onepass.h rd_op_safe_draw): the prelit mesh
+   draw proved wholly in front of the eye, whatever the twins' state */
+static bool s_opFront;
 static bool s_zeroArmed;
 static uint32_t s_zeroWord;
 static int s_zeroWhy;
@@ -1363,7 +1366,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         /* the one-pass blend (rd_onepass.h): a proven pair whose class is in
            use and whose pipeline is made drawn in one pass; not the skin
            check's draws (their twins read keys[0]) */
-        rd__op_take(dp, &np, s_vuAlpha.hi, vcb->draw[2], count);
+        rd__op_take(dp, &np, s_vuAlpha.hi, vcb->draw[2], count, prog == RD_PROG_PARTICLE,
+                    s_opFront);
     }
     rd__perf_vu_draw(np == 2 && rd__no_dual_second(dp, 1),
                      np == 1 && (dp[0].flags & ICO_DF_NODUAL_FACTOR) != 0, count / 3u, np);
@@ -4322,6 +4326,12 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         const uint32_t clip = vcb.draw[2] & ICO_VU_CLIP_MASK;
         s_ndFront = c->type == RDC_MESH && p.prog == RD_PROG_PRELIT && clip != ICO_VU_CLIP_NONE &&
                     rd__nd_on() &&
+                    rd__vis_mesh_gs_proof(c->u[0], m, (const float (*)[4])vcb.mem,
+                                          clip == ICO_VU_CLIP_SCISSOR);
+        /* the one-pass blend's own: every corner at its GS position, so
+           its colour stays within its corners' (rd_op_safe_draw) */
+        s_opFront = c->type == RDC_MESH && p.prog == RD_PROG_PRELIT && clip != ICO_VU_CLIP_NONE &&
+                    rd__op_on() &&
                     rd__vis_mesh_gs_proof(c->u[0], m, (const float (*)[4])vcb.mem,
                                           clip == ICO_VU_CLIP_SCISSOR);
     }
