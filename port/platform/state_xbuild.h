@@ -77,7 +77,15 @@
  * that holds them (by the prefix and the hash for the second form): one
  * place translates the word to it plus the offset; none refuses ("the text
  * ... is missing here"), more than one refuses ("... is in more than one
- * place here"): a load never picks one.
+ * place here"): a load never picks one.  The window holds the bytes before
+ * the word too: the word may name an object starting at it or one ending at
+ * it (C's end pointer), and only the same bytes on both sides here prove
+ * one translation serves both.  The linker merges and orders the program's
+ * anonymous constants (.rodata.cst8, .rodata.cst16) anew in every link, so
+ * a word at the start of one (most likely a stale page value in a live
+ * frame: 0x294000 in the owner's v0.11.15-rc6 state) finds no window in a
+ * later build and is refused; the refusal then says where the save found
+ * the word and whether its bytes from the word on lie here once.
  *
  * Page words (arm64).  clang keeps an ADRP's page address in a
  * callee-saved register across calls and adds a variable's offset in its
@@ -131,7 +139,8 @@
  * pool's size and the list's count after it), then the units (48 bytes
  * each), data (48; 40 in a version 1 record, without the input section),
  * points (48; 64 in version 3, a window's length, offset, hash, pool place
- * and nearest symbol) and blocks (40) records, in version 3 the list of
+ * and nearest symbol, and since rules 3 where the save found the word: its
+ * region's name at 44 and its address at 56, zeros before) and blocks (40) records, in version 3 the list of
  * words nothing names (40 each), then the names, and in version 3 the pool
  * of the windows' bytes.  The header's word at 60 counts the words nothing
  * names (0 in a record from before it was counted).  Versions 1 and 2 are

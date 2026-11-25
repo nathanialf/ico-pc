@@ -149,7 +149,12 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   (`IcoXbNow.xlate`: each function's row the record's hash and the current rules'), its return
   address translated; a table of another build (one row not the record's hash: `another
   build's`) or checking by other rules is not used, and a function whose current-rules hash
-  differs too is refused with `(its instructions differ)` (`test_xlate`).
+  differs too is refused with `(its instructions differ)` (`test_xlate`). A word on a thread's
+  stack at a page start where a 16-byte anonymous constant follows an 8-byte one, the two apart
+  in B: refused (`(16 bytes) is missing here`) naming where the save found it (`a word of fiber
+  slot 0's stack at 0x..`) and that its 8 bytes from the word on lie in B once; with the
+  neighbour kept beside it in B it loads, translated to the constant's place; a word 8 bytes into
+  a 32-byte object that moved whole is translated by its bytes (`test_window_page`).
 
 - `dump_zip_test.c`, its scene ledger case (`dump_zip`): with a ledger text set
   (`ico_dump_zip_set_ledger`, [SCENE_LEDGER.md](SCENE_LEDGER.md#the-report)) a capture's zip that

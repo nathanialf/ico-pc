@@ -1576,7 +1576,8 @@ static void note_unnamed(const IcoXbRefs *r, const IcoSymTab *t, size_t slot, ui
    range's own start that byte is not readable here, and rlo_lstart says
    (a legacy run's flag from its table, else 0).  0, or -1 (no memory). */
 static int put_window(Out *points, Out *pool, Out *strs, const IcoSymTab *t, int64_t delta,
-                      uint64_t w, uint64_t a, uint64_t z, int text, uint64_t rlo, int rlo_lstart)
+                      uint64_t w, uint64_t a, uint64_t z, int text, uint64_t rlo, int rlo_lstart,
+                      const char *where, uint64_t where_at)
 {
     const size_t len = (size_t)(z - a);
     const unsigned char *b = (const unsigned char *)(uintptr_t)(a + (uint64_t)delta);
@@ -1604,7 +1605,12 @@ static int put_window(Out *points, Out *pool, Out *strs, const IcoSymTab *t, int
     put32(q + 32, pool_at);
     put32(q + 36, (uint32_t)stored);
     put32(q + 40, sym_at);
+    /* where the save first found the word (its region's label and the
+       word's address there): for the load's refusal alone (a record
+       without them holds zeros, which a load reads as "not said") */
+    put32(q + 44, where != NULL && where[0] != '\0' ? str_put(strs, where) : 0u);
     put64(q + 48, sym != NULL ? off : 0);
+    put64(q + 56, where_at);
     pq = out_grow(pool, stored);
     if (pq == NULL) {
         return -1;
@@ -1792,8 +1798,8 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                 ro_freq(&p->image, r->delta, freq);
             }
             if (grow_window(&p->image, r->delta, freq, w, rlo, rhi, tl, &a, &z)) {
-                if (put_window(&points, &pool, &strs, t, r->delta, w, a, z, tl > 0, rlo,
-                               rlo_lstart) != 0) {
+                if (put_window(&points, &pool, &strs, t, r->delta, w, a, z, tl > 0, rlo, rlo_lstart,
+                               r->labels[r->lab[i]], r->at[i]) != 0) {
                     goto done;
                 }
                 np++;
@@ -2334,6 +2340,35 @@ static const UMap *umap_find(const UMap *m, size_t n, uint64_t old)
     return lo < n && m[lo].old == old ? &m[lo] : NULL;
 }
 
+/* a window's refusal: what, missing or twice, where the save found the
+   word (a record that says so), and for a missing window that is no text
+   whether its bytes from the word on lie here once while the ones before it
+   do not (a neighbour of other contents: the linker's merged constants are
+   ordered anew in every link).  That says nothing of which object the word
+   names (the one starting at it, one ending at it, a page), so the state is
+   still refused (state_xbuild.h) */
+static void window_why(IcoXbVerdict *v, const IcoStateImage *im, const uint32_t *freq,
+                       const char *what, unsigned found, const unsigned char *b, size_t stored,
+                       size_t len, size_t at, int hashed, const char *where, uint64_t where_at)
+{
+    char held[96], tail[64];
+    uint64_t first = 0;
+
+    held[0] = tail[0] = '\0';
+    if (where[0] != '\0') {
+        snprintf(held, sizeof held, ", a word of %.40s at 0x%llx", where,
+                 (unsigned long long)where_at);
+    }
+    if (found == 0 && !hashed && at > 0 && at < stored && stored == len &&
+        find_in(im, 0, freq, b + at, stored - at, len - at, 0, 0, 0, 2, &first) == 1) {
+        snprintf(tail, sizeof tail,
+                 "; its %u bytes from the word on lie here once, not those before",
+                 (unsigned)(stored - at));
+    }
+    verdict(v, ICO_XB_DATA, "%s is %s here%s%s", what,
+            found == 0 ? "missing" : "in more than one place", held, tail);
+}
+
 /* IcoXbVerdict.code_patch for this build's function w compared under
    `rules` */
 static int code_patch_of(const IcoSymTab *t, const IcoSymUnit *w, int rules)
@@ -2746,8 +2781,9 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                              sym[0] != '\0' ? sym : "?", (unsigned long long)get64(r + 48),
                              (unsigned)len);
                 }
-                FAIL(v, ICO_XB_DATA, "%s is %s here", what,
-                     found == 0 ? "missing" : "in more than one place");
+                window_why(v, &im, freq, what, found, pool + pool_at, stored, len, at, hashed,
+                           NAME_AT(get32(r + 44)), get64(r + 56));
+                goto fail;
             }
             span_add(&points, old, old, w + at);
             v->windows++;

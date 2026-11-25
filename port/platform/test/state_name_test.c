@@ -1910,6 +1910,137 @@ static void test_xlate(void)
     pg_free(&b);
 }
 
+/* --- a word at the start of an anonymous constant ---------------------------------- */
+
+#define WP_RO 0x8000u /* this test's read-only range: [WP_RO, WP_RO + 0x2000) */
+
+static void wp_put(Pg *g, uint64_t off, uint8_t seed, size_t n)
+{
+    size_t i;
+
+    for (i = 0; i < n; i++) {
+        g->mem[off + i] = (uint8_t)(seed + 7u * i + 1u);
+    }
+    g->mem[off] = 0x01; /* no text: a constant's bytes */
+}
+
+static void wp_image(const Pg *g, IcoStateImage *im)
+{
+    pg_image(g, im);
+    im->n_ro = 1;
+    im->ro_lo[0] = g->lo + WP_RO;
+    im->ro_hi[0] = g->lo + WP_RO + 0x2000u;
+}
+
+/* A's record of a word on fiber 1's stack and one in the arena */
+static void *wp_save(const Pg *a, const uint64_t *stack, int ns, const uint64_t *arena, int na,
+                     size_t *n)
+{
+    IcoXbProc p;
+    IcoXbRefs *r;
+    IcoXbStats st;
+    void *sec = NULL;
+
+    memset(&p, 0, sizeof p);
+    p.tab = a->tab;
+    wp_image(a, &p.image);
+    p.game_lo[1] = a->lo + a->bss;
+    p.game_hi[1] = p.game_lo[1] + PG_BSS_N;
+    p.any_address = 1;
+    p.judge_lo = 0x0000007400000000ull;
+    *n = 0;
+    r = ico_xb_begin(&p);
+    if (r == NULL) {
+        return NULL;
+    }
+    ico_xb_frames(r, 1);
+    ico_xb_where(r, "fiber slot 0's stack");
+    ico_xb_scan(r, stack, (size_t)ns * 8u, (uint64_t)(uintptr_t)stack, 1);
+    ico_xb_frames(r, 0);
+    ico_xb_where(r, "the arena");
+    ico_xb_scan(r, arena, (size_t)na * 8u, (uint64_t)(uintptr_t)arena, 1);
+    CHECK(ico_xb_finish(r, &sec, n, &st) == 0 && st.windows == (unsigned)(ns + na),
+          "ico_xb_finish: %u windows", st.windows);
+    return sec;
+}
+
+static int wp_check(const void *sec, size_t n, const Pg *b, const Pg *a, IcoXbVerdict *v)
+{
+    IcoXbNow now;
+
+    memset(&now, 0, sizeof now);
+    now.tab = b->tab;
+    wp_image(b, &now.image);
+    now.game_lo[1] = b->lo + b->bss;
+    now.game_hi[1] = now.game_lo[1] + PG_BSS_N;
+    now.old_game_lo[1] = a->lo + a->bss;
+    now.old_game_hi[1] = now.old_game_lo[1] + PG_BSS_N;
+    now.old_image_lo = 0x0000007400000000ull;
+    return ico_xb_check(sec, n, &now, v);
+}
+
+/* the owner's v0.11.15-rc6 state: a word on a thread's stack at a page
+   start between symbols, the start of a 16-byte anonymous constant whose
+   8-byte neighbour before it the next link put elsewhere (merged
+   constants are ordered anew): its window is missing, and the refusal
+   stands (the word may name the constant at it, the end of the one before,
+   or nothing; no reading is proven), now saying where the word was and
+   that its bytes from the word on lie here once.  A word inside a real
+   object whose bytes moved whole loads, translated by them */
+static void test_window_page(void)
+{
+    Pg a, b;
+    IcoXbVerdict v;
+    uint64_t stack[1], arena[1];
+    void *sec;
+    size_t n = 0;
+    int k;
+
+    if (pg_make(&a, 0x1000, 0x1100, PG_BSS, 0x13000) != 0 ||
+        pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) != 0) {
+        pg_free(&a);
+        pg_free(&b);
+        return;
+    }
+    /* A: the 8-byte constant at 0x8ff8 and the 16-byte one at the page start
+       0x9000 after it; B: the two apart, in the other order */
+    wp_put(&a, WP_RO + 0xFF8u, 0x10, 8);
+    wp_put(&a, WP_RO + 0x1000u, 0x60, 16);
+    wp_put(&b, WP_RO + 0x1800u, 0x10, 8);
+    wp_put(&b, WP_RO + 0x400u, 0x60, 16);
+    stack[0] = a.lo + WP_RO + 0x1000u;
+    sec = wp_save(&a, stack, 1, NULL, 0, &n);
+    k = sec != NULL ? wp_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_DATA && strstr(v.why, "(16 bytes) is missing here") != NULL &&
+              strstr(v.why, "a word of fiber slot 0's stack at 0x") != NULL &&
+              strstr(v.why, "its 8 bytes from the word on lie here once") != NULL,
+          "a word at a merged constant's start, its neighbour moved: refused, said where: %d %s", k,
+          v.why);
+    ico_xb_verdict_free(&v);
+    free(sec);
+    /* the neighbour kept beside it in B: loads, to the constant's new place */
+    wp_put(&b, WP_RO + 0x3F8u, 0x10, 8);
+    sec = wp_save(&a, stack, 1, NULL, 0, &n);
+    k = sec != NULL ? wp_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_OK && pg_xlate(&v, stack[0], 1) == b.lo + WP_RO + 0x400u,
+          "the same bytes on both sides in B: translated: %d %s", k, v.why);
+    ico_xb_verdict_free(&v);
+    free(sec);
+    /* a word 8 bytes into a 32-byte object that moved whole */
+    wp_put(&a, WP_RO + 0x800u, 0xA0, 32);
+    wp_put(&b, WP_RO + 0xC00u, 0xA0, 32);
+    arena[0] = a.lo + WP_RO + 0x808u;
+    sec = wp_save(&a, stack, 0, arena, 1, &n);
+    k = sec != NULL ? wp_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_OK && pg_xlate(&v, arena[0], 0) == b.lo + WP_RO + 0xC08u,
+          "a word inside an object that moved whole: translated: %d %s", k, v.why);
+    ico_xb_verdict_free(&v);
+    free(sec);
+    printf("state_name: a word at a merged constant's start refused with where it was\n");
+    pg_free(&a);
+    pg_free(&b);
+}
+
 /* one page word on two fibers: fiber 1 holds the page f_s's ADRP of s_big
    + 0x180 makes, fiber 2 the same value as an ordinary address into s_big
    (no producer there): each fiber's word read as it holds it, the second
@@ -1973,5 +2104,6 @@ int main(void)
     test_pages_plain();
     test_legacy();
     test_xlate();
+    test_window_page();
     return ico_check_summary("state_name");
 }
