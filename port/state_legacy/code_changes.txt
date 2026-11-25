@@ -1,0 +1,17 @@
+# The game code changes made on purpose that no change of a game source file
+# explains (tools/state_legacy_table.py gate, run by tools/package_android.sh):
+# a compiler or flag change that moves the code of game functions. The gate
+# fails a package when a game function that can hold a paused frame hashes
+# apart from the newest release table's (the code hash rules,
+# port/platform/code_hash.h) while its source file did not change since that
+# release: the release's states saved inside it would then resume from their
+# checkpoint for a change of the build, not of the game. First find what
+# differs: a linker patch or an instruction the hash rules misread is a gap in
+# the rules, fixed in port/platform/code_hash.c and tools/code_hash_a64.py
+# together (the tables rebuilt), never recorded here. Add a line only for a
+# change made on purpose, knowing those states then take the checkpoint path:
+#
+#   changed <table> <function> <its new hash, as the gate prints it>
+#
+# The lines of a table stop counting once a newer release's table is the
+# newest (the gate compares with that one).

@@ -424,10 +424,16 @@ tool is built by `port/save/CMakeLists.txt` and kept in every build (`cmake/IcoT
 Load on a slot that cannot resume where it was saved continues the game from the checkpoint the
 state holds, in the program, through the game's own load path for a card save. The exact resume
 is tried first ([PLATFORM.md](PLATFORM.md#saving-and-loading)), an earlier Android record named
-again by its version's legacy table included (`state_host.c` `xb_probe`): a state that resumes
+again by its version's legacy table included (`state_host.c` `xb_probe`), and an earlier Android
+record of older code hash rules compared through its version's table of code hashes (a function
+the linker patched in only one of the two builds then compares as the same code): a state that resumes
 exactly never takes the checkpoint, and the listing decides with the same `other_build`, its
 verdict kept per slot with the file's size, time and the settings (the legacy check reads the
-whole state and a table once per file). That work runs on a worker thread
+whole state and a table once per file). When it still refuses a changed function a thread sits
+in, the log line says how it was compared: `the function <f> changed (its instructions differ)`
+under the current code hash rules, or `(here it holds a linker patch site, which the saving
+build's code hash rules count: maybe not its code)` when the state's older rules count this
+build's patch site as code and no table translated them. That work runs on a worker thread
 (`port/save/state_verdicts.h`): the page lists every slot from its header at once and a row fills
 when its verdict comes (`state: slot N's verdict in T ms: exact E ms (legacy table L ms),
 checkpoint C ms`); a Load takes the slot's verdict when the file and the settings are unchanged,

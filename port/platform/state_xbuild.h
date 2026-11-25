@@ -288,11 +288,13 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st);
 /* An earlier version's format 2 record against that version's legacy
    table: 0, or -1 and why (the table is another version's: another layout
    hash, a unit the record names that the table does not hold at its place,
-   or one whose code hash, rules 1, is not the table's for that function;
-   the record is no format 2 arm64 one).  hash: the table's n_hash triples
-   (state_legacy.h: offset from the image start, rules 1, current rules). */
+   or one whose code hash is not the table's for that function; the record
+   is no format 2 arm64 one, or its rules are not verify_rules).  hash: the
+   table's n_hash triples (state_legacy.h: offset from the image start, the
+   hash under verify_rules (the record's own, 1), under the table's rules). */
 int ico_xb_legacy_verify(const void *v2, size_t n, const IcoSymTab *old_tab, uint64_t old_lo,
-                         const uint64_t *hash, size_t n_hash, char *why, size_t why_n);
+                         const uint64_t *hash, size_t n_hash, int verify_rules, char *why,
+                         size_t why_n);
 /* Each block a record holds (any format): its name, size, flags, old
    address and offset in its packed section.  0, or -1 (damaged). */
 typedef void (*IcoXbBlockFn)(void *user, const char *name, uint64_t size, unsigned flags,
@@ -317,6 +319,18 @@ typedef struct IcoXbNow {
     /* the saving process's image start (0: not known, the first word
        nothing names stands for it) */
     uint64_t old_image_lo;
+    /* a format 3 record of earlier code hash rules (an Android version
+       before this build's rules): its build's legacy table's hashes
+       (state_legacy.h IcoLegacyTable.hash, n_xlate triples: offset from the
+       image start, the hash under xlate_rules, under the current rules), or
+       NULL.  When every function of the record has its row there with the
+       record's own hash (so the table is the saving build's), the check
+       compares the table's current-rules hash with this build's; else the
+       record's rules with this build's code, as without it. */
+    const uint64_t *xlate;
+    size_t n_xlate;
+    int xlate_rules;
+    const char *xlate_name; /* the table's name, for the log */
 } IcoXbNow;
 
 /* what blocks a state (the first blocker found) */
@@ -352,6 +366,17 @@ typedef struct IcoXbVerdict {
     unsigned windows;     /* the points that were windows */
     unsigned data_masked; /* the data matched by ordinal and contents */
     unsigned pages;       /* page words translated by their producers */
+    /* IcoXbNow.xlate: 1 when its table compared the record's functions
+       under the current rules, -1 when it was given but refused (why in
+       xlate_why), 0 when none was given */
+    int xlated;
+    char xlate_why[120];
+    /* a refusal for a changed function (ICO_XB_CODE): 1 when it was
+       compared under rules that hash an erratum patch site as a branch and
+       this build's copy holds one (the difference may be the linker's
+       alone), 2 when compared under the current rules (the instructions
+       differ: a patch site compares as the load it stands for), 0 else */
+    int code_patch;
     /* text windows of whole literals found at several literal starts, all
        the same bytes: the first in address order taken (state_xbuild.c) */
     unsigned twins;

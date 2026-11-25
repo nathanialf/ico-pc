@@ -253,7 +253,9 @@ endif()
 # state_legacy: the committed legacy tables (port/state_legacy, issue 217)
 # read by the game's loader (state_legacy.c): each table the index names
 # loads with its manifest's counts, its code hashes in address order under
-# the current rules, every function its symbol file cuts hashed; the index's
+# the current rules (or rules 2 where its manifest says why it was kept),
+# every function its symbol file cuts hashed, the format 3 records' tables
+# (their code hashes alone) too; the index's
 # lookup (a release, an rc, another platform, an unknown commit, no index), a
 # missing and a cut file; the source tree's folder, no game
 add_executable(state_legacy_test test/state_legacy_test.c)
@@ -262,6 +264,21 @@ target_compile_options(state_legacy_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_P
 target_link_libraries(state_legacy_test PRIVATE ico_platform)
 if(ICO_RUN_TESTS)
     add_test(NAME state_legacy COMMAND state_legacy_test "${CMAKE_SOURCE_DIR}/port/state_legacy")
+endif()
+
+# code_hash_corpus: the arm64 code hash's C twin (code_hash.c) against the
+# Python twin's hashes (tools/code_hash_a64.py) on their shared corpus:
+# real functions of two Android builds of one game source (the linker's
+# erratum 843419 patch site in one, the page registers rules 1 and 2 lost),
+# their stubs and variants, under rules 1, 2 and 3, and the registers
+# instructions write; no build output, no game
+add_executable(code_hash_corpus_test test/code_hash_corpus_test.c)
+target_include_directories(code_hash_corpus_test PRIVATE "${ICO_COMPAT_DIR}")
+target_compile_options(code_hash_corpus_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(code_hash_corpus_test PRIVATE ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME code_hash_corpus COMMAND code_hash_corpus_test
+             "${CMAKE_SOURCE_DIR}/tools/test/code_hash_a64_corpus.txt")
 endif()
 
 # cpu_place: the cores a thread ran on most, the cores' speeds from a fake

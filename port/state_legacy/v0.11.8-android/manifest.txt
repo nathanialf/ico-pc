@@ -9,6 +9,7 @@ text_index 2
 lstarts 15436
 text_files 3
 hash_rules 2
+hash_rules_kept its release APK was not at hand when the code hash rules became 3, so its states compare under rules 2
 hashes 14118
 file hashes.z 158633 c9fc92cae5dcd410734eb5ef5802c148b0c6f65efa5ad3229d020fdb6d1df2aa
 file sections.txt 1231 3687c797f4cb421616c14ef60983d11126eb4ff22e2808d48a94b5ffbdd6f418

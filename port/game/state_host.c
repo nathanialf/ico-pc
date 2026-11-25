@@ -1933,10 +1933,11 @@ static int legacy_record(const char *path, const char *commit, void **out, size_
     if (lt == NULL) {
         goto done;
     }
-    if (lt->hash_rules != ICO_CODE_HASH_RULES) {
+    if (lt->record != 2 || lt->hash_rules < 2 || lt->hash_rules > ICO_CODE_HASH_RULES) {
         snprintf(why, why_n,
-                 "its legacy table %s holds code hashes of rules %d, this build's are %d", name,
-                 lt->hash_rules, ICO_CODE_HASH_RULES);
+                 "its legacy table %s is of format %d records and holds code hashes of rules %d, "
+                 "this build reads format 2 ones of rules 2 to %d",
+                 name, lt->record, lt->hash_rules, ICO_CODE_HASH_RULES);
         goto done;
     }
     memset(&env, 0, sizeof env);
@@ -1950,8 +1951,9 @@ static int legacy_record(const char *path, const char *commit, void **out, size_
     env.game_hi[ICO_GAME_BSS] = rg->gbss_hi;
     env.arch = ICO_CODE_A64;
     ot = ico_legacy_symtab(lt, &env, why, why_n);
-    if (ot == NULL || ico_xb_legacy_verify(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], ot, rg->image_lo,
-                                           lt->hash, lt->n_hash, why, why_n) != 0) {
+    if (ot == NULL ||
+        ico_xb_legacy_verify(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], ot, rg->image_lo, lt->hash,
+                             lt->n_hash, lt->verify_rules, why, why_n) != 0) {
         goto done;
     }
     memset(&lg, 0, sizeof lg);
@@ -2027,9 +2029,10 @@ static int legacy_record(const char *path, const char *commit, void **out, size_
     fprintf(stderr,
             "state: read again with the legacy table %s: %u functions (%u with a thread inside), "
             "%u data symbols, %u start-up values and texts (%u read-only data found by its bytes), "
-            "%u page words of the threads, %u ADRPs making them; %u words naming nothing\n",
+            "%u page words of the threads, %u ADRPs making them; %u words naming nothing; code "
+            "compared under hash rules %d\n",
             name, st.units, st.positions, st.data, st.points, st.windows, st.pages, st.producers,
-            st.left);
+            st.left, lt->hash_rules);
 done:
     if (r != NULL) {
         void *tmp = NULL;
@@ -2154,7 +2157,50 @@ static int xb_probe_locked(const char *path, const char *commit, IcoXbVerdict *v
             }
         }
     }
-    k = ico_xb_check(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], &now, v);
+    /* a format 3 arm64 record of earlier code hash rules: compared through
+       its version's legacy table when one is packaged (its functions' hashes
+       under the record's rules and this build's: state_legacy.h) */
+    {
+        const unsigned char *sy = (const unsigned char *)c.p[SEC_SYMS];
+        IcoLegacyTable *lt = NULL;
+        char name[64], why[200];
+
+        if (c.n[SEC_SYMS] >= 20 && sy[4] == 3 && sy[16] == ICO_CODE_A64 &&
+            sy[12] < ICO_CODE_HASH_RULES &&
+            ico_legacy_find(legacy_read, NULL, ico_state_platform_tag(), commit, name,
+                            sizeof name) == 1) {
+            const double lt0 = ico_thread_now_ms();
+
+            lt = ico_legacy_load(legacy_read, NULL, name, why, sizeof why);
+            s_legacy_ms = ico_thread_now_ms() - lt0;
+            if (lt == NULL) {
+                fprintf(stderr, "state: the legacy table %s could not be read: %s\n", name, why);
+            } else if (lt->hash_rules != ICO_CODE_HASH_RULES) {
+                fprintf(stderr,
+                        "state: the legacy table %s holds code hashes of rules %d, this build's "
+                        "are %d: its version's state compares under rules %d\n",
+                        name, lt->hash_rules, ICO_CODE_HASH_RULES, sy[12]);
+            } else {
+                now.xlate = lt->hash;
+                now.n_xlate = lt->n_hash;
+                now.xlate_rules = lt->verify_rules;
+                now.xlate_name = lt->name;
+            }
+        }
+        k = ico_xb_check(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], &now, v);
+        if (v->xlated == 1) {
+            fprintf(stderr,
+                    "state: its code compared through the legacy table %s: rules %u hashes "
+                    "checked, rules %d compared\n",
+                    now.xlate_name, (unsigned)sy[12], ICO_CODE_HASH_RULES);
+        } else if (v->xlated < 0) {
+            fprintf(stderr,
+                    "state: the legacy table %s was not used: %s; its code compared under rules "
+                    "%u\n",
+                    now.xlate_name, v->xlate_why, (unsigned)sy[12]);
+        }
+        ico_legacy_free(lt);
+    }
     copy_free(&c);
     return k;
 }

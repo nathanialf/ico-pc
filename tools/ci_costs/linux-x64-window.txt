@@ -53,7 +53,8 @@ capture_trigger 0.01
 cdvd_host 0.51
 charfile_image 0.01
 clock_trap 0.00
-code_hash_a64_selftest 0.10  # estimate: 0.03 s local (STATENAME), Python XXH3 over 14 short vectors
+code_hash_a64_selftest 0.60  # estimate: 0.38 s local (HASH3), Python XXH3 vectors and the twins' corpus of 28 functions under three rules
+code_hash_corpus 0.10  # estimate: 0.02 s local under ASan/UBSan (HASH3), C over the twins' corpus of 28 functions
 collision_carrier 0.02
 collision_carrier_disc 0.01
 collision_carrier_disc_aug6 0.00
@@ -1193,8 +1194,9 @@ state_fiber_guard 0.11
 state_format 0.08
 state_guard 0.01
 state_host 0.01
-state_legacy 1.00  # estimate: unmeasured, assumed (STATENAME could not build or run it; it inflates and parses three legacy tables)
-state_legacy_tables 0.30  # estimate: 0.15 s local (STATENAME), Python over three legacy tables
+state_legacy 1.00  # estimate: 0.25 s local under ASan/UBSan (HASH3), it inflates and parses five legacy tables
+state_legacy_gate 0.80  # estimate: 0.44 s local (HASH3), Python gate over a fake release and new library, eight runs of the tool
+state_legacy_tables 0.30  # estimate: 0.12 s local (HASH3), Python over five legacy tables
 state_name 0.01  # estimate: 0.0x s local (STATENAME's merge check), a unit test like state_port
 state_port 0.02
 state_recover 0.04

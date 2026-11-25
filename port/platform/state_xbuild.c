@@ -190,8 +190,10 @@ static int uh_cmp(const void *a, const void *b)
 
 /* a legacy read: the version's read-only data is its text runs' copy (the
    only read-only range), and the table's code hashes of the version's
-   functions (rules ICO_CODE_HASH_RULES, tools/state_legacy_table.py) stand
-   for the code this process cannot read */
+   functions (the table's rules, 2 to ICO_CODE_HASH_RULES:
+   tools/state_legacy_table.py) stand for the code this process cannot
+   read; the record it makes says those rules, so the load compares this
+   build's code under them */
 static int legacy_begin(IcoXbRefs *r)
 {
     const IcoXbLegacy *lg = r->p.legacy;
@@ -201,7 +203,7 @@ static int legacy_begin(IcoXbRefs *r)
     r->p.image.ro_lo[0] = lg->old_lo + lg->lt->ro_lo;
     r->p.image.ro_hi[0] = lg->old_lo + lg->lt->ro_hi;
     r->delta = (int64_t)((uint64_t)(uintptr_t)lg->lt->ro - r->p.image.ro_lo[0]);
-    if (lg->lt->hash_rules != ICO_CODE_HASH_RULES) {
+    if (lg->lt->hash_rules < 2 || lg->lt->hash_rules > ICO_CODE_HASH_RULES) {
         return -1; /* the caller says so (state_host.c legacy_record checks it first) */
     }
     r->uh = (uint64_t *)malloc((lg->lt->n_hash ? lg->lt->n_hash : 1) * 2 * sizeof *r->uh);
@@ -1079,14 +1081,16 @@ static int plan_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEnt 
 
 /* the low 12 bits the first user of an ADRP's register Rd adds (an ADD or a
    load or store by unsigned offset through it), in the function's order
-   after it at `at` and before `end` (a page kept across calls is used far
-   from its ADRP), before anything writes Rd: 1 and *lo12, else 0 */
-static int adrp_lo12(uint64_t at, uint64_t end, uint32_t rd, uint64_t *lo12)
+   after its word k and before its end (a page kept across calls is used far
+   from its ADRP), before anything writes Rd: 1 and *lo12, else 0.  ws: the
+   function's words with its erratum patch sites replaced (code_hash.h
+   ico_code_a64_unpatch: a site's B stands for the load its stub holds) */
+static int adrp_lo12(const uint32_t *ws, size_t words, size_t k, uint32_t rd, uint64_t *lo12)
 {
-    uint64_t j;
+    size_t j;
 
-    for (j = at + 4; j + 4 <= end && j < at + 4 * 4096; j += 4) {
-        const uint32_t w = code32(j);
+    for (j = k + 1; j < words && j < k + 1 + 4096; j++) {
+        const uint32_t w = ws[j];
         const uint32_t rn = (w >> 5) & 31u;
         uint32_t wr;
 
@@ -1176,23 +1180,28 @@ static int a64_lo12(uint32_t w, uint64_t *lo12)
    one old page they all lie on, else 0 (no user, one not placed back, or
    two pages) */
 static int adrp_users_page(const IcoXbRefs *r, const IcoSymTab *ot, uint64_t start, uint64_t size,
-                           uint64_t k, uint32_t rd, uint64_t P, uint64_t *page)
+                           const uint32_t *ws, uint64_t k, uint32_t rd, uint64_t P, uint64_t *page)
 {
     const size_t words = (size_t)(size / 4);
     uint32_t *into = (uint32_t *)malloc((words ? words : 1) * sizeof *into);
     uint8_t *seen = (uint8_t *)malloc(words ? words : 1);
+    const IcoSymTab *nt = r->p.legacy->now_tab;
+    IcoA64Text tx;
     size_t j;
     int any = 0, ok = 1;
 
+    tx.bytes = (const void *)(uintptr_t)nt->env.text_lo;
+    tx.lo = nt->env.text_lo;
+    tx.hi = nt->env.text_hi;
     if (into == NULL || seen == NULL ||
-        ico_code_a64_flow((const void *)(uintptr_t)start, words, (size_t)(k / 4), 1u << rd, 0, into,
-                          seen) != 0) {
+        ico_code_a64_flow((const void *)(uintptr_t)start, words, start, &tx, (size_t)(k / 4),
+                          1u << rd, 0, into, seen) != 0) {
         free(into);
         free(seen);
         return 0;
     }
     for (j = 0; j < words && ok; j++) {
-        const uint32_t w = code32(start + 4 * j);
+        const uint32_t w = ws[j];
         uint64_t lo12, old;
 
         if (!seen[j] || ((into[j] >> ((w >> 5) & 31u)) & 1u) == 0 || !a64_lo12(w, &lo12)) {
@@ -1269,6 +1278,7 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
     size_t cap_lp = 0;
     uint64_t *mix = NULL; /* the page words a fiber holds with no producer */
     size_t nmix = 0, cap_mix = 0;
+    uint32_t *ws = NULL; /* a frame's function here, its patch sites replaced */
 
     *pe = NULL;
     *pr = NULL;
@@ -1334,6 +1344,23 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
                 continue; /* the load refuses it: the function is missing here */
             }
             n = u->size < u2->size ? u->size : u2->size;
+            free(ws);
+            ws = (uint32_t *)malloc((u2->size / 4 ? (size_t)(u2->size / 4) : 1) * sizeof *ws);
+            if (ws == NULL) {
+                free(units);
+                free(lp);
+                free(mix);
+                return -1;
+            }
+            {
+                IcoA64Text tx;
+
+                tx.bytes = (const void *)(uintptr_t)nt->env.text_lo;
+                tx.lo = nt->env.text_lo;
+                tx.hi = nt->env.text_hi;
+                (void)ico_code_a64_unpatch((const void *)(uintptr_t)u2->start,
+                                           (size_t)(u2->size / 4), u2->start, &tx, ws);
+            }
             for (k = 0; k + 4 <= n; k += 4) {
                 const uint32_t insn = code32(u2->start + k);
                 const uint64_t P = adrp_page(u2->start + k, insn);
@@ -1351,6 +1378,7 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
                         free(units);
                         free(lp);
                         free(mix);
+                        free(ws);
                         return -1;
                     }
                     lp = q;
@@ -1359,12 +1387,13 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
                 e = &lp[nlp++];
                 e->ustart = u->start;
                 e->off = (uint32_t)k;
-                if (adrp_lo12(u2->start + k, u2->start + u2->size, insn & 31u, &lo12)) {
+                if (adrp_lo12(ws, (size_t)(u2->size / 4), (size_t)(k / 4), insn & 31u, &lo12)) {
                     T = P + lo12;
                     e->known = old_of(r, t, T, &old);
                 } else {
                     T = P;
-                    e->known = adrp_users_page(r, t, u2->start, u2->size, k, insn & 31u, P, &old);
+                    e->known =
+                        adrp_users_page(r, t, u2->start, u2->size, ws, k, insn & 31u, P, &old);
                 }
                 if (e->known) {
                     e->page = old & ~(uint64_t)0xFFF;
@@ -1374,6 +1403,8 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
                 }
             }
         }
+        free(ws);
+        ws = NULL;
         /* each page word of the fiber */
         for (i = p0; i < b; i++) {
             const uint64_t w = r->fw[i].w;
@@ -1917,7 +1948,8 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     put32(sec + H_MAGIC, ICO_XB_MAGIC);
     put32(sec + H_VERSION, ICO_XB_VERSION);
     put32(sec + H_FLAGS, flags);
-    put32(sec + H_RULES, ICO_CODE_HASH_RULES);
+    put32(sec + H_RULES,
+          p->legacy != NULL ? (uint32_t)p->legacy->lt->hash_rules : (uint32_t)ICO_CODE_HASH_RULES);
     put32(sec + H_ARCH, t != NULL ? (uint32_t)t->env.arch : 0u);
     put32(sec + H_UNITS, nu);
     put32(sec + H_DATA, nd);
@@ -2014,7 +2046,8 @@ static const uint64_t *legacy_hash_at(const uint64_t *hash, size_t n_hash, uint6
 }
 
 int ico_xb_legacy_verify(const void *v2, size_t n, const IcoSymTab *old_tab, uint64_t old_lo,
-                         const uint64_t *hash, size_t n_hash, char *why, size_t why_n)
+                         const uint64_t *hash, size_t n_hash, int verify_rules, char *why,
+                         size_t why_n)
 {
     const unsigned char *s = (const unsigned char *)v2;
     uint32_t ver, nu, i;
@@ -2026,6 +2059,13 @@ int ico_xb_legacy_verify(const void *v2, size_t n, const IcoSymTab *old_tab, uin
     ver = get32(s + H_VERSION);
     if (ver != 2 || (int)get32(s + H_ARCH) != ICO_CODE_A64) {
         snprintf(why, why_n, "its symbols record is not one a legacy table reads");
+        return -1;
+    }
+    if ((int)get32(s + H_RULES) != verify_rules) {
+        snprintf(why, why_n,
+                 "the legacy table's code hashes to check it by are of rules %d, its record's "
+                 "of rules %u",
+                 verify_rules, (unsigned)get32(s + H_RULES));
         return -1;
     }
     if (get64(s + H_LAYOUT) != old_tab->layout_hash) {
@@ -2051,7 +2091,8 @@ int ico_xb_legacy_verify(const void *v2, size_t n, const IcoSymTab *old_tab, uin
             return -1;
         }
         /* and its code is the table's: the record's hash (rules 1, the
-           saver's own) is the table's rules-1 hash of that function */
+           saver's own) is the table's hash of that function under those
+           rules (its second column) */
         if (o != NULL && get64(u) >= old_lo) {
             const uint64_t *h = legacy_hash_at(hash, n_hash, get64(u) - old_lo);
 
@@ -2293,6 +2334,33 @@ static const UMap *umap_find(const UMap *m, size_t n, uint64_t old)
     return lo < n && m[lo].old == old ? &m[lo] : NULL;
 }
 
+/* IcoXbVerdict.code_patch for this build's function w compared under
+   `rules` */
+static int code_patch_of(const IcoSymTab *t, const IcoSymUnit *w, int rules)
+{
+    uint32_t *ws;
+    IcoA64Text tx;
+    size_t sites;
+
+    if (t->env.arch != ICO_CODE_A64) {
+        return 0;
+    }
+    if (rules >= 3) {
+        return 2;
+    }
+    ws = (uint32_t *)malloc((w->size / 4 ? (size_t)(w->size / 4) : 1) * sizeof *ws);
+    if (ws == NULL) {
+        return 0;
+    }
+    tx.bytes = (const void *)(uintptr_t)t->env.text_lo;
+    tx.lo = t->env.text_lo;
+    tx.hi = t->env.text_hi;
+    sites = ico_code_a64_unpatch((const void *)(uintptr_t)w->start, (size_t)(w->size / 4), w->start,
+                                 &tx, ws);
+    free(ws);
+    return sites > 0 ? 1 : 0;
+}
+
 int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *v)
 {
     const unsigned char *sec = (const unsigned char *)secv;
@@ -2485,6 +2553,38 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             span_add(&spans, now->old_game_lo[j], now->old_game_hi[j], now->game_lo[j]);
         }
     }
+    /* a record of earlier rules with its build's legacy table: the table is
+       that build's when every function of the record has its row there
+       with the record's own hash; its current-rules hashes then stand for
+       the saving build's code */
+    if (now->xlate != NULL && ver >= 3 && (int)get32(sec + H_RULES) != ICO_CODE_HASH_RULES) {
+        const char *bad = NULL;
+
+        if ((int)get32(sec + H_RULES) != now->xlate_rules || now->old_image_lo == 0) {
+            snprintf(v->xlate_why, sizeof v->xlate_why,
+                     "its hashes to check the record by are of rules %d, the record's of rules %u",
+                     now->xlate_rules, (unsigned)get32(sec + H_RULES));
+        } else {
+            for (i = 0; i < nu && bad == NULL; i++) {
+                const unsigned char *r = u + (size_t)i * UNIT_BYTES;
+                const uint64_t *row =
+                    get64(r) >= now->old_image_lo
+                        ? legacy_hash_at(now->xlate, now->n_xlate, get64(r) - now->old_image_lo)
+                        : NULL;
+
+                if (row == NULL || row[1] != get64(r + 24)) {
+                    bad = NAME_AT(get32(r + 32));
+                }
+            }
+            if (bad != NULL) {
+                snprintf(v->xlate_why, sizeof v->xlate_why,
+                         "it is another build's (the function %.60s of the record differs from "
+                         "it)",
+                         bad);
+            }
+        }
+        v->xlated = v->xlate_why[0] == '\0' ? 1 : -1;
+    }
     /* the units */
     umap = (UMap *)malloc((nu ? nu : 1) * sizeof *umap);
     if (umap == NULL) {
@@ -2506,10 +2606,21 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             v->soft_left++;
             continue;
         }
-        same = ico_symtab_unit_hash_rules(t, w, (int)get32(sec + H_RULES)) == get64(r + 24);
+        if (v->xlated == 1) {
+            same = legacy_hash_at(now->xlate, now->n_xlate, start - now->old_image_lo)[2] ==
+                   ico_symtab_unit_hash(t, w);
+        } else {
+            same = ico_symtab_unit_hash_rules(t, w, (int)get32(sec + H_RULES)) == get64(r + 24);
+        }
         if (!same && ((f & XU_POSITION) != 0 ||
                       ((f & XU_START) != 0 && !((f & XU_UNIQUE) != 0 && w->unique)))) {
-            FAIL(v, ICO_XB_CODE, "the function %s changed", nm);
+            v->code_patch = code_patch_of(
+                t, w, v->xlated == 1 ? ICO_CODE_HASH_RULES : (int)get32(sec + H_RULES));
+            FAIL(v, ICO_XB_CODE, "the function %s changed%s", nm,
+                 v->code_patch == 1   ? " (here it holds a linker patch site, which the saving "
+                                        "build's code hash rules count: maybe not its code)"
+                 : v->code_patch == 2 ? " (its instructions differ)"
+                                      : "");
         }
         if (same && strict) {
             umap[n_umap].old = start;

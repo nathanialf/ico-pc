@@ -121,52 +121,35 @@ static long manifest_num(const Dir *d, const char *name, const char *key)
     return v;
 }
 
-static void check_table(const Dir *d, const char *name, const char *platform, const char *commit)
+/* every function the version's symbol file cuts (state_syms.c, as the
+   loader places it at an image) has its row in the table's code hashes */
+/* 1 when the manifest has a line starting with `key` and a space */
+static int manifest_has(const Dir *d, const char *name, const char *key)
 {
-    char why[200], found[64];
-    IcoLegacyTable *t;
+    char path[256], err[160];
+    void *m = NULL;
+    size_t n = 0, i, k = strlen(key);
+    int hit = 0;
+
+    snprintf(path, sizeof path, "%s/manifest.txt", name);
+    if (dir_read((void *)d, path, &m, &n, err, sizeof err) != 0) {
+        return 0;
+    }
+    for (i = 0; i + k < n && !hit; i++) {
+        hit = (i == 0 || ((char *)m)[i - 1] == '\n') && memcmp((char *)m + i, key, k) == 0 &&
+              ((char *)m)[i + k] == ' ';
+    }
+    free(m);
+    return hit;
+}
+
+static void check_rows(const char *name, const IcoLegacyTable *t)
+{
     IcoSymTabEnv env;
     IcoSymTab *st;
+    char why[200];
     size_t i;
-    int sorted = 1;
 
-    CHECK(ico_legacy_find(dir_read, (void *)d, platform, commit, found, sizeof found) == 1 &&
-              strcmp(found, name) == 0,
-          "%s: the index finds it by %s %s", name, platform, commit);
-    t = ico_legacy_load(dir_read, (void *)d, name, why, sizeof why);
-    CHECK(t != NULL, "%s loads: %s", name, t != NULL ? "" : why);
-    if (t == NULL) {
-        return;
-    }
-    CHECK(strcmp(t->commit, commit) == 0, "%s: its manifest's commit %s", name, t->commit);
-    CHECK((long)t->n_hash == manifest_num(d, name, "hashes") && t->n_hash > 1000,
-          "%s: %zu code hashes, as its manifest says", name, t->n_hash);
-    CHECK((long)t->n_run == manifest_num(d, name, "texts") && t->n_run > 1000,
-          "%s: %zu text runs, as its manifest says", name, t->n_run);
-    CHECK(t->hash_rules == ICO_CODE_HASH_RULES, "%s: hashes under rules %d", name, t->hash_rules);
-    for (i = 1; i < t->n_hash; i++) {
-        sorted &= t->hash[3 * i] > t->hash[3 * (i - 1)];
-    }
-    CHECK(sorted, "%s: the code hashes in address order", name);
-    CHECK(t->ro_hi > t->ro_lo && t->n_run > 0 && t->run[0] >= t->ro_lo &&
-              (uint64_t)t->run[2 * (t->n_run - 1)] + t->run[2 * (t->n_run - 1) + 1] <= t->ro_hi,
-          "%s: its text runs inside its .rodata", name);
-    {
-        uint64_t lo = 0, hi = 0;
-        const uint32_t off = t->run[2 * (t->n_run / 2)];
-        int ls = -1;
-        long nls = 0;
-
-        CHECK(ico_legacy_run(t, off, &lo, &hi, &ls) == 1 && lo == off &&
-                  t->ro[off - t->ro_lo + (hi - lo) - 1] == 0 && ls == t->lstart[t->n_run / 2],
-              "%s: a run found by its start ends in a zero byte, its literal-start flag given",
-              name);
-        for (i = 0; i < t->n_run; i++) {
-            nls += t->lstart[i] != 0;
-        }
-        CHECK(nls == manifest_num(d, name, "lstarts") && nls > 0 && nls < (long)t->n_run,
-              "%s: %ld runs start a literal, as its manifest says", name, nls);
-    }
     /* placed where an Android state's ranges put an image */
     memset(&env, 0, sizeof env);
     env.image_lo = 0x0000007768720000ull;
@@ -199,6 +182,113 @@ static void check_table(const Dir *d, const char *name, const char *platform, co
               name, hit, st->n_unit);
     }
     ico_symtab_free(st);
+}
+
+/* a table of format 3 records (v0.11.9 and later): its code hashes alone,
+   under the records' rules 2 and the current rules; its symbol file (read
+   here, as the package gate reads it) cuts every function it hashes */
+static void check_table3(const Dir *d, const char *name, const char *commit)
+{
+    char why[200], found[64], path[128];
+    IcoLegacyTable *t;
+    void *gz = NULL;
+    size_t gz_n = 0, i, differ = 0;
+    int sorted = 1;
+
+    CHECK(ico_legacy_find(dir_read, (void *)d, "android-arm64", commit, found, sizeof found) == 1 &&
+              strcmp(found, name) == 0,
+          "%s: the index finds it by %s", name, commit);
+    t = ico_legacy_load(dir_read, (void *)d, name, why, sizeof why);
+    CHECK(t != NULL, "%s loads: %s", name, t != NULL ? "" : why);
+    if (t == NULL) {
+        return;
+    }
+    CHECK(t->record == 3 && t->verify_rules == 2 && t->hash_rules == ICO_CODE_HASH_RULES &&
+              t->n_run == 0 && t->syms == NULL,
+          "%s: format 3 records' hashes, rules %d and %d, no texts", name, t->verify_rules,
+          t->hash_rules);
+    CHECK((long)t->n_hash == manifest_num(d, name, "hashes") && t->n_hash > 10000,
+          "%s: %zu code hashes, as its manifest says", name, t->n_hash);
+    for (i = 1; i < t->n_hash; i++) {
+        sorted &= t->hash[3 * i] > t->hash[3 * (i - 1)];
+    }
+    for (i = 0; i < t->n_hash; i++) {
+        differ += t->hash[3 * i + 1] != t->hash[3 * i + 2];
+    }
+    CHECK(sorted, "%s: the code hashes in address order", name);
+    CHECK(differ > 0 && differ < t->n_hash / 100,
+          "%s: %zu functions hash apart under rules 2 and 3 (a few: the rules changed little)",
+          name, differ);
+    snprintf(path, sizeof path, "%s/" ICO_LEGACY_SYMS, name);
+    if (dir_read((void *)d, path, &gz, &gz_n, why, sizeof why) == 0) {
+        size_t n = 0;
+        char *txt = ico_symtab_gunzip(gz, gz_n, &n);
+
+        t->syms = txt;
+        t->syms_n = n;
+        CHECK(txt != NULL, "%s: its symbol file inflates", name);
+        if (txt != NULL) {
+            check_rows(name, t); /* t->syms goes with the table */
+        }
+    } else {
+        CHECK(0, "%s: its symbol file: %s", name, why);
+    }
+    printf("state_legacy: %s: format 3 records, %zu code hashes, %zu apart under rules 2 and %d\n",
+           name, t->n_hash, differ, ICO_CODE_HASH_RULES);
+    free(gz);
+    ico_legacy_free(t);
+}
+
+static void check_table(const Dir *d, const char *name, const char *platform, const char *commit)
+{
+    char why[200], found[64];
+    IcoLegacyTable *t;
+    size_t i;
+    int sorted = 1;
+
+    CHECK(ico_legacy_find(dir_read, (void *)d, platform, commit, found, sizeof found) == 1 &&
+              strcmp(found, name) == 0,
+          "%s: the index finds it by %s %s", name, platform, commit);
+    t = ico_legacy_load(dir_read, (void *)d, name, why, sizeof why);
+    CHECK(t != NULL, "%s loads: %s", name, t != NULL ? "" : why);
+    if (t == NULL) {
+        return;
+    }
+    CHECK(strcmp(t->commit, commit) == 0, "%s: its manifest's commit %s", name, t->commit);
+    CHECK((long)t->n_hash == manifest_num(d, name, "hashes") && t->n_hash > 1000,
+          "%s: %zu code hashes, as its manifest says", name, t->n_hash);
+    CHECK((long)t->n_run == manifest_num(d, name, "texts") && t->n_run > 1000,
+          "%s: %zu text runs, as its manifest says", name, t->n_run);
+    CHECK(t->record == 2 && t->verify_rules == 1 &&
+              (t->hash_rules == ICO_CODE_HASH_RULES ||
+               (t->hash_rules == 2 && manifest_has(d, name, "hash_rules_kept"))),
+          "%s: format 2 records' hashes, rules 1 and %d (an earlier rules' table says why it "
+          "was kept)",
+          name, t->hash_rules);
+    for (i = 1; i < t->n_hash; i++) {
+        sorted &= t->hash[3 * i] > t->hash[3 * (i - 1)];
+    }
+    CHECK(sorted, "%s: the code hashes in address order", name);
+    CHECK(t->ro_hi > t->ro_lo && t->n_run > 0 && t->run[0] >= t->ro_lo &&
+              (uint64_t)t->run[2 * (t->n_run - 1)] + t->run[2 * (t->n_run - 1) + 1] <= t->ro_hi,
+          "%s: its text runs inside its .rodata", name);
+    {
+        uint64_t lo = 0, hi = 0;
+        const uint32_t off = t->run[2 * (t->n_run / 2)];
+        int ls = -1;
+        long nls = 0;
+
+        CHECK(ico_legacy_run(t, off, &lo, &hi, &ls) == 1 && lo == off &&
+                  t->ro[off - t->ro_lo + (hi - lo) - 1] == 0 && ls == t->lstart[t->n_run / 2],
+              "%s: a run found by its start ends in a zero byte, its literal-start flag given",
+              name);
+        for (i = 0; i < t->n_run; i++) {
+            nls += t->lstart[i] != 0;
+        }
+        CHECK(nls == manifest_num(d, name, "lstarts") && nls > 0 && nls < (long)t->n_run,
+              "%s: %ld runs start a literal, as its manifest says", name, nls);
+    }
+    check_rows(name, t);
     ico_legacy_free(t);
 }
 
@@ -218,6 +308,8 @@ int main(int argc, char **argv)
     check_table(&d, "v0.11.7-android", "android-arm64", "v0.11.6-183-g66d9d0dcba");
     check_table(&d, "v0.11.8-android", "android-arm64", "v0.11.7-68-gaeb00e6100");
     check_table(&d, "v0.11.8-rc4-android", "android-arm64", "v0.11.7-66-gaf8507442c");
+    check_table3(&d, "v0.11.14-android", "v0.11.13-42-g0aaa7ac704");
+    check_table3(&d, "v0.11.15-android", "v0.11.14-94-g5396fcfcd2");
     /* no table: another platform's, an unknown commit, no index */
     CHECK(ico_legacy_find(dir_read, &d, "windows-x64", "v0.11.7-68-gaeb00e6100", found,
                           sizeof found) == 0,
