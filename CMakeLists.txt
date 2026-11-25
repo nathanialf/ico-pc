@@ -454,9 +454,15 @@ if(Python3_FOUND)
     # the earlier Android versions' legacy tables (port/state_legacy, issue 217):
     # each parses and matches its manifest (files, sizes, SHA-256, counts), the
     # index names each once; the Python arm64 code hash against xxHash's
-    # vectors and hand-made functions (no build, no game)
+    # vectors, hand-made functions and the twins' corpus
+    # (tools/test/code_hash_a64_corpus.txt; no build, no game)
     add_test(NAME state_legacy_tables COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/state_legacy_table.py" check)
     add_test(NAME code_hash_a64_selftest COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/code_hash_a64.py" --selftest)
+    # the Android package gate on the game's code hashes (tools/state_legacy_table.py
+    # gate) over a fake release and new library: a changed game function that can hold
+    # a paused frame fails unless its source changed or code_changes.txt records it; the
+    # linker's erratum patch site passes (no build, no game)
+    add_test(NAME state_legacy_gate COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/test/state_legacy_gate_test.py")
     # the Apple programs' image base check (tools/macho_image_check.py, issue
     # 218) on hand-built Mach-O headers (no build, no game)
     add_test(NAME macho_image_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/macho_image_check.py" selftest)

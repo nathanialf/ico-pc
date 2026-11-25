@@ -111,6 +111,8 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
         return NULL;
     }
     snprintf(t->name, sizeof t->name, "%s", name);
+    t->verify_rules = 1; /* a manifest without the line: a format 2 record's rules */
+    t->record = 2;
     if (read_file(rd, user, name, "manifest.txt", &man, &man_n, why, why_n) != 0) {
         goto fail;
     }
@@ -141,13 +143,23 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
                 files = (size_t)strtoul(l + 11, NULL, 10);
             } else if (strncmp(l, "hash_rules ", 11) == 0) {
                 t->hash_rules = (int)strtol(l + 11, NULL, 10);
+            } else if (strncmp(l, "hash_verify_rules ", 18) == 0) {
+                t->verify_rules = (int)strtol(l + 18, NULL, 10);
+            } else if (strncmp(l, "record ", 7) == 0) {
+                t->record = (int)strtol(l + 7, NULL, 10);
             }
         }
         p = next;
     }
-    if (t->commit[0] == '\0' || files == 0 || files > 64 || t->n_run == 0) {
+    if (t->commit[0] == '\0' || (t->record != 2 && t->record != 3) ||
+        (t->record == 2 && (files == 0 || files > 64 || t->n_run == 0)) || t->verify_rules < 1 ||
+        t->verify_rules >= t->hash_rules) {
         say(why, why_n, "its manifest is damaged");
         goto fail;
+    }
+    if (t->record == 3) {
+        t->n_run = 0;
+        goto hashes; /* a format 3 record names its own words: the code hashes alone */
     }
     if (text_index != ICO_LEGACY_TEXT_INDEX) {
         if (why != NULL && why_n > 0) {
@@ -271,6 +283,7 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
         say(why, why_n, "the text files hold less than the index");
         goto fail;
     }
+hashes:
     {
         void *hz = NULL, *hb = NULL;
         size_t hz_n = 0, hb_n = 0, j;

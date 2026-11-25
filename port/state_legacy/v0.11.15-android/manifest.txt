@@ -1,0 +1,12 @@
+# tools/state_legacy_table.py build --record 3 from ico-pc-v0.11.15-android.apk
+commit v0.11.14-94-g5396fcfcd2
+platform android-arm64
+kind release
+record 3
+apk ico-pc-v0.11.15-android.apk
+apk_sha256 2efb30eea372cbc52b2a6dde95d101ec3bf9f79507d6260878cd019b0836fc36
+hash_rules 3
+hash_verify_rules 2
+hashes 14825
+file hashes.z 163197 279d27f013b99e3466956f331d7eaacc64548c31ef4f270acbcfaa81ffeaff0e
+file syms.gzip 243332 0cefa12d28b936e3ccca0b550d9c9b169843969799c1d2ec4d6947f8d1c9e3e4

@@ -1351,18 +1351,29 @@ const IcoSymData *ico_symtab_data_named(const IcoSymTab *t, uint64_t name_hash, 
     return i >= 0 ? &t->data[i] : NULL;
 }
 
+/* the program's code range, for an erratum patch site's stub (code_hash.h
+   IcoA64Text): the table's text range, read in place */
+static void unit_text(const IcoSymTab *t, IcoA64Text *tx)
+{
+    tx->bytes = (const void *)(uintptr_t)t->env.text_lo;
+    tx->lo = t->env.text_lo;
+    tx->hi = t->env.text_hi;
+}
+
 uint64_t ico_symtab_unit_hash_rules(IcoSymTab *t, const IcoSymUnit *cu, int rules)
 {
     IcoSymUnit *u = &t->unit[cu - t->unit];
+    IcoA64Text tx;
 
     if (rules == ICO_CODE_HASH_RULES) {
         return ico_symtab_unit_hash(t, cu);
     }
-    if (!u->hashed1) {
+    if (u->hashed1 != rules) {
+        unit_text(t, &tx);
         u->code_hash1 =
-            ico_code_hash_rules(rules, t->env.arch, (const void *)(uintptr_t)u->start,
-                                (size_t)u->size, u->start, t->env.image_lo, t->env.image_hi);
-        u->hashed1 = 1;
+            ico_code_hash_text(rules, t->env.arch, (const void *)(uintptr_t)u->start,
+                               (size_t)u->size, u->start, t->env.image_lo, t->env.image_hi, &tx);
+        u->hashed1 = (uint8_t)rules;
     }
     return u->code_hash1;
 }
@@ -1372,8 +1383,12 @@ uint64_t ico_symtab_unit_hash(IcoSymTab *t, const IcoSymUnit *cu)
     IcoSymUnit *u = &t->unit[cu - t->unit];
 
     if (!u->hashed) {
-        u->code_hash = ico_code_hash(t->env.arch, (const void *)(uintptr_t)u->start,
-                                     (size_t)u->size, u->start, t->env.image_lo, t->env.image_hi);
+        IcoA64Text tx;
+
+        unit_text(t, &tx);
+        u->code_hash =
+            ico_code_hash_text(ICO_CODE_HASH_RULES, t->env.arch, (const void *)(uintptr_t)u->start,
+                               (size_t)u->size, u->start, t->env.image_lo, t->env.image_hi, &tx);
         u->hashed = 1;
     }
     return u->code_hash;

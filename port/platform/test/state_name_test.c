@@ -1460,6 +1460,7 @@ static void test_pages(void)
 typedef struct Lg {
     IcoLegacyTable lt;
     uint64_t hash[3 * 16];
+    uint64_t hash2[16]; /* the units' rules-2 hashes (a table kept at rules 2) */
     uint32_t run[2];
     uint8_t lstart[1];
     uint8_t v2[64 + 16 * 48];
@@ -1493,6 +1494,8 @@ static int lg_make(Lg *g, Pg *a)
     g->lt.lstart = g->lstart;
     g->lt.n_run = 1;
     g->lt.hash_rules = ICO_CODE_HASH_RULES;
+    g->lt.verify_rules = 1;
+    g->lt.record = 2;
     /* the version 2 record its saver made: its units with their rules-1
        hashes, the unnamed words it could not name */
     put32le(g->v2, ICO_XB_MAGIC);
@@ -1509,6 +1512,7 @@ static int lg_make(Lg *g, Pg *a)
         g->hash[3 * nu] = u->start - a->lo;
         g->hash[3 * nu + 1] = ico_symtab_unit_hash_rules(a->tab, u, 1);
         g->hash[3 * nu + 2] = ico_symtab_unit_hash_rules(a->tab, u, ICO_CODE_HASH_RULES);
+        g->hash2[nu] = ico_symtab_unit_hash_rules(a->tab, u, 2);
         put64le(q, u->start);
         put64le(q + 8, u->size);
         put64le(q + 24, g->hash[3 * nu + 1]);
@@ -1646,8 +1650,8 @@ static void test_legacy(void)
         return;
     }
     /* the table proves itself the saver's: every unit's rules-1 hash */
-    CHECK(ico_xb_legacy_verify(g.v2, g.v2_n, g.ot, a.lo, g.lt.hash, g.lt.n_hash, why, sizeof why) ==
-              0,
+    CHECK(ico_xb_legacy_verify(g.v2, g.v2_n, g.ot, a.lo, g.lt.hash, g.lt.n_hash, 1, why,
+                               sizeof why) == 0,
           "the record and its table agree: %s", why);
     /* B's start-up data: its second "dup" at offset 8 */
     snap[0] = 0;
@@ -1719,15 +1723,15 @@ static void test_legacy(void)
     snap[1] = b.lo + b.o_dup + 0x100;
     /* another build's table: a unit's rules-1 hash not the record's */
     put64le(g.v2 + 64 + 24, g.hash[1] ^ 1u);
-    CHECK(ico_xb_legacy_verify(g.v2, g.v2_n, g.ot, a.lo, g.lt.hash, g.lt.n_hash, why, sizeof why) !=
-                  0 &&
+    CHECK(ico_xb_legacy_verify(g.v2, g.v2_n, g.ot, a.lo, g.lt.hash, g.lt.n_hash, 1, why,
+                               sizeof why) != 0 &&
               strstr(why, "another build's") != NULL,
           "a table of another build: refused: %s", why);
     put64le(g.v2 + 64 + 24, g.hash[1]);
     /* another version's table: another layout */
     put64le(g.v2 + 40, a.tab->layout_hash ^ 1u);
-    CHECK(ico_xb_legacy_verify(g.v2, g.v2_n, g.ot, a.lo, g.lt.hash, g.lt.n_hash, why, sizeof why) !=
-                  0 &&
+    CHECK(ico_xb_legacy_verify(g.v2, g.v2_n, g.ot, a.lo, g.lt.hash, g.lt.n_hash, 1, why,
+                               sizeof why) != 0 &&
               strstr(why, "another version's") != NULL,
           "a table of another layout: refused: %s", why);
     put64le(g.v2 + 40, a.tab->layout_hash);
@@ -1747,17 +1751,163 @@ static void test_legacy(void)
         ico_xb_verdict_free(&v);
         free(sec);
     }
-    /* a table of other code hash rules: no read (and nothing it allocated
-       kept: the leak checker's builds) */
-    g.lt.hash_rules = ICO_CODE_HASH_RULES - 1;
+    /* a table kept at rules 2 (its release APK not at hand when the rules
+       changed): read, its record says rules 2, and B's code compares under
+       them */
+    {
+        size_t i;
+
+        for (i = 0; i < g.lt.n_hash; i++) {
+            g.hash[3 * i + 2] = g.hash2[i];
+        }
+        g.lt.hash_rules = 2;
+        sec = lg_read(&g, &a, &b, snap, 2, regs, 2, arena, 2, &n, &st);
+        CHECK(sec != NULL && sec != NULL && n > 16 && ((const uint8_t *)sec)[12] == 2,
+              "a table of rules 2: read, its record of rules 2");
+        k = sec != NULL ? lg_check(sec, n, &b, &a, snap, 2, &v) : ICO_XB_BAD;
+        CHECK(k == ICO_XB_OK, "B loads A's legacy state through a rules 2 table: %d %s", k, v.why);
+        ico_xb_verdict_free(&v);
+        free(sec);
+    }
+    /* a table of rules 1 (no current hashes at all): no read (and nothing it
+       allocated kept: the leak checker's builds) */
+    g.lt.hash_rules = 1;
     sec = lg_read(&g, &a, &b, snap, 2, regs, 2, arena, 2, &n, &st);
-    CHECK(sec == NULL, "a table of other code hash rules: not read");
+    CHECK(sec == NULL, "a table of rules 1: not read");
     free(sec);
     g.lt.hash_rules = ICO_CODE_HASH_RULES;
     lg_free(&g);
     pg_free(&a);
     pg_free(&b);
     s_pg_legacy = 0;
+}
+
+/* xt_row sort: by offset */
+static int xt_cmp(const void *x, const void *y)
+{
+    const uint64_t a = ((const uint64_t *)x)[0], b = ((const uint64_t *)y)[0];
+
+    return a < b ? -1 : a > b;
+}
+
+/* B's check of A's record with a legacy table's rows (IcoXbNow.xlate) */
+static int xt_check(const void *sec, size_t n, const Pg *b, const Pg *a, const uint64_t *rows,
+                    size_t nrow, int rules, IcoXbVerdict *v)
+{
+    IcoXbNow now;
+
+    memset(&now, 0, sizeof now);
+    now.tab = b->tab;
+    pg_image(b, &now.image);
+    now.game_lo[1] = b->lo + b->bss;
+    now.game_hi[1] = now.game_lo[1] + PG_BSS_N;
+    now.old_game_lo[1] = a->lo + a->bss;
+    now.old_game_hi[1] = now.old_game_lo[1] + PG_BSS_N;
+    now.old_image_lo = a->lo;
+    now.xlate = rows;
+    now.n_xlate = nrow;
+    now.xlate_rules = rules;
+    now.xlate_name = "v0.0.2-test";
+    return ico_xb_check(sec, n, &now, v);
+}
+
+/* a format 3 record of earlier code hash rules (a v0.11.15 state: rules 2)
+   whose functions hash apart from B's under those rules but alike under
+   the current ones (the linker's patch site): refused by its own rules,
+   loaded through its build's legacy table (each function's row: the
+   record's hash, then the current rules'); a table of another build (a
+   row not the record's hash), one checking by other rules, and a function
+   whose current-rules hash differs too (refused, "its instructions
+   differ") */
+static void test_xlate(void)
+{
+    Pg a, b;
+    IcoXbStats st;
+    IcoXbVerdict v;
+    uint64_t regs[4], stack[1], rows[3 * 32];
+    uint8_t *sec;
+    size_t n = 0, nu, i;
+    int k;
+
+    if (pg_make(&a, 0x1000, 0x1100, PG_BSS, 0x13000) != 0 ||
+        pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) != 0) {
+        pg_free(&a);
+        pg_free(&b);
+        return;
+    }
+    regs[0] = a.lo + a.f_a + 8;       /* a return address in f_a */
+    regs[1] = a.lo + a.f_b + 4;       /* one in f_b */
+    regs[2] = a.lo + PG_BSS;          /* x19: VAR1's page */
+    regs[3] = a.lo + PG_BSS + 0x1000; /* x21: VAR3's page */
+    stack[0] = a.lo + PG_BSS + 0x1000;
+    sec = (uint8_t *)pg_save(&a, regs, 4, stack, 1, NULL, 0, &n, &st);
+    CHECK(sec != NULL && n > 80 && sec[4] == 3 && sec[12] == ICO_CODE_HASH_RULES,
+          "A's record: format 3, the current rules");
+    if (sec == NULL || n <= 80) {
+        free(sec);
+        pg_free(&a);
+        pg_free(&b);
+        return;
+    }
+    nu = (size_t)sec[20] | (size_t)sec[21] << 8;
+    CHECK(nu > 0 && nu <= 32, "A's record holds %zu functions", nu);
+    nu = nu > 32 ? 32 : nu;
+    /* as rules 2 made it: each function's hash another number */
+    sec[12] = 2;
+    for (i = 0; i < nu; i++) {
+        uint8_t *r = sec + 80 + 48 * i;
+        uint64_t start = 0, h = 0;
+        int j;
+
+        for (j = 7; j >= 0; j--) {
+            start = start << 8 | r[j];
+            h = h << 8 | r[24 + j];
+        }
+        rows[3 * i] = start - a.lo;
+        rows[3 * i + 1] = h ^ 0x5A5A5A5A5A5A5A5Aull;
+        rows[3 * i + 2] = h;
+        put64le(r + 24, rows[3 * i + 1]);
+    }
+    qsort(rows, nu, 3 * sizeof *rows, xt_cmp);
+    k = pg_check(sec, n, &b, &a, &v);
+    CHECK(k == ICO_XB_CODE && strstr(v.why, "changed") != NULL && v.xlated == 0,
+          "a rules 2 record whose functions hash apart there: refused: %d %s", k, v.why);
+    ico_xb_verdict_free(&v);
+    k = xt_check(sec, n, &b, &a, rows, nu, 2, &v);
+    CHECK(k == ICO_XB_OK && v.xlated == 1 && v.pages == 2,
+          "through its build's table: loads (%d, xlated %d, %u page words): %s", k, v.xlated,
+          v.pages, v.why);
+    if (k == ICO_XB_OK) {
+        CHECK(pg_xlate(&v, regs[0], 1) == b.lo + b.f_a + 8, "the return address in f_a");
+    }
+    ico_xb_verdict_free(&v);
+    /* another build's table: one row not the record's hash */
+    rows[1] ^= 1u;
+    k = xt_check(sec, n, &b, &a, rows, nu, 2, &v);
+    CHECK(k == ICO_XB_CODE && v.xlated == -1 && strstr(v.xlate_why, "another build's") != NULL,
+          "a table of another build: not used, refused by the record's rules: %d %d %s / %s", k,
+          v.xlated, v.xlate_why, v.why);
+    ico_xb_verdict_free(&v);
+    rows[1] ^= 1u;
+    /* a table whose first hashes are of other rules */
+    k = xt_check(sec, n, &b, &a, rows, nu, 1, &v);
+    CHECK(k == ICO_XB_CODE && v.xlated == -1 && strstr(v.xlate_why, "rules 1") != NULL,
+          "a table checking by rules 1: not used: %d %s", k, v.xlate_why);
+    ico_xb_verdict_free(&v);
+    /* a function a thread sits in whose current-rules hash differs too */
+    for (i = 0; i < nu; i++) {
+        rows[3 * i + 2] ^= 1u;
+    }
+    k = xt_check(sec, n, &b, &a, rows, nu, 2, &v);
+    CHECK(k == ICO_XB_CODE && v.xlated == 1 && v.code_patch == 2 &&
+              strstr(v.why, "(its instructions differ)") != NULL,
+          "a function changed under the current rules: refused, said so: %d %d %s", k, v.code_patch,
+          v.why);
+    ico_xb_verdict_free(&v);
+    printf("state_name: a rules 2 record of %zu functions through its legacy table\n", nu);
+    free(sec);
+    pg_free(&a);
+    pg_free(&b);
 }
 
 /* one page word on two fibers: fiber 1 holds the page f_s's ADRP of s_big
@@ -1822,5 +1972,6 @@ int main(void)
     test_pages();
     test_pages_plain();
     test_legacy();
+    test_xlate();
     return ico_check_summary("state_name");
 }

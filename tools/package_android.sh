@@ -211,6 +211,13 @@ run python3 -I "$wt/tools/state_carry_check.py" check --binary "$so" --syms "$sy
 # resume exactly only under their layout hash: a package of another one fails
 python3 -I "$wt/tools/android_syms_lines.py" layout "$symdir/carry.txt" "$wt" >>"$log" 2>&1 ||
     fail "tools/android_syms_lines.py layout: the game data layout hash is not the legacy tables' (the log says which and what to do)"
+# the previous release's states resume exactly only where every game function
+# that can hold a paused frame hashes as it did there: one that hashes apart
+# while its source did not change fails the package (v0.11.16-rc8's
+# subBirdBrainMain: a linker patch the code hash counted as code)
+python3 -I "$wt/tools/state_legacy_table.py" gate --so "$so" --syms "$symdir/libmain.syms.gz" \
+    --map "$map" --git "$wt" >>"$log" 2>&1 ||
+    fail "tools/state_legacy_table.py gate: game functions hash apart from the last release's with no change to their source (the log names them and says what to do)"
 withsyms="$root/build-host/tmp/android-$label-syms.apk"
 cp "$unsigned" "$withsyms"
 run python3 - "$withsyms" "$symdir/libmain.syms.gz" <<'PY'

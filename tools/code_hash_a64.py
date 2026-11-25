@@ -1,4 +1,4 @@
-"""tools/code_hash_a64.py -- port/platform/code_hash.c's arm64 code hash, rules 2, and
+"""tools/code_hash_a64.py -- port/platform/code_hash.c's arm64 code hash, rules 1 to 3, and
 port/render/xxh3.c's XXH3-64, in Python, for tools/state_legacy_table.py (an earlier
 version's functions hashed from its released library, as this build hashes its own).
 `python3 -I tools/code_hash_a64.py --selftest` checks XXH3-64 against xxHash's sanity vectors
@@ -133,8 +133,8 @@ def sext(v, bits):
     return (v ^ m) - m
 
 
-def a64_writes(w):
-    """code_hash.c ico_code_a64_writes"""
+def a64_writes_v2(w):
+    """code_hash.c a64_writes_v2: rules 1 and 2's decoder, kept as those rules' hashes were made"""
     rd = 1 << (w & 31)
     rn = 1 << ((w >> 5) & 31)
     opc = (w >> 22) & 3
@@ -176,14 +176,156 @@ def a64_writes(w):
     return 0xFFFFFFFF
 
 
-def a64_page_uses(ws, addr, n, seed=None):
-    """code_hash.c a64_page_uses (rules 2): the ADD (immediate) and load/store (unsigned offset)
-    words whose base register may hold an ADRP page on some path through the function's own
-    branches (a forward data-flow to a fixed point: an ADRP makes its register a page, a MOV
-    copies one, any other write ends one, an unknown instruction ends all; B and B.cond, CBZ,
-    TBZ inside the function lead to their target, BR (a jump table) to every word, B and RET
-    nowhere else).  seed (k, rd): the page one ADRP at word k makes, alone (port/platform/
-    state_xbuild.c adrp_users_page: code_hash.h ico_code_a64_flow from that word)"""
+def a64_writes_v3(w):
+    """code_hash.c a64_writes_v3 (rules 3, ico_code_a64_writes): the general registers written,
+    by the A64 encoding tables' classes; an unknown load or store, an unallocated or SVE / SME
+    word: every register"""
+    rd = 1 << (w & 31)
+    rn = 1 << ((w >> 5) & 31)
+    rt2 = 1 << ((w >> 10) & 31)
+    rs = 1 << ((w >> 16) & 31)
+    call = 0x7FFFF | 1 << 30
+    opc = (w >> 22) & 3
+    v = (w >> 26) & 1
+    if w & 0x7C000000 == 0x14000000:
+        return call if w & 0x80000000 else 0
+    if w & 0x7E000000 in (0x34000000, 0x36000000) or w & 0xFF000000 == 0x54000000:
+        return 0
+    if w & 0xFE000000 == 0xD6000000:
+        return call if (w >> 21) & 3 == 1 else 0
+    if w & 0xFF000000 == 0xD4000000:
+        return call if (w >> 21) & 7 == 0 and w & 3 else 0
+    if w & 0xFFC00000 == 0xD5000000:
+        if w & 0x00200000:
+            return rd
+        if w & 0xFFFFF01F == 0xD503201F:
+            h = (w >> 5) & 0x7F
+            if h >> 3 == 1:
+                return 1 << 16 | 1 << 17
+            if h >> 3 == 3 or h == 7:
+                return 1 << 30
+            return 1 << 16 if h == 0x28 else 0
+        return 0
+    if w & 0x1C000000 == 0x10000000:
+        return rd
+    if w & 0x0A000000 == 0x08000000:
+        if w & 0xBE000000 == 0x0C000000:
+            return rn if w & 0x00800000 else 0
+        if w & 0x3E000000 == 0x08000000:
+            return rd | rt2 | rs | 1 << (((w >> 16) + 1) & 31) | rn
+        if w & 0x3B000000 == 0x18000000:
+            return 0 if v else rd
+        if w & 0x3B000000 == 0x19000000:
+            return rd | rn | rs
+        if w & 0x3A000000 == 0x28000000:
+            idx = (w >> 23) & 3
+            out = rd | rt2 if (w >> 22) & 1 and not v else 0
+            if idx in (1, 3):
+                out |= rn
+            return out
+        if w & 0x3B000000 == 0x39000000:
+            return rd if opc and not v else 0
+        if w & 0x3B200000 == 0x38000000:
+            idx = (w >> 10) & 3
+            out = rd if opc and not v else 0
+            if idx in (1, 3):
+                out |= rn
+            return out
+        if w & 0x3B200C00 == 0x38200800:
+            return rd if opc and not v else 0
+        if w & 0x3B200C00 == 0x38200000 and not v:
+            if w & 0xFFFFFC00 == 0xF83FD000:
+                return 0xFFFFFFFF
+            return rd | rs if w & 0xFFE0E000 == 0xF820A000 else rd
+        if w & 0x3B200400 == 0x38200400 and not v:
+            return rd | (rn if w & 0x800 else 0)
+        return 0xFFFFFFFF
+    if w & 0x0E000000 == 0x0A000000:
+        if w & 0x3FE00000 == 0x3A400000:
+            return 0
+        if w & 0xFFE07C10 == 0xBA000400 or w & 0xFFFFBC1F == 0x3A00080D:
+            return 0
+        return rd
+    if w & 0x0E000000 == 0x0E000000:
+        if w & 0x5F20FC00 == 0x1E200000:
+            op = (w >> 16) & 7
+            return rd if op <= 1 or 4 <= op <= 6 else 0
+        if w & 0x5F200000 == 0x1E000000:
+            return rd if (w >> 16) & 6 == 0 else 0
+        if w & 0xBFE0FC00 in (0x0E003C00, 0x0E002C00):
+            return rd
+        return 0
+    return 0xFFFFFFFF
+
+
+def a64_writes_rules(rules, w):
+    return a64_writes_v3(w) if rules >= 3 else a64_writes_v2(w)
+
+
+a64_writes = a64_writes_v3  # code_hash.c ico_code_a64_writes: the current rules
+
+
+class Text:
+    """the program's code range a patch stub may be read from (code_hash.h IcoA64Text): the
+    bytes of addresses [lo, hi)"""
+
+    def __init__(self, data, lo, hi=None):
+        self.data, self.lo = data, lo
+        self.hi = lo + len(data) if hi is None else hi
+
+    def word(self, a):
+        if a < self.lo or a + 4 > self.hi or a - self.lo + 4 > len(self.data):
+            return None
+        return rd32(self.data, a - self.lo)
+
+
+def patch_site(ws, k, addr, text):
+    """code_hash.c a64_patch_site (rules 3): the stub's instruction word k of the function at
+    addr stands for, when it is an erratum 843419 patch site, else None"""
+    w = ws[k]
+    pc = addr + 4 * k
+    if text is None or w & 0xFC000000 != 0x14000000:
+        return None
+    t = pc + sext(w & 0x3FFFFFF, 26) * 4
+    if addr <= t < addr + 4 * len(ws) or t < text.lo or t > text.hi or text.hi - t < 8:
+        return None
+    s0, s1 = text.word(t), text.word(t + 4)
+    if s0 is None or s1 is None:
+        return None
+    if s0 & 0x3B000000 != 0x39000000 or s1 & 0xFC000000 != 0x14000000 or \
+            t + 4 + sext(s1 & 0x3FFFFFF, 26) * 4 != pc + 4:
+        return None
+    for back in (2, 3):
+        if k >= back:
+            a, apc = ws[k - back], pc - 4 * back
+            if a & 0x9F000000 == 0x90000000 and apc & 0xFFF in (0xFF8, 0xFFC) and a & 31 == (s0 >> 5) & 31:
+                return s0
+    return None
+
+
+def unpatch(ws, addr, text):
+    """code_hash.c ico_code_a64_unpatch: the words with every patch site replaced, and the
+    number of sites"""
+    out, sites = list(ws), 0
+    if text is None:
+        return out, 0
+    for k in range(2, len(ws)):
+        s0 = patch_site(out, k, addr, text)
+        if s0 is not None:
+            out[k] = s0
+            sites += 1
+    return out, sites
+
+
+def a64_page_uses(ws, addr, n, seed=None, writes=a64_writes_v2):
+    """code_hash.c a64_flow and mask_a64_pages (rules 2 and 3, by the rules' decoder `writes`):
+    the ADD (immediate) and load/store (unsigned offset) words whose base register may hold an
+    ADRP page on some path through the function's own branches (a forward data-flow to a fixed
+    point: an ADRP makes its register a page, a MOV copies one, any other write ends one, an
+    unknown instruction ends all; B and B.cond, CBZ, TBZ inside the function lead to their
+    target, BR (a jump table) to every word, B and RET nowhere else).  seed (k, rd): the page one
+    ADRP at word k makes, alone (port/platform/state_xbuild.c adrp_users_page: code_hash.h
+    ico_code_a64_flow from that word)"""
     words = len(ws)
     succ = []
     for k, w in enumerate(ws):
@@ -214,7 +356,7 @@ def a64_page_uses(ws, addr, n, seed=None):
         if first is None and not seen[k]:
             continue
         w, v = ws[k], into[k]
-        wr = a64_writes(w)
+        wr = writes(w)
         if first is not None:
             out, first = 1 << seed[1], None
         elif wr == 0xFFFFFFFF:
@@ -236,12 +378,16 @@ def a64_page_uses(ws, addr, n, seed=None):
             and (into[k] >> ((w >> 5) & 31)) & 1]
 
 
-def mask_a64(code, addr, rules=2):
-    """code_hash.c mask_a64 (rules 1) and, for rules 2, mask_a64_pages: the masked words and
-    the kept length in bytes"""
+def mask_a64(code, addr, rules=3, text=None):
+    """code_hash.c ico_code_hash_text's arm64 part: mask_a64 (rules 1) and, for rules 2 and 3,
+    mask_a64_pages, by the rules' decoder; rules 3 over the words with the erratum patch sites
+    read through text (a Text, None: none) replaced.  The masked words and the kept length in
+    bytes"""
     n = len(code)
     words = n // 4
-    ws = [rd32(code, 4 * k) for k in range(words)]
+    raw = [rd32(code, 4 * k) for k in range(words)]
+    ws = unpatch(raw, addr, text if rules >= 3 else None)[0]
+    writes = a64_writes_v3 if rules >= 3 else a64_writes_v2
     pend, keep, out = 0, 0, []
     for k, w in enumerate(ws):
         pc, m = addr + 4 * k, w
@@ -266,14 +412,15 @@ def mask_a64(code, addr, rules=2):
         elif (w & 0x7F800000 == 0x11000000 or w & 0x3B000000 == 0x39000000) and (pend >> ((w >> 5) & 31)) & 1:
             m = w & ~(0xFFF << 10) & 0xFFFFFFFF
         out.append(m)
-        wr = a64_writes(w)
+        wr = writes(w)
         pend = 0 if wr == 0xFFFFFFFF else pend & ~wr
         if w & 0x9F000000 == 0x90000000 and (w & 31) not in (29, 31):
             pend |= 1 << (w & 31)
+    for k, w in enumerate(raw):
         if w != 0 and w != 0xD503201F:
             keep = 4 * (k + 1)
     if rules >= 2:
-        for k in a64_page_uses(ws, addr, n):
+        for k in a64_page_uses(ws, addr, n, writes=writes):
             out[k] &= ~(0xFFF << 10) & 0xFFFFFFFF
     b = b"".join(struct.pack("<I", m) for m in out) + code[4 * words:]
     if n > 4 * words:
@@ -281,8 +428,78 @@ def mask_a64(code, addr, rules=2):
     return b[:keep]
 
 
-def code_hash(code, addr, rules=2):
-    return xxh3_64(mask_a64(code, addr, rules)) if code else xxh3_64(b"")
+def code_hash(code, addr, rules=3, text=None):
+    return xxh3_64(mask_a64(code, addr, rules, text)) if code else xxh3_64(b"")
+
+
+CORPUS = "test/code_hash_a64_corpus.txt"  # beside this tool: the twins' corpus
+
+
+def corpus_text(stubs):
+    """the code range a corpus entry's stubs make: [lowest, highest + 8), zeros between"""
+    if not stubs:
+        return None
+    lo, hi = min(stubs), max(stubs) + 8
+    b = bytearray(hi - lo)
+    for t, (w0, w1) in stubs.items():
+        struct.pack_into("<II", b, t - lo, w0, w1)
+    return Text(bytes(b), lo, hi)
+
+
+def corpus_hashes(addr, ws, stubs):
+    code = b"".join(struct.pack("<I", w) for w in ws)
+    text = corpus_text(stubs)
+    return [code_hash(code, addr, r, text) for r in (1, 2, 3)]
+
+
+def read_corpus(path):
+    """the corpus' entries {name: (addr, words, stubs, hashes)} and its relations"""
+    ent, rel, cur = {}, [], None
+    for line in open(path):
+        t = line.split()
+        if not t or t[0].startswith("#"):
+            continue
+        if t[0] == "fn":
+            cur = ent[t[1]] = [int(t[2], 16), [], {}, None]
+        elif t[0] == "from":
+            b = ent[t[2]]
+            cur = ent[t[1]] = [int(t[3], 16), list(b[1]), dict(b[2]), None]
+        elif t[0] == "w":
+            cur[1].extend(int(x, 16) for x in t[1:])
+        elif t[0] == "set":
+            cur[1][int(t[1])] = int(t[2], 16)
+        elif t[0] == "stubs":
+            cur[2] = {}
+        elif t[0] == "stub":
+            cur[2][int(t[1], 16)] = (int(t[2], 16), int(t[3], 16))
+        elif t[0] == "hash":
+            cur[3] = [int(x, 16) for x in t[1:4]]
+        elif t[0] in ("same", "differ"):
+            rel.append((t[0], t[1], t[2], int(t[3])))
+        elif t[0] == "writes":
+            rel.append((t[0], int(t[1], 16), int(t[2], 16), int(t[3], 16)))
+        else:
+            raise ValueError("code_hash_a64: corpus line %r" % line)
+    return ent, rel
+
+
+def check_corpus(path):
+    bad = []
+    ent, rel = read_corpus(path)
+    got = {}
+    for nm, (addr, ws, stubs, want) in ent.items():
+        got[nm] = corpus_hashes(addr, ws, stubs)
+        if got[nm] != want:
+            bad.append("corpus %s: %s, the file says %s" % (nm, got[nm], want))
+    for kind, x, y, r in rel:
+        if kind == "writes":
+            if a64_writes_v3(x) != y or a64_writes_v2(x) != r:
+                bad.append("corpus: writes %08x: %08x %08x, the file says %08x %08x" %
+                           (x, a64_writes_v3(x), a64_writes_v2(x), y, r))
+            continue
+        if (got[x][r - 1] == got[y][r - 1]) != (kind == "same"):
+            bad.append("corpus: rules %d should find %s and %s %s" % (r, x, y, kind))
+    return bad, len(ent), len(rel)
 
 
 def selftest():
@@ -302,6 +519,10 @@ def selftest():
     g = struct.pack("<5I", 0x14000002, 0xF9400660, 0x90000013, 0x17FFFFFE, 0)  # ldr x0,[x19,#8]
     if mask_a64(f, 0x1000, 1) == mask_a64(g, 0x1000, 1) or mask_a64(f, 0x1000, 2) != mask_a64(g, 0x1000, 2):
         bad.append("rules 2")
+    import os
+    cb, ne, nr = check_corpus(os.path.join(os.path.dirname(os.path.abspath(__file__)), CORPUS))
+    bad += cb
+    print("code_hash_a64: the corpus' %d functions and %d relations under rules 1 to 3" % (ne, nr))
     print("code_hash_a64: %s" % ("ok" if not bad else "FAIL %s" % bad))
     return 0 if not bad else 1
 

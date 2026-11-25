@@ -6,7 +6,12 @@
  * records whose program words into read-only data and arm64 pages they
  * could not name (state_xbuild.h); a state of such a version is read here
  * by naming its words again, at the load, with today's rules against that
- * version's program as the table describes it (ico_xb_legacy_*).  Per
+ * version's program as the table describes it (ico_xb_legacy_*).  Later
+ * versions save format 3 records, which name their words themselves, but
+ * compare their code under the code hash rules of their day: a table of
+ * such a version ("record 3" in its manifest) holds its functions' code
+ * hashes under those rules and today's (IcoXbNow.xlate), and its symbol
+ * file (for the package gate, tools/state_legacy_table.py gate) alone.  Per
  * version, under port/state_legacy/<name>/ (tools/state_legacy_table.py
  * builds them from the released APK; Android packages them as assets):
  *
@@ -26,15 +31,19 @@
  *   hashes.z      every function's code hashes (code_hash.h) as this
  *                 build's table would cut and hash it: per function its
  *                 offset from the image start (32 bits), its hash under
- *                 rules 1 and under the current rules (64 bits each),
- *                 little-endian, raw deflate.  The rules-1 hash is what a
- *                 format 2 record holds: every unit of the record must
- *                 match it, which proves the table is the saver's build.
+ *                 the version's records' rules and under the table's (64 bits each),
+ *                 little-endian, raw deflate.  The first hash is under the
+ *                 rules the version's records hold (hash_verify_rules: 1
+ *                 for a format 2 record, 2 for v0.11.9 to v0.11.15): every
+ *                 unit of a record must match it, which proves the table
+ *                 is the saver's build.
  *   manifest.txt  the commit text its states carry, the platform, the kind
  *                 (release, rc), the source APK and its SHA-256, the files,
  *                 "text_index 2" (texts.idx's format: a table without it,
  *                 whose lengths carry no literal starts, is refused) and
- *                 "lstarts N" (the runs that start a literal)
+ *                 "lstarts N" (the runs that start a literal); a format 3
+ *                 version's: "record 3", "hash_verify_rules 2", its
+ *                 syms.gzip and hashes.z, no sections or texts
  *
  * and index.txt: one line per table, "platform kind name commit".
  */
@@ -69,9 +78,12 @@ typedef struct IcoLegacyTable {
     uint8_t *lstart; /* n_run: 1 when the run starts a literal (NULL: none does) */
     size_t n_run;
     uint64_t *hash; /* n_hash triples: a function's offset from the image start, its code hash
-                       under rules 1, under hash_rules */
+                       under verify_rules, under hash_rules */
     size_t n_hash;
-    int hash_rules; /* the code hash rules the table's hashes follow */
+    int hash_rules;   /* the code hash rules the table's hashes follow */
+    int verify_rules; /* the rules of the second column: the version's records' own */
+    int record;       /* the version's records' format: 2 (everything above), 3 (the hashes
+                         alone: such a record names its own words) */
 } IcoLegacyTable;
 
 /* The table of states whose header names `commit` on `platform`: 1 and

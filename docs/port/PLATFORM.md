@@ -1288,9 +1288,41 @@ page in a callee-saved register and uses it after a branch back, before the ADRP
 function's order. Under rules 1, 521 of the 13,857 functions that two consecutive Android builds
 share hashed apart with no change to their source, six of them holding threads in the owner's
 state. Under rules 2, 88 hash apart, and each lies in a file changed between the two builds or
-is a fortify `snprintf` wrapper paired by ordinal. A record states its rules, and the load
+is a fortify `snprintf` wrapper paired by ordinal. Rules 3 close two gaps that still made
+identical game code hash apart, about two functions with a thread inside per Android release
+(the bird's brain thread in one, so every state saved in a room with birds took its
+checkpoint):
+
+- **The linker's erratum 843419 patch.** The NDK links with `--fix-cortex-a53-843419`: where an
+  ADRP lands at page offset 0xff8 or 0xffc and a load or store through its register follows 8 or
+  12 bytes later, lld moves that load into a stub (the load, then a B back to the word after it)
+  and puts a B to the stub in its place. Whether it happens depends on the address alone, so any
+  size change earlier in the code adds or removes patches. Under rules 3 such a B hashes as the
+  stub's load in its place, masked as that load would be. The shape must be exact: a B (not BL)
+  that leaves the function, 8 or 12 bytes after an ADRP at page offset 0xff8 or 0xffc, to a stub
+  in the code range whose first word is a load or store (unsigned offset) based on that ADRP's
+  register and whose second is a B to the word after the patch. Any other branch, a real tail
+  call included, hashes as itself, and a different stub instruction changes the hash. The
+  running program reads the stub from its own code range (`IcoA64Text`, the symbol table's
+  text range); `tools/code_hash_a64.py` reads it from the library's bytes. A frame never sits
+  in a stub (it holds no call), so a return address lies at the same offset in either build.
+- **The registers an instruction writes** (`ico_code_a64_writes`). A false write ended a page
+  early and left its later use's link-time offset in the hash: an FMOV (immediate) and an LDP
+  of SIMD registers counted as writing the general registers their fields name, and a CCMP's
+  flags field as a register. A missed write left an offset masked after its register stopped
+  being a page, which a change of that offset would then not show: the conversions to a
+  general register (FCVTZS and the like, fixed point too), UMOV and SMOV, BLR (a call, like
+  BL), an exclusive store's status register, the PAC hints, and the write-back of a PAC load
+  or a SIMD structure load or store. Rules 3 decode the A64 encoding classes one by one (the
+  branches, exceptions and system instructions, data processing by immediate and by register,
+  every load and store class, SIMD and floating point); a load or store of a class it does not
+  know, SVE and SME words count as writing every register.
+
+Rules 1 and 2 are still computed exactly as before (their decoder is kept apart), so a record
+of those rules compares this build's code under them. A record states its rules, and the load
 compares this build's functions under them, so a format 3 state from a rules-1 build still
-loads. A suspended frame
+loads. Android states of rules 2 compare through their version's legacy table where one is
+packaged (below). A suspended frame
 needs the same instructions at the same offsets with the same frame; a changed address constant
 changes none of that, every other byte does. A prototype of these rules run over the shipped
 binaries of two consecutive releases (with real changes between them) found, of the 10,709
@@ -1419,7 +1451,9 @@ assets. A release candidate's table goes only into release candidate APKs. The t
   `text_index 2` names this format, and a table without it is refused (`the table must be
   rebuilt`);
 - every function's code hash, under rules 1 and under the current rules
-  (`tools/code_hash_a64.py`, the C rules in Python).
+  (`tools/code_hash_a64.py`, the C rules in Python). A table whose release APK was not at hand
+  when the rules changed keeps its earlier rules (its manifest's `hash_rules_kept` line says
+  why); its states are then read under those rules, as before the change.
 
 At load, `state_host.c` (`legacy_record`) finds the table by the state's commit text and runs the
 save's naming again over the state's own bytes (its blocks, arena, game data, model tables,
@@ -1451,7 +1485,7 @@ describes it (`IcoXbProc.legacy`):
   names a word only where no unique name does, such as a repeated name's data, which a legacy read
   cannot tell apart by contents.
 
-The result is a format 3 record, checked against this build as usual. A format 2 Android state of
+The result is a format 3 record of the table's rules, checked against this build as usual. A format 2 Android state of
 this layout with no table gets the pinned refusal: `its build has no legacy table here`. A state
 of another layout is refused for the layout first: `the game's data layout changed`. The check
 names another layout before any other reason. Two more changes came with this work:
@@ -1502,6 +1536,51 @@ names another layout before any other reason. Two more changes came with this wo
   data did not change, the link lost or moved an item. If it changed on purpose, the maintainer
   records the new hash there, knowing that the legacy tables' states then cannot resume
   exactly and take the checkpoint path.
+- `tools/package_android.sh` then runs the gate on the game's code (above): a game function
+  that can hold a paused frame and hashes apart from the newest release table's with no change
+  to its source fails the package.
+
+**Format 3 states of earlier code hash rules.** A format 3 record names its own words, but its
+code hashes are of the rules of its build's day (rules 2 before rules 3). This build's code
+under rules 2 still carries the two gaps above, so a function with a linker patch site in only
+one of the two builds would refuse the state. A released Android build of this game data
+layout therefore also has a table of format 3 records (`record 3` in its manifest): its symbol
+file and every function's code hash under the records' rules (`hash_verify_rules 2`) and the
+current ones, no texts (`tools/state_legacy_table.py build --record 3`). At the check
+(`state_host.c` `xb_probe_locked`, `IcoXbNow.xlate`), when the state's commit text names such a
+table: every function of the record must have its row there with the record's own hash, which
+proves the table is the saving build's; the table's current-rules hash of each function is then
+compared with this build's. The log says which way it went: `state: its code compared through
+the legacy table <name>: rules 2 hashes checked, rules 3 compared`, or `state: the legacy table
+<name> was not used: it is another build's (the function <f> of the record differs from it);
+its code compared under rules 2`. The state file is unchanged: such a table only changes how a
+record is compared.
+
+**The package gate on the game's code** (`tools/state_legacy_table.py gate`, run by
+`tools/package_android.sh` after the layout gate). Every game function (one whose input
+section the link map gives an `ico2/` or `ico/` file) that can hold a paused frame (it reaches
+`ico_fiber_yield`, or makes an indirect call, by BL or B through the functions it calls: PLT
+entries by the symbol they bind, linker thunks by their target) and whose name is unique in
+both, hashed under the current rules from the new library, is compared with the newest release
+table's hash. One that differs while its source file did not change since that release
+(`git diff <its commit> HEAD -- ico2 ico`) fails the package, named with both hashes: its
+release's states saved inside it would take their checkpoint for a change of the build, not of
+the game. A gap in the hash rules is fixed in both twins (the tables rebuilt). A game code change
+made on purpose with no source change (a compiler or flag change) is recorded in
+`port/state_legacy/code_changes.txt` (`changed <table> <function> <hash>`), as
+`layout.txt` records a layout change made on purpose. After each Android release, its
+`--record 3` table is added (the next release's gate compares with it, and its states compare
+through it if the rules change again).
+
+**Windows and Linux.** The erratum patch and the decoder are arm64 matters: x86-64 has no ADRP,
+and its masking (`mask_x64`) is the same under every rule (a record of rules 2 compares exactly
+as one of rules 3). The x86-64 linkers make no address-dependent patch of this kind; the
+x86-64 equivalent risk is an instruction the length decoder does not know (then the rest of
+the function hashes raw: it can only hash apart, never alike wrongly) or misreads (a field
+masked that is no address, or the reverse), which only a pair of builds shows, as it did here
+for arm64. The arm64 Linux program and macOS use rules 3 as Android does. A program linked by
+GNU ld with its erratum 843419 fix gets a stub of the same shape, or its ADRP turned into an
+ADR, which still hashes apart (whether that link uses the fix is not checked here).
 
 **Words nothing names.** Only a word the record confirms is translated: a word in a unit (the
 hash rule above), in a game range, a block or a unique variable, or at a start-up value or a

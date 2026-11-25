@@ -20,6 +20,24 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   draw filter's callers each followed by a hook, the visibility test's NOP) keep their counts;
   the packet box test cannot return 0; the texture reasons and their words agree. The self-test: the rule finds an unledgered early return in a synthetic
   function and passes a ledgered one.
+- `code_hash_a64.py --selftest`, its corpus (`code_hash_a64_selftest`): the twins' corpus
+  (`tools/test/code_hash_a64_corpus.txt`): every function's hash under rules 1, 2 and 3 is the
+  file's, every pair hashes alike or apart as the file says, and every decoder line's written
+  registers under rules 3 and under rules 1 and 2 are the file's, as `code_hash_corpus` checks
+  the C twin.
+- `state_legacy_table.py check`, its rules (`state_legacy_tables`): a table's code hashes are of
+  the current rules, or of rules 2 with a `hash_rules_kept` line saying why; a format 3 records'
+  table (`record 3`, `hash_verify_rules 2`) holds `syms.gzip` and `hashes.z` alone.
+- `test/state_legacy_gate_test.py` (`state_legacy_gate`, [PLATFORM.md](PLATFORM.md#saving-and-loading)):
+  the Android package gate on the game's code (`tools/state_legacy_table.py gate`) over a fake
+  release library and table and a new library, each a small ELF with a yielding game function,
+  an indirect caller, one that holds no frame and a port function, their symbol files and lld
+  style maps naming real game source files. The same code passes; the yielding function changed
+  with its file unchanged fails naming it, its file and `code_changes.txt`; it passes with its
+  file in the changed list, or recorded in `code_changes.txt` with its new hash (not with
+  another); the indirect caller is gated, the leaf is not; the new library holding an erratum
+  843419 patch site where the release had the load passes, rules 2 telling the two apart and
+  rules 3 not.
 
 ## port/config/test
 
@@ -107,6 +125,31 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   PlayStation) and the changes counted once each (`pad_kind`).
 
 ## port/platform/test
+
+- `code_hash_corpus_test.c` (`code_hash_corpus`): the arm64 code hash's C twin against the
+  Python twin's hashes on their shared corpus (`tools/test/code_hash_a64_corpus.txt`, the
+  argument): real functions of two Android builds of one game source (the bird's brain thread
+  with the linker's erratum 843419 patch site and its stub in one; `GetCloth4D`,
+  `gameblock_read`, `debug_Menu` and `reg_DispMultiPri`, whose page registers rules 1 and 2
+  lost; two more patch sites) and variants (another stub instruction, a stub store, a stub that
+  does not branch back, no stub to read, the site's ADRP off page offset 0xff8 / 0xffc, another
+  stack slot, a real write of each page register). Every hash under rules 1, 2 and 3 is the
+  file's, each pair hashes alike or apart as the file says (the builds' pairs alike under rules
+  3 and apart under rules 2; every variant apart under rules 3), 43 instructions' written
+  registers under rules 3 and under rules 1 and 2 are the file's, and the patch sites found are
+  one in the rc's bird and none in the release's.
+- `state_legacy_test.c`, its later cases (`state_legacy`): a format 2 table kept at rules 2 loads
+  when its manifest says why (`hash_rules_kept`); the format 3 records' tables load with their
+  code hashes alone (rules 2 and 3, address order, a few apart, no texts), and their symbol file
+  cuts every function they hash.
+- `state_name_test.c`, its later cases (`state_name`): a legacy table kept at rules 2 is read
+  (its record says rules 2) and B loads the state; a table of rules 1 is not read
+  (`test_legacy`). A format 3 record of rules 2 whose functions hash apart from B's under those
+  rules is refused by them and loads through its build's table of code hashes
+  (`IcoXbNow.xlate`: each function's row the record's hash and the current rules'), its return
+  address translated; a table of another build (one row not the record's hash: `another
+  build's`) or checking by other rules is not used, and a function whose current-rules hash
+  differs too is refused with `(its instructions differ)` (`test_xlate`).
 
 - `dump_zip_test.c`, its scene ledger case (`dump_zip`): with a ledger text set
   (`ico_dump_zip_set_ledger`, [SCENE_LEDGER.md](SCENE_LEDGER.md#the-report)) a capture's zip that
