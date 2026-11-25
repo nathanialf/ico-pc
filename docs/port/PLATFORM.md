@@ -1421,7 +1421,19 @@ that made it:
   - Producers on one fiber that make two pages: `fiber slot N holds the page 0x.., which ADRPs in
     f+0x.. and g+0x.. make: here they make two pages, and which one it came from cannot be told`.
     Only unwinding the frames with the call frame information could say which frame set the
-    register.
+    register. Before that refusal the load drops every producer whose page dies in place: from
+    its ADRP, through the function's own branches (the code hash's flow), the page is only ever
+    the base of an ADD of an offset or of a load or store, and is overwritten before any call, any
+    return or branch by register, any store of it or any other use (`page_escapes`). Such a page
+    is never in a register or a slot while the function waits in a call, so no paused thread
+    holds it; this build's code is the saving build's (its hash compared), so its flow is too.
+    When the producers left make one page, the word takes it, logged: `state: fiber slot N's page
+    0x.. is taken here as 0x.., from the ADRP in f+0x..: of the ADRPs that made it there (...),
+    the others' pages die in place ...`, and the resume's line counts them. Otherwise it is
+    refused with every producer named, those whose page dies in place marked; when none is left,
+    `none of them can keep it past its own uses`. The memory card manager's thread
+    (`iosMcManager`) has two such ADRPs: one of a message buffer whose page an ADD consumes as
+    the call's argument, and one kept in x25 across its wait, the only one a paused thread holds.
   - A word that is both a page word and an ordinary address (seen outside the fibers' frames, or a
     symbol, a block or a start-up value starts at it) must get one value from both readings:
     `0x.. is both the page an ADRP in f+0x.. makes and an address of its own, and here the two lie
@@ -1602,9 +1614,10 @@ alone (not proven): its two-sided window is found nowhere here`, and the resume'
 them (`N words placed by forward bytes alone, not proven`). The Save states page's verdict
 goes through the same check, so such a slot is listed as resuming. Otherwise the refusal says
 where the save found the word and whether its bytes from the word on lie here once or more
-than once. The check goes on through every point, so a refusal names every word that blocks:
-the first in the slot's line, the others in `state: N words block it, the first named in the
-slot's refusal line; the others: ...`. This applies to every format 3 record (Android, the
+than once. The check goes on through every function, variable, point and page word, so a refusal names
+every obstacle of those kinds: the first in the slot's line, the others in `state: N things block
+it, the first named in the slot's refusal line; the others: ...` (a damaged record, another
+layout, a block or a pinned record still stops it at once). This applies to every format 3 record (Android, the
 Linux and Windows programs) and to an earlier Android version's format 2 record named again with
 its legacy table, whose words reach the same check.
 

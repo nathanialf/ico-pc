@@ -158,7 +158,12 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   bytes from the word on, found once: refused (one repeated byte); the word a page word too
   (a function with a live frame makes its page by ADRP) and an ordinary address in the arena:
   refused; a page word alone: its ADRP here translates it; a word inside an object that moved
-  whole: translated; two words that block: both counted and named (`test_window_page`).
+  whole: translated; two words that block: both counted and named (`test_window_page`). A page
+  word on fiber 1 that two ADRPs of the function it waits in (f_p) make in A and that are two
+  pages in B: the first's page consumed by an ADD before the call, the second kept in x25 across
+  it: taken from the second, logged with the first marked (`its page dies in place`); both kept
+  (the first stored too): refused, both named; both consumed in place: refused (`none of them
+  can keep it past its own uses`) (`test_page_split`).
 
 - `dump_zip_test.c`, its scene ledger case (`dump_zip`): with a ledger text set
   (`ico_dump_zip_set_ledger`, [SCENE_LEDGER.md](SCENE_LEDGER.md#the-report)) a capture's zip that

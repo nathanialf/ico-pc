@@ -2411,6 +2411,110 @@ static int forward_place(const IcoStateImage *im, const uint32_t *freq, const un
     return *count == 1;
 }
 
+/* a producer of a page word, for the page pass */
+#define PAGE_CANDS 16
+
+typedef struct PageCand {
+    const UMap *m;
+    uint32_t off;
+    uint64_t page;
+    int live;
+} PageCand;
+
+/* 1 when the word, entered with the page in the registers `regs`, may carry
+   it beyond its function's own base uses: a call (the page held across it,
+   where a thread can pause), any branch by register (a return, a tail
+   call), a store of it, an ADD of 0 (a copy the flow does not follow), and
+   any other instruction one of whose register fields names it; 0 for a base
+   use (an ADD of an offset, a load or store through it), a MOV (the flow
+   follows the copy), an ADRP or ADR, a test and branch on it, and an
+   instruction none of whose source register fields (by its class) names it */
+static int page_escapes(uint32_t w, uint32_t regs)
+{
+    const unsigned rt = w & 31u, rn = (w >> 5) & 31u, rt2 = (w >> 10) & 31u, rm = (w >> 16) & 31u;
+#define HELD(r) (((regs >> (r)) & 1u) != 0)
+
+    if ((w & 0x7C000000u) == 0x14000000u) {
+        return (w & 0x80000000u) != 0; /* BL: across the call; B: no */
+    }
+    if ((w & 0xFE000000u) == 0xD6000000u) {
+        return 1;
+    }
+    if ((w & 0x7E000000u) == 0x34000000u || (w & 0x7E000000u) == 0x36000000u ||
+        (w & 0xFF000000u) == 0x54000000u) {
+        return 0;
+    }
+    if ((w & 0xFFE0FFE0u) == 0xAA0003E0u) {
+        return 0;
+    }
+    if ((w & 0x7F800000u) == 0x11000000u) {
+        return HELD(rn) && ((w >> 10) & 0xFFFu) == 0 && ((w >> 22) & 1u) == 0;
+    }
+    if ((w & 0x9F000000u) == 0x90000000u || (w & 0x9F000000u) == 0x10000000u) {
+        return 0;
+    }
+    if ((w & 0x3B000000u) == 0x39000000u || (w & 0x3B200000u) == 0x38000000u) {
+        return ((w >> 22) & 3u) == 0 && ((w >> 26) & 1u) == 0 && HELD(rt);
+    }
+    if ((w & 0x3A000000u) == 0x28000000u) {
+        return ((w >> 22) & 1u) == 0 && ((w >> 26) & 1u) == 0 && (HELD(rt) || HELD(rt2));
+    }
+    if ((w & 0x1C000000u) == 0x10000000u) {
+        /* data processing, immediate: MOVZ and MOVN read nothing, MOVK its
+           Rd, logical, bitfield and extract their Rn (and EXTR its Rm) */
+        if ((w & 0x1F800000u) == 0x12800000u) {
+            return ((w >> 29) & 3u) == 3u && HELD(rt);
+        }
+        return HELD(rn) || ((w & 0x1F800000u) == 0x13800000u && HELD(rm));
+    }
+    if ((w & 0x0E000000u) == 0x0A000000u) {
+        /* data processing, register: Rn, Rm, and the 3-source class's Ra */
+        return HELD(rn) || HELD(rm) || ((w & 0x1F000000u) == 0x1B000000u && HELD(rt2));
+    }
+    if ((w & 0x0E000000u) == 0x0E000000u) {
+        return HELD(rn); /* SIMD and FP: a general register is read only as Rn */
+    }
+    return HELD(rt) || HELD(rn) || HELD(rt2) || HELD(rm);
+#undef HELD
+}
+
+/* 1 when the page the ADRP at offset off of this build's function m makes
+   can outlive its own uses (page_escapes on some word its page reaches
+   through the function's branches, the code hash's flow from that ADRP
+   alone: ico_code_a64_flow); 1 too when the memory for it is lacking.  A
+   page that dies in place is never in a register or a slot while the
+   function waits in a call, so no paused thread holds it.  The function's
+   code is the saving build's (its hash compared above), so its flow is
+   too */
+static int producer_live(const IcoSymTab *t, const UMap *m, uint32_t off)
+{
+    const size_t words = (size_t)(m->size / 4), k = off / 4;
+    uint32_t *ws = (uint32_t *)malloc((words ? words : 1) * sizeof *ws);
+    uint32_t *into = (uint32_t *)malloc((words ? words : 1) * sizeof *into);
+    uint8_t *seen = (uint8_t *)malloc(words ? words : 1);
+    IcoA64Text tx;
+    size_t j;
+    int live = 1;
+
+    if (ws != NULL && into != NULL && seen != NULL && k < words && t != NULL) {
+        tx.bytes = (const void *)(uintptr_t)t->env.text_lo;
+        tx.lo = t->env.text_lo;
+        tx.hi = t->env.text_hi;
+        (void)ico_code_a64_unpatch((const void *)(uintptr_t)m->now, words, m->now, &tx, ws);
+        if (ico_code_a64_flow((const void *)(uintptr_t)m->now, words, m->now, &tx, k,
+                              1u << (ws[k] & 31u), 0, into, seen) == 0) {
+            live = 0;
+            for (j = 0; j < words && !live; j++) {
+                live = seen[j] && into[j] != 0 && page_escapes(ws[j], into[j]);
+            }
+        }
+    }
+    free(ws);
+    free(into);
+    free(seen);
+    return live;
+}
+
 /* IcoXbVerdict.code_patch for this build's function w compared under
    `rules` */
 static int code_patch_of(const IcoSymTab *t, const IcoSymUnit *w, int rules)
@@ -2463,6 +2567,13 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
         verdict(__VA_ARGS__);                                                                      \
         goto fail;                                                                                 \
     } while (0)
+    /* an obstacle in a loop over the record's items: named (block), and the
+       check goes on, so one refusal names every obstacle after it */
+#define BLOCK(...)                                                                                 \
+    {                                                                                              \
+        block(__VA_ARGS__);                                                                        \
+        continue;                                                                                  \
+    }
     ver = sec != NULL && n >= H_BYTES ? get32(sec + H_VERSION) : 0;
     if (sec == NULL || n < H_BYTES || get32(sec + H_MAGIC) != ICO_XB_MAGIC || ver < 1 ||
         ver > ICO_XB_VERSION) {
@@ -2678,7 +2789,7 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
 
         if (w == NULL) {
             if (strict) {
-                FAIL(v, ICO_XB_CODE, "the function %s is missing here", nm);
+                BLOCK(v, ICO_XB_CODE, "the function %s is missing here", nm);
             }
             v->soft_left++;
             continue;
@@ -2693,11 +2804,11 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                       ((f & XU_START) != 0 && !((f & XU_UNIQUE) != 0 && w->unique)))) {
             v->code_patch = code_patch_of(
                 t, w, v->xlated == 1 ? ICO_CODE_HASH_RULES : (int)get32(sec + H_RULES));
-            FAIL(v, ICO_XB_CODE, "the function %s changed%s", nm,
-                 v->code_patch == 1   ? " (here it holds a linker patch site, which the saving "
-                                        "build's code hash rules count: maybe not its code)"
-                 : v->code_patch == 2 ? " (its instructions differ)"
-                                      : "");
+            BLOCK(v, ICO_XB_CODE, "the function %s changed%s", nm,
+                  v->code_patch == 1   ? " (here it holds a linker patch site, which the saving "
+                                         "build's code hash rules count: maybe not its code)"
+                  : v->code_patch == 2 ? " (its instructions differ)"
+                                       : "");
         }
         if (same && strict) {
             umap[n_umap].old = start;
@@ -2723,7 +2834,7 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
         const unsigned df = get32(r + 32);
 
         if (w == NULL) {
-            FAIL(v, ICO_XB_DATA, "the variable %s is missing here", nm);
+            BLOCK(v, ICO_XB_DATA, "the variable %s is missing here", nm);
         }
         if (ver >= 3 && (df & XD_MASKED) != 0) {
             /* one of a repeated name in data read-only after loading: the
@@ -2731,8 +2842,8 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                contents, its pointers masked */
             if (!w->exact || w->size != get64(r + 8) ||
                 masked_hash(w->start, w->size, &im) != get64(r + 40)) {
-                FAIL(v, ICO_XB_DATA, "the read-only data %s (number %u of its name) changed", nm,
-                     (unsigned)get32(r + 28) + 1u);
+                BLOCK(v, ICO_XB_DATA, "the read-only data %s (number %u of its name) changed", nm,
+                      (unsigned)get32(r + 28) + 1u);
             }
             span_add(&spans, get64(r), get64(r) + get64(r + 8), w->start);
             v->data++;
@@ -2740,17 +2851,17 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             continue;
         }
         if (!w->unique) {
-            FAIL(v, ICO_XB_DATA, "the variable %s is not the only one of its name here", nm);
+            BLOCK(v, ICO_XB_DATA, "the variable %s is not the only one of its name here", nm);
         }
         if ((df & XD_EXACT) != 0 && w->exact && w->size != get64(r + 8)) {
-            FAIL(v, ICO_XB_DATA, "the variable %s changed size", nm);
+            BLOCK(v, ICO_XB_DATA, "the variable %s changed size", nm);
         }
         /* a size the file did not give: a word past the symbol may point at
            a static of its object, at the same offset only while the object's
            section is laid out alike */
         if (ver >= 2 && (df & XD_SECTION) != 0 &&
             (w->sec_size != get64(r + 40) || w->sec_off != get32(r + 36))) {
-            FAIL(v, ICO_XB_DATA, "the data around the variable %s changed", nm);
+            BLOCK(v, ICO_XB_DATA, "the data around the variable %s changed", nm);
         }
         span_add(&spans, get64(r), get64(r) + get64(r + 8), w->start);
         v->data++;
@@ -2898,9 +3009,6 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
         v->points++;
     }
 #undef NAME_AT
-    if (v->blocked > 0) {
-        goto fail; /* every point that blocks it named (block) */
-    }
     if (spans.failed || points.failed) {
         FAIL(v, ICO_XB_BAD, "no memory for the translation");
     }
@@ -2942,6 +3050,9 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             uint32_t off0 = 0;
             int have_q = 0, have_n;
 
+            int nc = 0, split = 0;
+            PageCand cand[PAGE_CANDS];
+
             for (k = 0; k < npr; k++) {
                 const unsigned char *pp = prd + (size_t)k * PROD_BYTES;
                 const UMap *m;
@@ -2951,6 +3062,9 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                     continue;
                 }
                 m = umap_find(umap, n_umap, get64(pp));
+                if (m == NULL && v->blocked > 0) {
+                    continue; /* its function was refused above */
+                }
                 if (m == NULL) {
                     FAIL(v, ICO_XB_BAD,
                          "the symbols record's page word names no function with a "
@@ -2965,7 +3079,7 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                 }
                 np2 = adrp_page(m->now + get32(pp + 16), code32(m->now + get32(pp + 16)));
                 if (np2 == 1) {
-                    FAIL(v, ICO_XB_CODE, "the function %s changed", m->name);
+                    BLOCK(v, ICO_XB_CODE, "the function %s changed", m->name);
                 }
                 if (!have_q) {
                     q = np2;
@@ -2973,27 +3087,88 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                     nm0 = m->name;
                     off0 = get32(pp + 16);
                 } else if (np2 != q) {
-                    snprintf(name, sizeof name, "%s+0x%x and %s+0x%x", nm0, (unsigned)off0, m->name,
-                             (unsigned)get32(pp + 16));
-                    FAIL(v, ICO_XB_DATA,
-                         "fiber slot %u holds the page 0x%llx, which ADRPs in %s make: here they "
-                         "make two pages, and which one it came from cannot be told",
-                         (unsigned)(fib - 1u), (unsigned long long)w, name);
+                    split = 1;
                 }
+                if (nc < PAGE_CANDS) {
+                    cand[nc].m = m;
+                    cand[nc].off = get32(pp + 16);
+                    cand[nc].page = np2;
+                    nc++;
+                } else {
+                    split |= 2; /* more than the check keeps: never resolved */
+                }
+            }
+            if (split) {
+                /* the producers make two or more pages here: only those whose
+                   page can outlive their own uses (reach a call, a return, a
+                   store of it, an indirect branch, any other use than a base:
+                   page_escapes) can have made a word a paused thread holds;
+                   when those agree, the page is theirs (logged), else refused
+                   with every candidate named */
+                char names[160];
+                int nl = 0, j, agree = 1, at = 0;
+                uint64_t lq = 0;
+
+                names[0] = '\0';
+                for (j = 0; j < nc; j++) {
+                    cand[j].live = (split & 2) != 0 || producer_live(t, cand[j].m, cand[j].off);
+                    if (cand[j].live) {
+                        if (nl == 0) {
+                            lq = cand[j].page;
+                            nm0 = cand[j].m->name;
+                            off0 = cand[j].off;
+                        } else if (cand[j].page != lq) {
+                            agree = 0;
+                        }
+                        nl++;
+                    }
+                    if (at + 2 < (int)sizeof names) {
+                        const int wr = snprintf(
+                            names + at, sizeof names - (size_t)at, "%s%s+0x%x%s",
+                            j > 0 ? (j + 1 == nc ? " and " : ", ") : "", cand[j].m->name,
+                            (unsigned)cand[j].off, cand[j].live ? "" : " (its page dies in place)");
+                        at = wr < 0                        ? at
+                             : at + wr < (int)sizeof names ? at + wr
+                                                           : (int)sizeof names - 1;
+                    }
+                }
+                if (nl == 0) {
+                    BLOCK(v, ICO_XB_DATA,
+                          "fiber slot %u holds the page 0x%llx, which ADRPs in %s make: none of "
+                          "them can keep it past its own uses",
+                          (unsigned)(fib - 1u), (unsigned long long)w, names);
+                }
+                if (!agree) {
+                    BLOCK(v, ICO_XB_DATA,
+                          "fiber slot %u holds the page 0x%llx, which ADRPs in %s make: here they "
+                          "make two pages, and which one it came from cannot be told",
+                          (unsigned)(fib - 1u), (unsigned long long)w, names);
+                }
+                q = lq;
+                if (v->page_resolved < ICO_XB_PAGE_LOG) {
+                    IcoXbPageRes *e = &v->pres[v->page_resolved];
+
+                    e->fiber = fib - 1u;
+                    e->old = w;
+                    e->now = q;
+                    snprintf(e->by, sizeof e->by, "%s+0x%x", nm0, (unsigned)off0);
+                    snprintf(e->all, sizeof e->all, "%s", names);
+                }
+                v->page_resolved++;
             }
             have_n = ico_state_xlate(&xl, w, &to);
             if (have_q) {
                 if ((fl & PG_ORDINARY) != 0 && have_n && to != q) {
                     snprintf(name, sizeof name, "%s+0x%x", nm0, (unsigned)off0);
-                    FAIL(v, ICO_XB_DATA,
-                         "0x%llx is both the page an ADRP in %s makes and an address of its own, "
-                         "and here the two lie apart (0x%llx, 0x%llx)",
-                         (unsigned long long)w, name, (unsigned long long)q,
-                         (unsigned long long)to);
+                    BLOCK(v, ICO_XB_DATA,
+                          "0x%llx is both the page an ADRP in %s makes and an address of its own, "
+                          "and here the two lie apart (0x%llx, 0x%llx)",
+                          (unsigned long long)w, name, (unsigned long long)q,
+                          (unsigned long long)to);
                 }
                 span_add(&fsp[fib - 1], w, w, q);
                 v->pages++;
-            } else {
+            } else if (v->blocked == 0) {
                 FAIL(v, ICO_XB_BAD, "the symbols record's page word has no producer");
             }
         }
@@ -3012,6 +3187,9 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             v->fiber_n_point[f_i] = fsp[f_i].n;
             fsp[f_i].p = NULL;
         }
+    }
+    if (v->blocked > 0) {
+        goto fail; /* every obstacle named (block) */
     }
     v->span = spans.p;
     v->n_span = spans.n;

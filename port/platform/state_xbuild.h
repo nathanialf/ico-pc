@@ -378,6 +378,17 @@ typedef struct IcoXbForward {
     unsigned n_bytes;       /* how many forward bytes matched in all */
 } IcoXbForward;
 
+/* a page word whose producers make two pages here, taken from the ones
+   whose page can outlive their own uses (ico_xb_check; proven, logged) */
+#define ICO_XB_PAGE_LOG 16
+
+typedef struct IcoXbPageRes {
+    uint32_t fiber;    /* the fiber's slot */
+    uint64_t old, now; /* the page in the saving build, here */
+    char by[64];       /* the ADRP it is taken from (function+offset) */
+    char all[160];     /* every producer, those whose page dies in place marked */
+} IcoXbPageRes;
+
 typedef struct IcoXbVerdict {
     int kind;      /* ICO_XB_* */
     char why[200]; /* the log's words for the blocker ("" when ok) */
@@ -420,6 +431,9 @@ typedef struct IcoXbVerdict {
        (as many as fit) in more */
     unsigned blocked;
     char more[480];
+    /* page words resolved among producers that make two pages here */
+    unsigned page_resolved;
+    IcoXbPageRes pres[ICO_XB_PAGE_LOG];
     /* text windows of whole literals found at several literal starts, all
        the same bytes: the first in address order taken (state_xbuild.c) */
     unsigned twins;
