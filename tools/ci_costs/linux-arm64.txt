@@ -848,6 +848,7 @@ rd_vu_bones_ring_ab_prepass 150.62
 rd_vu_compact 0.00
 rd_vu_compact_ab 390.58
 rd_vu_compact_ab_pixel 0.01
+rd_vu_compact_play 15.00  # estimate: two --repeat 6 replays of one Mali fixture on lavapipe (not run here)
 rd_vu_flat0 0.00
 rd_vu_flat0_ab 256.18
 rd_vu_flat0_ab_pixel 0.00

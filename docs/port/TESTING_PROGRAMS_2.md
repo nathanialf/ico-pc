@@ -178,8 +178,10 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   recent apps list while counting: not blocked, removed; a lost device while trying: `blocked
   <version>`, `ICO_COMPACT_BLOCK` word for word, kept, removed at a later version's start; a crash
   while on with the twins' mark (as the previous run left it) trying: not blocked, the twins named,
-  the cull's step after it leaving its file alone; the same with the lean vertex outputs' mark and
-  the rate card's file; the crash with nothing else trying: blocked. CPU only.
+  the cull's step after it leaving its file alone; the same with the one-pass blend's mark and the
+  rate card's file; a leanvs-mark.txt not read; the crash with nothing else trying: blocked; a lost
+  device while its own test was trying and the four others counting or on: the five steps in
+  diag_host.c's order, it blocked and none of them, each of their lines naming it. CPU only.
 - `fastps_mark_test.c` (`fastps_mark`): the fast pixel build's mark on the install
   (`port/platform/fastps_mark.c`, the cull's stages and table with its own file and words): every
   stage at a crash blocked for the version in the mark and tried again by the next version, the

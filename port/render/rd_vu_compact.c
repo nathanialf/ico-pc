@@ -361,8 +361,9 @@ static struct {
     char markPath[1024];  /* ICO_COMPACT_MARK: the platform's mark file, "" none */
     char version[64];     /* ICO_COMPACT_VERSION */
     char blockWords[320]; /* ICO_COMPACT_BLOCK's words */
-    uint32_t pictures;    /* pictures read back with it since its test (the probation) */
+    uint32_t pictures;    /* pictures with it and every stamp written since its test */
     bool markedOn;        /* "on" written */
+    bool held;            /* rd__vu_compact_hold: the rate card's frames */
     RhiShader cs;
     RhiPipeline pipe;
     /* the counts' readback, a buffer a frame slot (grown by powers of
@@ -642,8 +643,54 @@ bool rd__vu_compact_active(void)
        test runs without it), and there only while the test holds it on */
     const bool tried =
         s_cmp.cpuLists ? s_cmp.ownRun && s_cmp.ownOn : rd__vu_prepass_selftest_running();
-    return s_cmp.on && !s_cmp.refused && (s_cmp.runs ? !s_cmp.ownRun || s_cmp.ownOn : tried) &&
-           s_cmp.pipe.id != 0 && g_rd.vuPrepass && rd__vu_record_compute() && !g_rdWin.first;
+    return s_cmp.on && !s_cmp.refused && !s_cmp.held &&
+           (s_cmp.runs ? !s_cmp.ownRun || s_cmp.ownOn : tried) && s_cmp.pipe.id != 0 &&
+           g_rd.vuPrepass && rd__vu_record_compute() && !g_rdWin.first;
+}
+
+bool rd__vu_compact_hold(bool on)
+{
+    const bool was = rd__vu_compact_active();
+    s_cmp.held = on;
+    return was;
+}
+
+void rd__vu_compact_play_health(bool hang, unsigned missing, uint32_t replay, uint32_t frame)
+{
+    /* the Mali-G52's form in play, outside every self-test */
+    if (!s_cmp.cpuLists || !s_cmp.runs || s_cmp.refused || s_cmp.held ||
+        rd__vu_prepass_selftest_running()) {
+        return;
+    }
+    if (!hang) {
+        /* the probation counts pictures whose stamps all came back */
+        if (!s_cmp.markedOn && ++s_cmp.pictures >= RD_VU_CMP_PROBATION) {
+            s_cmp.markedOn = true;
+            (void)writeMark("on", false);
+            rd__log("VU index compaction: %u pictures drawn with it since its own start-up test, "
+                    "every recorded stamp written: its mark says on",
+                    (unsigned)RD_VU_CMP_PROBATION);
+        }
+        return;
+    }
+    /* v0.11.6's sign on the Mali-G52 with it on: off for the run from the
+       next picture, the install's mark failed (this version leaves it
+       off), the record made again without the plane */
+    snprintf(s_cmp.why, sizeof(s_cmp.why),
+             "in play: replay %u, frame %u, %u of its recorded stamps unwritten after its work was "
+             "signalled finished",
+             (unsigned)replay, (unsigned)frame, missing);
+    s_cmp.refused = true;
+    s_cmp.selftest = ICO_ATT_CMP_ST_PLAY_REFUSED;
+    s_cmp.runs = false;
+    (void)decide(); /* the ledger's row: refused in play */
+    (void)writeMark("failed", true);
+    dropPlane();
+    s_cmp.cpuLists = false;
+    rd__log("VU index compaction: off for the run (%s, the sign of v0.11.6's black pictures on the "
+            "Mali-G52, with it on): the next picture without it, every draw on its own index "
+            "list; its mark says failed (off on this install until the version changes)",
+            s_cmp.why);
 }
 
 RhiPipeline rd__vu_compact_pipeline(void)
@@ -817,15 +864,6 @@ static void slotRead(uint32_t slot)
     const uint64_t left = rd_vu_cmp_left_out(&d);
     s_cmp.lastLeftOut = left > UINT32_MAX ? UINT32_MAX : (uint32_t)left;
     ico_attempt_fire(ICO_ATT_COMPACTION, left);
-    if (s_cmp.cpuLists && s_cmp.runs && !s_cmp.markedOn && !rd__vu_prepass_selftest_running() &&
-        ++s_cmp.pictures >= RD_VU_CMP_PROBATION) {
-        /* the Mali-G52's form's probation (its mark, compact_mark.h) */
-        s_cmp.markedOn = true;
-        (void)writeMark("on", false);
-        rd__log("VU index compaction: %u pictures drawn with it since its own start-up test: its "
-                "mark says on",
-                (unsigned)RD_VU_CMP_PROBATION);
-    }
     blockLock();
     for (int g = 0; g < 2; g++) {
         s_cmp.block.drop[g] += d.drop[g];

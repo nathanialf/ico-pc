@@ -54,7 +54,8 @@
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "rd_nodiscard.h"
-#include "rd_onepass.h" /* held at the two-pass blend through the card */
+#include "rd_onepass.h"    /* held at the two-pass blend through the card */
+#include "rd_vu_compact.h" /* the index compaction held off through the card */
 #include "rd_ratecard.h"
 #include "shader_consts.h"
 
@@ -584,6 +585,10 @@ static void measure(RdRateCard *c, RdTargetRec *t, double budgetMs)
        reference, every pair in two passes): the blended layer is the
        two-pass blend's, as the card says */
     rd__op_check_arm(RD_OP_ARM_REF, false);
+    /* the index compaction held off (its Mali-G52 form would leave out
+       the vertex frame's off-target triangles as fillers, so "a vertex"
+       would time a filler's corner) */
+    const bool cmpHeld = rd__vu_compact_hold(true);
     double ms[F_COUNT][RD_RC_SAMPLES];
     uint32_t got[F_COUNT];
     uint32_t ids[F_COUNT][RD_RC_SAMPLES];
@@ -719,6 +724,7 @@ static void measure(RdRateCard *c, RdTargetRec *t, double budgetMs)
     rd__nd_hold_end();
     rd__fps_hold_end(); /* the fast build's counts put back: the card's draws are not play */
     rd__op_check_arm(-1, false);
+    (void)rd__vu_compact_hold(false);
     g_rd.msaaBlocked = wasBlocked;
     const uint32_t released = rd__pipeline_forget_since(pipeMark);
     if (m.nearL.id) {
@@ -798,9 +804,9 @@ static void measure(RdRateCard *c, RdTargetRec *t, double budgetMs)
     }
     snprintf(c->sized, sizeof(c->sized),
              "2 full-target layers (%.0f texels each), %u x %u triangles off the target and in "
-             "a %ux%u GS pixel square; %u of its pipelines released",
+             "a %ux%u GS pixel square; %u of its pipelines released%s",
              a, (unsigned)RC_REPEAT, (unsigned)RC_TRIS, (unsigned)RC_SQUARE, (unsigned)RC_SQUARE,
-             (unsigned)released);
+             (unsigned)released, cmpHeld ? ", the index compaction held off" : "");
 }
 
 void rd_rate_card(void)
