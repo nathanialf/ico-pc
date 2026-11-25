@@ -117,7 +117,7 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
                      "-DEXTRA=${_opA}not checked: [1-9][0-9]* frames still without a pipeline after a retry \\(case 1 at 32.*rd: one-pass blend: off for the run \\(check: nothing in use, arms A not checked, B the same bytes, C ${_opMeasured}, D none, no verdict: its mark removed, nothing written as failed, the check runs again at the next start\\).*${_opMark}none"
-                     "-DNOT_=over 13 cases: differs|rd: one-pass blend: on \\(|device was lost" -P "${_vst}")
+                     "-DNOT_=outside code 36\\) over 13 cases: differs|rd: one-pass blend: on \\(|device was lost" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_onepass_marked
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
