@@ -20,8 +20,10 @@
  *     title's stage whatever its layout, the title, a menu or a movie:
  *     rd_ab_scenery_of, rd_ab_set_scenery, the renderer's word), for one
  *     subject at a time that may be tried (rd_ab_allow), changed something
- *     in that stage's pictures and has no verdict this run; at most
- *     RD_AB_TRIALS trials a run;
+ *     in that stage's pictures and has no verdict this run, the one with
+ *     the fewest trials begun first (the registry's order among equals);
+ *     at most RD_AB_TRIALS trials a run (a trial the scenery ended not
+ *     counted);
  *   - the trial's replays (keep frames left out) alternate on, off, off,
  *     on (ABBA, which cancels a drift of the content); replays 2k and 2k+1
  *     of the trial, both collected, both with GPU times, both with the
@@ -44,8 +46,10 @@
  *     subject was turned off before: not an answer, the subject is tried
  *     again in the next stage of scenery while trials are left; the scenery
  *     ended (a menu, a movie, the title): no verdict whatever the pairs, no
- *     mark, tried again RD_AB_START_MS into the next stretch of scenery
- *     (the same stage too) while trials are left; between
+ *     mark, not counted toward RD_AB_TRIALS, tried again RD_AB_START_MS
+ *     into the next stretch of scenery (the same stage too) while trials
+ *     are left (each retry waits for that much unbroken scenery again, one
+ *     trial at a time); between
  *     RD_AB_PAIRS_MIN and
  *     RD_AB_PAIRS pairs at either end, the verdict on those pairs with
  *     RD_AB_FAVOUR scaled;
@@ -82,7 +86,7 @@
 /* The constants, all here (the owner's to review; the hand-back and
    PIPELINES.md say where each comes from) */
 #define RD_AB_START_MS 2000.0 /* a trial's start into a stage (past its fade and first pictures) */
-#define RD_AB_TRIALS 12       /* trials a run at most */
+#define RD_AB_TRIALS 12       /* trials a run at most (one the scenery ended not counted) */
 #define RD_AB_WORK_TOL 0.10   /* a pair's work within 10 % of the larger */
 #define RD_AB_LONG 2.0        /* a pair with a span over twice the running median: dropped */
 #define RD_AB_MEDIAN_MIN 8u   /* spans before a running median is trusted */

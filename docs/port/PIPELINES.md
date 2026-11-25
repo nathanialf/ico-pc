@@ -1674,7 +1674,10 @@ ledger row, whether it may be tried) and its value in `rd_ab_run.h`.
 - **One verdict a subject a run, timed in scenery.** A trial starts after 2 s of game scenery in a
   stage (the scene ledger's stage switch gives the stage; the scenery's start, past the fade and
   the stage's first pictures, starts the 2 s), once the subject had work in that stage (the cull: a
-  target with a lattice word) and only while it has no verdict this run; at most 12 trials a run.
+  target with a lattice word) and only while it has no verdict this run, the subject with the
+  fewest trials begun this run first (the registered order among equals), so a subject with no
+  trial yet goes before the retry of one that had one; at most 12 trials a run, a trial the
+  scenery ended not counted.
   Scenery is the window's layout kind (`port/platform/window_scene.h` `SceneKind`, the perf scene
   line's words): `play` or `scene` (a cutscene's layout; a movie, also `scene`, has no work for
   either subject), passed by `window_perf_rank_step` through `rd_ab_scenery` into the pure judge
@@ -1684,7 +1687,11 @@ ledger row, whether it may be tried) and its value in `rd_ab_run.h`.
   opening on it sits on the scene layout for about 2 s, and issue 179's report showed the cull
   timed there. When the scenery ends during a trial (a menu, a movie, back to the title) the trial
   ends with no verdict, whatever its pairs, and no mark for the stage; the subject is timed again
-  2 s into the next stretch of scenery (the same stage too) while trials are left. On a new game the first timed stage is the opening's cutscene (stage
+  2 s into the next stretch of scenery (the same stage too) while trials are left. Such a trial
+  does not count toward the 12, so pauses during trials never use the cap up and keep the
+  subjects registered last untimed; what bounds the retries is the 2 s of unbroken scenery each
+  one waits for again, one trial at a time, so a stretch of play or a cutscene starts at most one.
+  The subject's own trial count (the stats line, the ledger's `trials run`) still counts it. On a new game the first timed stage is the opening's cutscene (stage
   41, `scene (op2)` in issue 179's report, about 46 s long), so the answer is in before the boat
   (stage 42); on a loaded save it is the save's stage once it plays (stage 11 `play (st04a ...)`
   in the owner's Pixel log). The twins have work only in some scenery: their one trial is
