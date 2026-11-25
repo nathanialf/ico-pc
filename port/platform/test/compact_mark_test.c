@@ -79,7 +79,8 @@ static void decide(void)
         {"counting v0.11.16", "was on, its first pictures being counted, when it ended (a crash)"},
         {"on v0.11.16", "was on when it ended (a crash)"},
         {"failed v0.11.16", "was refused by its own start-up test (the lists read back, the "
-                            "pictures or the stamps)"},
+                            "pictures or the stamps) or turned off in play by a picture whose "
+                            "stamps came back unwritten"},
         {"blocked v0.11.16", "kept off by its mark"},
     };
 

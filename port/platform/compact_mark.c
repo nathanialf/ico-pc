@@ -59,7 +59,7 @@ void compact_mark_decide(const char *mark, int endKind, const char *endWords, co
     case VU_ZERO_STAGE_FAILED:
         snprintf(what, sizeof what,
                  "was refused by its own start-up test (the lists read back, the pictures or the "
-                 "stamps)");
+                 "stamps) or turned off in play by a picture whose stamps came back unwritten");
         break;
     case VU_ZERO_STAGE_BLOCKED:
         snprintf(what, sizeof what, "kept off by its mark");
