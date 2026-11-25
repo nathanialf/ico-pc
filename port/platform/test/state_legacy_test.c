@@ -185,8 +185,9 @@ static void check_rows(const char *name, const IcoLegacyTable *t)
 }
 
 /* a table of format 3 records (v0.11.9 and later): its code hashes alone,
-   under the records' rules 2 and the current rules; its symbol file (read
-   here, as the package gate reads it) cuts every function it hashes */
+   under the records' rules 2 and the current rules; where it keeps its
+   symbol file (the newest release's, which the package gate reads), that
+   file cuts every function it hashes */
 static void check_table3(const Dir *d, const char *name, const char *commit)
 {
     char why[200], found[64], path[128];
@@ -220,7 +221,9 @@ static void check_table3(const Dir *d, const char *name, const char *commit)
           "%s: %zu functions hash apart under rules 2 and 3 (a few: the rules changed little)",
           name, differ);
     snprintf(path, sizeof path, "%s/" ICO_LEGACY_SYMS, name);
-    if (dir_read((void *)d, path, &gz, &gz_n, why, sizeof why) == 0) {
+    if (!manifest_has(d, name, "file " ICO_LEGACY_SYMS)) {
+        /* a table of the code hashes alone (every one but the newest release's) */
+    } else if (dir_read((void *)d, path, &gz, &gz_n, why, sizeof why) == 0) {
         size_t n = 0;
         char *txt = ico_symtab_gunzip(gz, gz_n, &n);
 
@@ -308,7 +311,13 @@ int main(int argc, char **argv)
     check_table(&d, "v0.11.7-android", "android-arm64", "v0.11.6-183-g66d9d0dcba");
     check_table(&d, "v0.11.8-android", "android-arm64", "v0.11.7-68-gaeb00e6100");
     check_table(&d, "v0.11.8-rc4-android", "android-arm64", "v0.11.7-66-gaf8507442c");
+    check_table3(&d, "v0.11.9-android", "v0.11.8-68-g96fd7c099a");
+    check_table3(&d, "v0.11.10-android", "v0.11.9-6-ge9bcc9d3ef");
+    check_table3(&d, "v0.11.11-android", "v0.11.10-23-g4832c07665");
+    check_table3(&d, "v0.11.12-android", "v0.11.11-29-ga42959af67");
+    check_table3(&d, "v0.11.13-android", "v0.11.12-69-g0c585e991a");
     check_table3(&d, "v0.11.14-android", "v0.11.13-42-g0aaa7ac704");
+    check_table3(&d, "v0.11.15-rc6-android", "v0.11.14-58-g5ccc7f8365");
     check_table3(&d, "v0.11.15-android", "v0.11.14-94-g5396fcfcd2");
     /* no table: another platform's, an unknown commit, no index */
     CHECK(ico_legacy_find(dir_read, &d, "windows-x64", "v0.11.7-68-gaeb00e6100", found,

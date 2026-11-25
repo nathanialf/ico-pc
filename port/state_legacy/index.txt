@@ -1,6 +1,12 @@
 # platform kind table commit (tools/state_legacy_table.py writes it)
+android-arm64 release v0.11.10-android v0.11.9-6-ge9bcc9d3ef
+android-arm64 release v0.11.11-android v0.11.10-23-g4832c07665
+android-arm64 release v0.11.12-android v0.11.11-29-ga42959af67
+android-arm64 release v0.11.13-android v0.11.12-69-g0c585e991a
 android-arm64 release v0.11.14-android v0.11.13-42-g0aaa7ac704
 android-arm64 release v0.11.15-android v0.11.14-94-g5396fcfcd2
+android-arm64 rc v0.11.15-rc6-android v0.11.14-58-g5ccc7f8365
 android-arm64 release v0.11.7-android v0.11.6-183-g66d9d0dcba
 android-arm64 release v0.11.8-android v0.11.7-68-gaeb00e6100
 android-arm64 rc v0.11.8-rc4-android v0.11.7-66-gaf8507442c
+android-arm64 release v0.11.9-android v0.11.8-68-g96fd7c099a

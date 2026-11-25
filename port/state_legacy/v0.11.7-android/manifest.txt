@@ -8,10 +8,9 @@ texts 19383 1042683
 text_index 2
 lstarts 15411
 text_files 3
-hash_rules 2
-hash_rules_kept its release APK was not at hand when the code hash rules became 3, so its states compare under rules 2
+hash_rules 3
 hashes 13880
-file hashes.z 156000 0e7a208b40379d8e71af1260ae474719c2eb35a3f7f343d682a5548c8cad33ce
+file hashes.z 156075 bfe61362a1a0968a361620e3c32447efd1dbdf3874696da8f82cfa3718f05b91
 file sections.txt 1231 cc765b3ae0305099ad375b03551537fd007d1bdf8f9298366f55a7bb8e1fcbca
 file syms.gzip 224138 bf6351d7d205cdcc2cae62452f4ea880c050606e35e41939bc09996ec60aa6df
 file texts.0.z 185480 98f91030eb9badc66bbd2d8ff541d60ca667e3fd21c551233b1911e4c5cb7807

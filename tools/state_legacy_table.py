@@ -31,7 +31,9 @@ states an earlier Android version saved (format 2: port/platform/state_legacy.h)
       --record 2 (the default: versions before v0.11.9, whose records' hashes are of rules
       1) writes all of the above; --record 3 (v0.11.9 and later: a format 3 record names its
       own words, its hashes are of rules 2) writes the symbol file, the code hashes and the
-      manifest alone ("record 3", "hash_verify_rules 2").
+      manifest alone ("record 3", "hash_verify_rules 2"); with --hashes-only no symbol file (the
+      loader reads the code hashes alone; the gate reads the newest release table's symbol file,
+      so only that one keeps it, which check enforces).
       Needs the NDK's llvm-readelf (tools/toolchain/android.env).
 
   state_legacy_table.py check [--root port/state_legacy]
@@ -256,7 +258,7 @@ def build(a):
         os.remove(os.path.join(out, f))
     hz = deflate(b"".join(struct.pack("<IQQ", a0, h1, h) for a0, h1, h in hashes))
     if a.record == 3:
-        files = {"syms.gzip": syms, "hashes.z": hz}
+        files = {"hashes.z": hz} if a.hashes_only else {"syms.gzip": syms, "hashes.z": hz}
         for name, b in files.items():
             if len(b) > CAP + 12000:
                 sys.exit("state_legacy_table: %s is %d bytes" % (name, len(b)))
@@ -348,7 +350,8 @@ def check(a):
                            "say why it cannot be in a hash_rules_kept line)" % (d, rules, HASH_RULES))
             elif rules != HASH_RULES:
                 print("state_legacy_table: %s: kept at rules %d (%s)" % (d, rules, m["hash_rules_kept"]))
-            if b" T ico_diag_init\n" not in gzip.decompress(open(os.path.join(p, "syms.gzip"), "rb").read()):
+            if "syms.gzip" in m["files"] and \
+                    b" T ico_diag_init\n" not in gzip.decompress(open(os.path.join(p, "syms.gzip"), "rb").read()):
                 bad.append("%s: the symbol file names no ico_diag_init" % d)
             hz = inflate(open(os.path.join(p, "hashes.z"), "rb").read())
             if len(hz) != 20 * int(m["hashes"]) or not hz:
@@ -357,9 +360,13 @@ def check(a):
             if any(x >= y for x, y in zip(offs, offs[1:])):
                 bad.append("%s: the code hashes are not in address order" % d)
             if record == 3:
-                if sorted(m["files"]) != ["hashes.z", "syms.gzip"]:
-                    bad.append("%s: a record 3 table holds syms.gzip and hashes.z alone, not %s" %
-                               (d, sorted(m["files"])))
+                # the loader reads hashes.z alone; the newest release's also keeps its symbol
+                # file, which the package gate names the functions by
+                want = ["hashes.z", "syms.gzip"] if d == newest_release(root) else ["hashes.z"]
+                if sorted(m["files"]) != want:
+                    bad.append("%s: a record 3 table holds %s, not %s (the newest release's keeps its "
+                               "symbol file for the gate, the others drop it: build --hashes-only)" %
+                               (d, " and ".join(want), sorted(m["files"])))
                 continue
             nruns, nbytes = map(int, m["texts"].split())
             if int(m.get("text_index", "1")) != TEXT_INDEX:
@@ -565,6 +572,9 @@ def gate(a):
     commit = m["commit"]
     # the release's functions: unique names, their current-rules hashes
     old_syms = gzip.decompress(open(os.path.join(root, name, "syms.gzip"), "rb").read()).decode()
+    if os.path.isfile(os.path.join(root, name, "sections.txt")):
+        # a format 2 table: the versions before v0.11.9 wrote no section lines into the file
+        old_syms += open(os.path.join(root, name, "sections.txt")).read()
     hz = inflate(open(os.path.join(root, name, "hashes.z"), "rb").read())
     old_hash = {off: h for off, _, h in struct.iter_unpack("<IQQ", hz)}
     old_lo = min(int(l.split()[1], 16) for l in old_syms.splitlines()
@@ -643,6 +653,8 @@ def main():
     b.add_argument("--kind", default="release", choices=("release", "rc"))
     b.add_argument("--record", type=int, default=2, choices=(2, 3),
                    help="the format of the version's states' records (3: v0.11.9 and later)")
+    b.add_argument("--hashes-only", action="store_true",
+                   help="record 3: no symbol file (every table but the newest release's: the gate reads it)")
     b.add_argument("--out", default=os.path.join(ROOT, "port/state_legacy"))
     c = sub.add_parser("check")
     c.add_argument("--root", default=os.path.join(ROOT, "port/state_legacy"))
