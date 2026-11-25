@@ -170,8 +170,9 @@ static const IcoSimKeyCarry kCarry[] = {
        tick) and when the row is off */
     ICO_SIM_CARRY_HARMLESS,
     /* gameplay.yorda_look: the toggle's block clears itself on the first
-       tick of Off or Hold (yorda_look.c ico_yorda_look) and a state of Off
-       or Hold carries none */
+       tick of Off or Hold (yorda_look.c ico_yorda_look), a state of Off
+       or Hold carries none, and every load ends a toggle
+       (ico_yorda_look_state_loaded) */
     ICO_SIM_CARRY_HARMLESS,
 };
 

@@ -12,9 +12,10 @@
  * one mesh of the discard-free twins' clipper check's case k (its 13
  * triangles across and near the eye plane, rd__nd_clip_case: the triangles
  * code 36's clipping exists for) in both windings, its corners' alphas 9
- * to 124 (the alpha plan's range at most 128), with the facing table every
+ * to 127 (the alpha plan's range at most 128), with the facing table every
  * prelit part has on the disc, in one of seven forms:
  *   32   the region test (the camera rule), ABE on: the plain class's pairs
+ *        (refused by A: not proven in front of the eye, rd_op_safe_draw)
  *   32t  the same textured: an RGBA32 texture (alphas 0..128), MODULATE,
  *        TCC, linear (vu_ps; the fast pixel build's form)
  *   34   clip mode none, ABE on;  34t  textured
@@ -136,7 +137,7 @@ static void sceneBlock(RdVuBlock *b)
 }
 
 /* a mesh of the prelit layout from corners (the clipper check's clipMesh),
-   each corner's alpha 9 to 124 (alpha 255 for the probe: it blends nothing) */
+   each corner's alpha 9 to 127, the sixth 127 (the probe's 127 too: it blends nothing) */
 static RdMesh makeMesh(const float (*c)[3], int n, float shade, bool probe)
 {
     static float q[1 + OC_VERTS * RD_VU_QW_PRELIT][4];

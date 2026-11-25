@@ -926,8 +926,10 @@ read them.
 The index compaction's mark, for its Mali-G52 form (`port/platform/compact_mark.c`;
 [PIPELINES.md](PIPELINES.md#the-mali-g52s-form)), is read first of the marks, by the same rules and
 table: `logs/compact-mark.txt` holds `trying <v>` (before its own start-up test's first replay with
-it), `counting <v>` (the test passed), `on <v>` (250 pictures read back with it), `failed <v>` (the
-test refused it; a test that could not check removes the file) or `blocked <v>`; the renderer gets
+it), `counting <v>` (the test passed), `on <v>` (250 pictures drawn with it whose recorded stamps
+all came back), `failed <v>` (the test refused it, or a picture in play came back with its stamps
+unwritten while it was on; a test that could not check removes the file) or `blocked <v>`; the
+renderer gets
 `ICO_COMPACT_BLOCK`, `ICO_COMPACT_MARK` and `ICO_COMPACT_VERSION`. Its test runs before the other
 attempts' self-tests write their marks, so its step reads their files as the previous run left them
 (`vu_zero_mark_stage_beside`: the cull's, the twins', the fast pixel build's, the one-pass
