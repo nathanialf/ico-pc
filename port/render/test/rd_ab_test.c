@@ -22,7 +22,10 @@
  *   - the boot logo and title's stage is never scenery, on the scene layout
  *     too (rd_ab_scenery_of; issue 179's v0.11.15 log: the cull judged
  *     there); the scenery ending mid-trial ends it with no verdict, timed
- *     again 2 s into the next stretch of scenery;
+ *     again 2 s into the next stretch of scenery, not counted toward
+ *     RD_AB_TRIALS; 15 such breaks (more than the cap) with five subjects:
+ *     the breaks go round the subjects (the fewest trials first) and every
+ *     subject, the last registered too, is timed after them;
  *   - the twins' camera rule class, a subject of its own: tried only where
  *     its own passes had work, its verdict independent of the twins' (each
  *     stops its own class);
@@ -1011,10 +1014,12 @@ static void testSceneryEnd(void)
     rd_ab_set_scenery(&s_a, false);
     s.replays = 100;
     t = run(&s_a, &s, t, 1u);
-    CHECK(!s_a.t.active && s_a.trials == 1u && rd_ab_verdict(&s_a, 0, 42) == RD_AB_V_NONE &&
-              s_a.subj[0].stagesOn == 0u && s_a.subj[0].stagesOff == 0u,
-          "the scenery ended: running %d, %u trials, verdict %d", (int)s_a.t.active,
-          (unsigned)s_a.trials, rd_ab_verdict(&s_a, 0, 42));
+    CHECK(!s_a.t.active && s_a.trials == 0u && s_a.subj[0].trials == 1u &&
+              rd_ab_verdict(&s_a, 0, 42) == RD_AB_V_NONE && s_a.subj[0].stagesOn == 0u &&
+              s_a.subj[0].stagesOff == 0u,
+          "the scenery ended: running %d, %u trials (not counted), %u begun, verdict %d",
+          (int)s_a.t.active, (unsigned)s_a.trials, (unsigned)s_a.subj[0].trials,
+          rd_ab_verdict(&s_a, 0, 42));
     CHECK(strstr(s_last, "A/B: zero-area cull, stage 42: no verdict (the scenery ended, ") ==
                   s_last &&
               strstr(s_last, "with it until it is timed again in the next stretch of play or a "
@@ -1027,12 +1032,87 @@ static void testSceneryEnd(void)
     s.effect = 0.05;
     s.replays = 45;
     t = run(&s_a, &s, t, 1u);
-    CHECK(s_a.trials == 1u, "a trial before 2 s of scenery again (%u)", (unsigned)s_a.trials);
+    CHECK(s_a.subj[0].trials == 1u, "a trial before 2 s of scenery again (%u)",
+          (unsigned)s_a.subj[0].trials);
     s.replays = 200;
     (void)run(&s_a, &s, t, 1u);
-    CHECK(s_a.trials == 2u && rd_ab_verdict(&s_a, 0, 42) == RD_AB_V_OFF,
-          "not timed again after the scenery came back: %u trials, verdict %d",
-          (unsigned)s_a.trials, rd_ab_verdict(&s_a, 0, 42));
+    CHECK(s_a.trials == 1u && s_a.subj[0].trials == 2u && rd_ab_verdict(&s_a, 0, 42) == RD_AB_V_OFF,
+          "not timed again after the scenery came back: %u trials counted, %u begun, verdict %d",
+          (unsigned)s_a.trials, (unsigned)s_a.subj[0].trials, rd_ab_verdict(&s_a, 0, 42));
+}
+
+/* the five subjects as the renderer registers them, every one with work
+   and 5 % dearer with it (each its early verdict, off); n replays at a
+   40 ms tick from t, q the replays in flight (two) */
+static double runFive(int32_t stage, double t, int n, Pend *q, int *qn)
+{
+    const uint8_t used = 0x1fu;
+    for (int i = 0; i < n; i++) {
+        if (*qn >= 2) {
+            const RdAbIn in = {q[0].tag, used, false, true, q[0].work, q[0].ms};
+            rd_ab_collect(&s_a, &in);
+            memmove(q, q + 1, (size_t)(*qn - 1) * sizeof(q[0]));
+            (*qn)--;
+        }
+        const RdAbTag tag = rd_ab_begin(&s_a, stage, t, false);
+        double ms = 40.0;
+        for (int k = 0; k < 5; k++) {
+            ms *= (tag.off & (1u << k)) ? 1.0 : 1.05;
+        }
+        q[(*qn)++] = (Pend){tag, 50000.0, ms, false};
+        t += 40.0;
+        lines(&s_a);
+    }
+    return t;
+}
+
+/* the scenery broken many times during trials (review M6: a pause each
+   time a trial ran): a trial the scenery ended does not count toward
+   RD_AB_TRIALS, and the next trial goes to a subject with no trial yet
+   before the retry of one that had one; so after 15 breaks (more than the
+   cap) every subject, the one registered last too, is still timed */
+static void testSceneryBreaks(void)
+{
+    printf("the scenery broken during trials:\n");
+    rd_ab_init(&s_a, RD_AB_AUTO);
+    const char *names[5] = {"zero-area cull", "discard-free twins", "fast pixel build",
+                            "discard-free twins, camera rule", "one-pass blend"};
+    for (int i = 0; i < 5; i++) {
+        CHECK(rd_ab_subject(&s_a, names[i]) == i, "id %d", i);
+        rd_ab_allow(&s_a, i, true);
+    }
+    Pend q[4];
+    int qn = 0;
+    double t = 0.0;
+    for (int b = 0; b < 15; b++) {
+        /* 2.32 s of play: a trial starts at 2 s and has at most 4 pairs
+           (no verdict), then a pause */
+        rd_ab_set_scenery(&s_a, true);
+        t = runFive(42, t, 58, q, &qn);
+        CHECK(s_a.t.active, "break %d: no trial ran before the pause", b);
+        const int on = s_a.t.subject;
+        rd_ab_set_scenery(&s_a, false);
+        t = runFive(42, t, 10, q, &qn);
+        CHECK(!s_a.t.active && s_a.trials == 0u,
+              "break %d: the trial the scenery ended counted (%u trials, running %d)", b,
+              (unsigned)s_a.trials, (int)s_a.t.active);
+        /* fairness: the breaks go round the subjects in turn */
+        CHECK(on == b % 5, "break %d: subject %d on trial, not %d (the first with no trial yet)", b,
+              on, b % 5);
+    }
+    for (int i = 0; i < 5; i++) {
+        CHECK(s_a.subj[i].trials == 3u, "%s: %u trials begun in 15 breaks", names[i],
+              (unsigned)s_a.subj[i].trials);
+    }
+    /* then a long stretch of play: every subject timed, the last too */
+    rd_ab_set_scenery(&s_a, true);
+    (void)runFive(42, t, 1000, q, &qn);
+    for (int i = 0; i < 5; i++) {
+        CHECK(s_a.subj[i].carry == RD_AB_V_OFF, "%s not timed after the breaks (verdict %d)",
+              names[i], s_a.subj[i].carry);
+    }
+    CHECK(s_a.trials == 5u && !s_a.capSaid, "%u trials counted, the cap's line %d",
+          (unsigned)s_a.trials, (int)s_a.capSaid);
 }
 
 /* the subjects as the renderer registers them (rd_ab_run.c k_subj): the
@@ -1117,6 +1197,7 @@ int main(void)
 {
     testTitleStage();
     testSceneryEnd();
+    testSceneryBreaks();
     testCamera();
     testMeasure();
     testForget();
