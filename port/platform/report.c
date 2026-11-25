@@ -1026,10 +1026,11 @@ int ico_report_write(const IcoReportInputs *in, char *name, size_t name_size)
         /* issue 179's attempts' marks on the install, each when there is
            one: the zero-area cull's (vu_zero_mark.h), the submit ahead's
            (ahead_mark.h), the discard-free twins', the fast pixel
-           build's (fastps_mark.h) and the one-pass blend's (onepass_mark.h) */
-        static const char *const k_marks[] = {"vu-zero-mark.txt", "ahead-mark.txt",
+           build's (fastps_mark.h), the one-pass blend's (onepass_mark.h) and the
+           index compaction's (compact_mark.h) */
+        static const char *const k_marks[] = {"vu-zero-mark.txt",   "ahead-mark.txt",
                                               "nodiscard-mark.txt", "fastps-mark.txt",
-                                              "onepass-mark.txt"};
+                                              "onepass-mark.txt",   "compact-mark.txt"};
         for (size_t i = 0; i < sizeof k_marks / sizeof k_marks[0]; i++) {
             if (join(path, sizeof path, s_logs, k_marks[i]) == 0) {
                 (void)zip_add_file(k_marks[i], path, 0);

@@ -28,9 +28,9 @@
  * blocked always.  Its test runs before the other attempts' self-tests
  * write their marks, so the step runs first and reads theirs as the
  * previous run left them (vu_zero_mark_stage_beside): at counting or on,
- * an end while the cull, the twins, the fast pixel build, the lean vertex
- * outputs or the one-pass blend said trying, or the rate card was
- * measuring, is theirs,
+ * an end while the cull, the twins, the fast pixel build or the one-pass
+ * blend said trying, or the rate card was measuring, is theirs, and their
+ * steps read its stage (compact_mark_stage_read) the same way,
  * and it is tried again.  A block holds only while the version in the mark
  * is the running one.  The line ("the previous run: index compaction:
  * ...") is logged when a mark was found; ICO_COMPACT_MARK (the file's
@@ -60,6 +60,12 @@ void compact_mark_decide(const char *mark, int endKind, const char *endWords, co
    "ico_pc: ") when a mark was found.  Returns 1 when it stays off. */
 int compact_mark_step(const char *activityPath, const char *version, int exitReason, int exitStatus,
                       void (*log)(const char *line));
+/* the mark's stage (VU_ZERO_STAGE_*) as the last compact_mark_step read it,
+   before it was rewritten (VU_ZERO_STAGE_NONE before any): the other
+   attempts' steps, which run after it, take an end while it said trying as
+   its own (its test can run after theirs wrote their marks: a graphics API
+   switch runs the start-up self-tests again) */
+int compact_mark_stage_read(void);
 /* compact_mark_step with exit_info_last_reason (exit_info_begin ran before
    it, window_host.c) */
 int compact_mark_begin(const char *activityPath, const char *version,

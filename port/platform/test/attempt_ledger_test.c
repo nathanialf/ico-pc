@@ -705,6 +705,11 @@ static void test_classes(void)
                  "its own start-up test refused it (the lists the CPU writes first read back, the "
                  "pictures or the stamps): every draw reads its own index list") == 0);
     CHECK(ico_attempt_decide_compaction(1, NULL, G, 1, 1, 1, ICO_ATT_CMP_ST_OWN_REFUSED) == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 1, ICO_ATT_CMP_ST_PLAY_REFUSED) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_REFUSED);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
+                 "off for the run in play: a picture's recorded stamps came back unwritten after "
+                 "its work was signalled finished with it on") == 0);
     CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 1, ICO_ATT_CMP_ST_MARKED) == 0);
     CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_REFUSED);
     CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),

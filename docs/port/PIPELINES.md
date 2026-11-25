@@ -1674,7 +1674,10 @@ ledger row, whether it may be tried) and its value in `rd_ab_run.h`.
 - **One verdict a subject a run, timed in scenery.** A trial starts after 2 s of game scenery in a
   stage (the scene ledger's stage switch gives the stage; the scenery's start, past the fade and
   the stage's first pictures, starts the 2 s), once the subject had work in that stage (the cull: a
-  target with a lattice word) and only while it has no verdict this run; at most 12 trials a run.
+  target with a lattice word) and only while it has no verdict this run, the subject with the
+  fewest trials begun this run first (the registered order among equals), so a subject with no
+  trial yet goes before the retry of one that had one; at most 12 trials a run, a trial the
+  scenery ended not counted.
   Scenery is the window's layout kind (`port/platform/window_scene.h` `SceneKind`, the perf scene
   line's words): `play` or `scene` (a cutscene's layout; a movie, also `scene`, has no work for
   either subject), passed by `window_perf_rank_step` through `rd_ab_scenery` into the pure judge
@@ -1684,7 +1687,11 @@ ledger row, whether it may be tried) and its value in `rd_ab_run.h`.
   opening on it sits on the scene layout for about 2 s, and issue 179's report showed the cull
   timed there. When the scenery ends during a trial (a menu, a movie, back to the title) the trial
   ends with no verdict, whatever its pairs, and no mark for the stage; the subject is timed again
-  2 s into the next stretch of scenery (the same stage too) while trials are left. On a new game the first timed stage is the opening's cutscene (stage
+  2 s into the next stretch of scenery (the same stage too) while trials are left. Such a trial
+  does not count toward the 12, so pauses during trials never use the cap up and keep the
+  subjects registered last untimed; what bounds the retries is the 2 s of unbroken scenery each
+  one waits for again, one trial at a time, so a stretch of play or a cutscene starts at most one.
+  The subject's own trial count (the stats line, the ledger's `trials run`) still counts it. On a new game the first timed stage is the opening's cutscene (stage
   41, `scene (op2)` in issue 179's report, about 46 s long), so the answer is in before the boat
   (stage 42); on a loaded save it is the save's stage once it plays (stage 11 `play (st04a ...)`
   in the owner's Pixel log). The twins have work only in some scenery: their one trial is
@@ -2315,10 +2322,29 @@ the third cause, the picture still right), the lists right and the pictures not,
 unwritten (the draws not drawing the lists they were given: the first or second cause). Its mark
 (`port/platform/compact_mark.c`, `logs/compact-mark.txt`, the zero-area cull's stages: `trying`
 synced before the first replay with it, `counting` on a pass, `on` after `RD_VU_CMP_PROBATION`
-(250) pictures read back with it, `failed` on a refusal, removed when not checked) keeps it off on
-the install after a bad end while it was tried or on; the step runs before the other attempts'
-marks and reads theirs as the previous run left them (an end while one of them was trying is
-theirs). The loss ladder's start without the pre-pass leaves it off too. Tests' words:
+(250) pictures drawn with it whose recorded stamps all came back, `failed` on a refusal, removed
+when not checked) keeps it off on the install after a bad end while it was tried or on; the step
+runs before the other attempts' marks and reads theirs as the previous run left them (an end while
+one of them was trying is theirs), and their steps read its stage the same way
+(`compact_mark_stage_read`: its test can run after theirs wrote their marks, when a graphics API
+switch runs the start-up self-tests again). Only a lost device in its replays with it is a
+measured failure; a replay, a read or a build that fails without one, or a failure of the
+references drawn without it, is "not checked". The loss ladder's start without the pre-pass leaves
+it off too.
+
+In play (`rd__vu_compact_play_health`, called from the picture-health report's
+`rd__health_note` for every collected record with VU draws outside the self-tests): a picture
+whose recorded stamps came back unwritten after its work was signalled finished, the sign the
+phone's black pictures carried, while the form is on turns it off for the run at once (the plane
+dropped, the next picture without it) and writes its mark `failed`, so later starts leave it off
+until the version changes:
+
+    rd: VU index compaction: off for the run (in play: replay 812, frame 640, 16 of its recorded stamps unwritten after its work was signalled finished, the sign of ...): the next picture without it, every draw on its own index list; its mark says failed (off on this install until the version changes)
+
+The rate card holds it off for its frames (`rd__vu_compact_hold`; its vertex frame's triangles lie
+off the target and would all be fillers), its head line then ending `, the index compaction held
+off`. The tests' `ICO_RD_HEALTH_FAKE=play` reads every such record as that sign
+(`rd_vu_compact_play`). Tests' words:
 `ICO_RD_VU_COMPACT_SABOTAGE=lists` (the CPU's lists written one triangle off) and `=readback` (one filler of
 the test's read-back taken back to its corner 0); `ICO_COMPACT_BLOCK` as the mark exports it. `=unchecked` (its
 lists never copied back: not checked). Not judged in play by the A/B judge: a subject would have

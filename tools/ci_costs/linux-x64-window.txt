@@ -848,6 +848,7 @@ rd_vu_bones_ring_ab_prepass 365.50  # estimate: 186.1 s local (merge-wt_FIX-P6a2
 rd_vu_compact 0.00
 rd_vu_compact_ab 543.29  # estimate: 276.6 s local (merge-wt_FIX-P4b-20261115T201517Z.lvp.log) x 1.96
 rd_vu_compact_ab_pixel 6.36
+rd_vu_compact_play 15.00  # estimate: two --repeat 6 replays of one Mali fixture on lavapipe (not run here)
 rd_vu_flat0 0.01
 rd_vu_flat0_ab 498.91  # estimate: 254.0 s local (merge-wt_FIX-P4b-20261115T201517Z.lvp.log) x 1.96
 rd_vu_flat0_ab_pixel 4.45
