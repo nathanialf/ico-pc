@@ -378,10 +378,11 @@ saves to slot 1 from the pause menu. The state keeps the game exactly as it
 is, and you can load it from the pause menu or from the title screen
 (choose **Continue**, then press **Square** for **Save states**; F9 loads
 slot 1). It does not replace
-the game's own save points: those still write to the memory card. In another
-version of the game a state may not resume where you saved it: it then
-continues from its last checkpoint, so keep a save point too before you
-update. On a journey with Permadeath on, save states are off.
+the game's own save points: those still write to the memory card. Until
+version 1.0, a save state is not guaranteed to resume where you saved it in
+another version of the game: it often does, and when it cannot it continues
+from its last checkpoint, so keep a save point too before you update. From
+1.0 on, states are meant to keep resuming exactly in later versions. On a journey with Permadeath on, save states are off.
 [The details](OPTIONS.md#save-states).
 
 ## Can I change the difficulty in the middle of a game?
