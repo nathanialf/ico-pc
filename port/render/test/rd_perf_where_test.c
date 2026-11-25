@@ -6,8 +6,9 @@
  * lines word for word, a piece of 0 ms left out, a list not timed pass by
  * pass "[...]", an effect without a name, the window's texts absent, no
  * timed picture, a short buffer cut and the count past it; the rate card's
- * bounds (never summed; "at least" only under a bound below the measured
- * time) with the hand-computed numbers of the reporter's v0.11.15 card
+ * estimates ("about", never "at most" or "at least"; what its units account
+ * for: the triangles and the passes, never the corners again) with the
+ * hand-computed numbers of the reporter's v0.11.15 card
  * (Mali-G52, log :339-342), and "no rate card figure" for each way the card
  * has none: no card, another graphics API, an item not measured, at or
  * below 0, in another unit, timed with the other pre-pass state, an empty
@@ -169,23 +170,26 @@ int main(void)
         "in list 0 (8)",
         "where: largest: GPU list 0 49.0 ms (47 % of the GPU span); CPU walk 8.0 ms (8 % of the "
         "time between presents)",
-        /* list 0: 91.1k triangles x 541.76 ns = 49.35 ms (above its 49.0 ms
-           measured: nothing said of the rest); 3 x (60.1k + 31.0k) = 273.3k
-           corners x 118.29 ns = 32.33 ms; 2 passes / 2 timed x 0.003 ms.
-           list 3: 12.1k triangles = 6.56 ms, under its 15.0 ms: at least
-           8.44 ms is something else; 30.0k corners = 3.55 ms; its passes
-           not timed.  Never summed */
-        "where: explained by the rate card, upper bounds, not a split (fragments, loads and stores "
-        "not counted): list 0 49.0 ms measured: its triangles at most 49.4 ms (91.1k x 541.76 ns, "
-        "each with its three corners and one 2x2 quad of fragments; 31.0k of them drawn again by a "
-        "later pass, 0.0k the shadow volumes'), its corners alone at most 32.3 ms (273.3k x 118.29 "
-        "ns: the card's corner also holds one pre-pass vertex), passes 0.0 ms (1.0 x 0.003 ms, an "
-        "empty SCENE pass each); list 3 15.0 ms measured: its triangles at most 6.6 ms (12.1k x "
-        "541.76 ns, each with its three corners and one 2x2 quad of fragments; 0.0k of them drawn "
-        "again by a later pass, 2.1k the shadow volumes'), its corners alone at most 3.5 ms (30.0k "
-        "x 118.29 ns: the card's corner also holds one pre-pass vertex), passes: no rate card "
-        "figure (the list not timed pass by pass), so at least 8.4 ms of it is not vertices or "
-        "triangles by the card: fragments, loads and stores, or a stall"};
+        /* list 0: 91.1k triangles x 541.76 ns = 49.35 ms; 3 x (60.1k +
+           31.0k) = 273.3k corners x 118.29 ns = 32.33 ms (inside the
+           triangles', not added); 2 passes / 2 timed x 0.003 ms; the card's
+           units 49.35 + 0.003 = 49.36 ms of 49.0 (above it: no bound
+           either way).  list 3: 12.1k triangles = 6.56 ms; 30.0k corners =
+           3.55 ms; its passes not timed, so 6.56 ms of 15.0 (the triangles
+           alone) */
+        "where: explained by the rate card (the card's units times the counts, not bounds, not a "
+        "split; fragments, loads and stores not counted): list 0 49.0 ms measured: its triangles "
+        "about 49.4 ms (91.1k x 541.76 ns, each with its three corners and one 2x2 quad of "
+        "fragments; 31.0k of them drawn again by a later pass, 0.0k the shadow volumes'), its "
+        "corners alone about 32.3 ms (273.3k x 118.29 ns, inside the triangles'; the card's "
+        "corner also holds one pre-pass vertex), passes about 0.0 ms (1.0 x 0.003 ms, an empty "
+        "SCENE pass each), so the card's units account for about 49.4 of 49.0 ms (the triangles "
+        "and the passes); list 3 15.0 ms measured: its triangles about 6.6 ms (12.1k x 541.76 ns, "
+        "each with its three corners and one 2x2 quad of fragments; 0.0k of them drawn again by a "
+        "later pass, 2.1k the shadow volumes'), its corners alone about 3.5 ms (30.0k x 118.29 "
+        "ns, inside the triangles'; the card's corner also holds one pre-pass vertex), passes: no "
+        "rate card figure (the list not timed pass by pass), so the card's units account for "
+        "about 6.6 of 15.0 ms (the triangles alone)"};
     char t[2048];
     for (unsigned i = 0; i < RD_PERF_WHERE_LINES; i++) {
         const int w = rd_perf_where_text(b, &in, &v, &x, i, t, sizeof t);
@@ -208,14 +212,14 @@ int main(void)
         RdPerfWhereExplained e;
         CHECK(rd_perf_where_explained(b, &in, &rates, 0, &e));
         CHECK(near(e.corners, 273300.0) && near(e.tris, 60100.0) && near(e.again, 31000.0));
-        CHECK(near(e.vertexMs, 273300.0 * 118.29e-6) && e.bound);
+        CHECK(near(e.vertexMs, 273300.0 * 118.29e-6) && e.prepass);
         CHECK(near(e.triMs, 91100.0 * 541.76e-6));
         CHECK(near(e.passes, 1.0) && near(e.passMs, 0.003));
-        CHECK(e.gapMs < 0.0); /* the bound above the measured time */
+        CHECK(near(e.cardMs, 91100.0 * 541.76e-6 + 0.003)); /* the triangles and the passes */
         CHECK(near(e.ms, 49.0));
         CHECK(rd_perf_where_explained(b, &in, &rates, 3, &e));
         CHECK(near(e.shadow, 2100.0) && e.passMs < 0.0);
-        CHECK(near(e.gapMs, 15.0 - 12100.0 * 541.76e-6));
+        CHECK(near(e.cardMs, 12100.0 * 541.76e-6));              /* the triangles alone */
         CHECK(!rd_perf_where_explained(b, &in, &rates, 12, &e)); /* no triangles */
         CHECK(!rd_perf_where_explained(b, &in, NULL, 0, &e));
     }
@@ -223,8 +227,8 @@ int main(void)
     /* no rate card figure, each way */
     {
         static const char head[] =
-            "where: explained by the rate card, upper bounds, not a split (fragments, loads and "
-            "stores not counted): ";
+            "where: explained by the rate card (the card's units times the counts, not bounds, "
+            "not a split; fragments, loads and stores not counted): ";
         char want[512];
         RdPerfWhereRates r;
         RdPerfWhereExtra xr = x;
@@ -268,7 +272,7 @@ int main(void)
                         "measured: 5 and 4 timed replays, 5 wanted), passes: no rate card figure "
                         "(the card's unit is \"x\", ms wanted); list 3") != NULL);
         CHECK(strstr(t, "at most") == NULL && strstr(t, "at least") == NULL);
-        CHECK(strstr(t, " ms:") == NULL); /* never a number */
+        CHECK(strstr(t, " ms:") == NULL && strstr(t, "account for") == NULL); /* never a number */
         /* the card's pre-pass not the block's; the empty pass of another size */
         cardMali();
         rd_perf_where_rates_of(&s_card, "Vulkan", &r);
@@ -282,17 +286,23 @@ int main(void)
                         "the block drew with it off), passes: no rate card figure (the card's "
                         "empty pass is SCENE at 512x512 texels, the list's first pass SCENE at "
                         "1024x512); list 3") != NULL);
-        CHECK(strstr(t, " ms (") == NULL); /* never a number */
-        /* both without the pre-pass: "about", no bound and so no "at least" */
+        CHECK(strstr(t, " ms (") == NULL && strstr(t, "account for") == NULL); /* never a number */
+        /* both without the pre-pass: figures, the corner without its pre-pass vertex */
         snprintf(s_card.item[RD_RC_VERTEX].label, sizeof s_card.item[RD_RC_VERTEX].label,
                  "a vertex (a corner drawn off the target, the VU pre-pass off)");
         rd_perf_where_rates_of(&s_card, "Vulkan", &r);
         CHECK(r.prepass == 0);
         (void)rd_perf_where_text(b, &in, &v, &xr, 6, t, sizeof t);
-        CHECK(strstr(t, "list 0 49.0 ms measured: its triangles about 49.4 ms (91.1k x 541.76 "
-                        "ns, each with its three corners and one 2x2 quad of fragments; 31.0k of "
-                        "them drawn again by a later pass, 0.0k the shadow volumes'), its corners "
-                        "alone about 32.3 ms (273.3k x 118.29 ns), passes: ") != NULL);
+        CHECK(strstr(t,
+                     "list 0 49.0 ms measured: its triangles about 49.4 ms (91.1k x 541.76 "
+                     "ns, each with its three corners and one 2x2 quad of fragments; 31.0k of "
+                     "them drawn again by a later pass, 0.0k the shadow volumes'), its corners "
+                     "alone about 32.3 ms (273.3k x 118.29 ns, inside the triangles'), passes: ") !=
+              NULL);
+        CHECK(strstr(t, "; the card's corner") == NULL);
+        CHECK(strstr(t, "passes: no rate card figure (the card's empty pass is SCENE at 512x512 "
+                        "texels, the list's first pass SCENE at 1024x512), so the card's units "
+                        "account for about 49.4 of 49.0 ms (the triangles alone); list 3") != NULL);
         CHECK(strstr(t, "at most") == NULL && strstr(t, "at least") == NULL);
         in.prepass = true;
         b->cls[RD_PERF_RANK_LIST0].first.w = 512;
@@ -316,8 +326,9 @@ int main(void)
     (void)rd_perf_where_text(b, &in, &v, &x, 5, t, sizeof t);
     CHECK(strstr(t, "where: largest: GPU none timed; CPU game step") == t);
     (void)rd_perf_where_text(b, &in, &v, &x, 6, t, sizeof t);
-    CHECK(text_is(t, "where: explained by the rate card, upper bounds, not a split (fragments, "
-                     "loads and stores not counted): no picture timed"));
+    CHECK(text_is(t, "where: explained by the rate card (the card's units times the counts, not "
+                     "bounds, not a split; fragments, loads and stores not counted): no picture "
+                     "timed"));
 
     /* a short buffer: cut, the count the whole line's */
     {

@@ -115,20 +115,18 @@ bool rd_perf_where_explained(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
         return false;
     }
     out->corners = 3.0 * (out->tris + out->again);
-    out->vertexMs = out->triMs = out->passMs = out->gapMs = -1.0;
+    out->vertexMs = out->triMs = out->passMs = out->cardMs = -1.0;
     const bool prepass = in != NULL && in->prepass;
     /* both units were timed under the card's pre-pass state (a triangle's
        corners are inside its unit): another state than the block's gives
-       neither a figure; both upper bounds only with it on for both (play's
-       programs' own work is then in the pre-pass, timed apart; without it
-       play's programs are not the card's prelit one) */
+       neither a figure */
     char other[176] = "";
     if (r->prepass >= 0 && (r->prepass == 1) != prepass) {
         snprintf(other, sizeof other,
                  "the card timed it with the VU pre-pass %s, the block drew with it %s",
                  r->prepass ? "on" : "off", prepass ? "on" : "off");
     }
-    out->bound = prepass && r->prepass == 1;
+    out->prepass = prepass && r->prepass == 1;
     if (!r->vertex.ok || other[0]) {
         snprintf(out->vertexWhy, sizeof out->vertexWhy, "%s", other[0] ? other : r->vertex.why);
     } else {
@@ -138,11 +136,6 @@ bool rd_perf_where_explained(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
         snprintf(out->triWhy, sizeof out->triWhy, "%s", other[0] ? other : r->triangle.why);
     } else {
         out->triMs = (out->tris + out->again + out->shadow) * r->triangle.v / 1.0e6;
-    }
-    /* the triangles' bound holds the corners too: below the measured time,
-       the rest is at least what the card's units cannot hold */
-    if (out->bound && out->triMs >= 0.0 && out->triMs < out->ms) {
-        out->gapMs = out->ms - out->triMs;
     }
     const RdPerfRankClass *c = &b->cls[RD_PERF_RANK_LIST0 + list];
     if (!r->pass.ok) {
@@ -159,6 +152,13 @@ bool rd_perf_where_explained(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
     } else {
         out->passes = c->pieces / (double)b->timed;
         out->passMs = out->passes * r->pass.v;
+    }
+    /* what the card's units account for: the triangles' figure (it holds
+       their corners, so the corners' is not added) and the passes' where
+       they have one.  No bound either way: rd_perf_where.h says which
+       assumptions would make it one, and none is checked here */
+    if (out->triMs >= 0.0) {
+        out->cardMs = out->triMs + (out->passMs >= 0.0 ? out->passMs : 0.0);
     }
     return true;
 }
@@ -339,12 +339,11 @@ static void largest_line(Out *o, const RdPerfRankBlock *b, const RdPerfRankVerdi
     }
 }
 
-/* " at most 49.4 ms", " about 49.4 ms" (no bound), or ": no rate card
-   figure (why)" */
-static void term(Out *o, bool bound, double ms, const char *why)
+/* " about 49.4 ms", or ": no rate card figure (why)" */
+static void term(Out *o, double ms, const char *why)
 {
     if (ms >= 0.0) {
-        put(o, " %s %.1f ms", bound ? "at most" : "about", ms);
+        put(o, " about %.1f ms", ms);
     } else {
         put(o, ": no rate card figure (%s)", why);
     }
@@ -354,8 +353,8 @@ static void explained_line(Out *o, const RdPerfRankBlock *b, const RdPerfRankInf
                            const RdPerfWhereExtra *x)
 {
     const RdPerfWhereRates *r = x != NULL ? x->rates : NULL;
-    put(o, "where: explained by the rate card, upper bounds, not a split (fragments, loads and "
-           "stores not counted):");
+    put(o, "where: explained by the rate card (the card's units times the counts, not bounds, "
+           "not a split; fragments, loads and stores not counted):");
     if (r == NULL || !r->have) {
         put(o, " no rate card figure (%s)", r != NULL ? r->none : "no rate card given");
         return;
@@ -372,7 +371,7 @@ static void explained_line(Out *o, const RdPerfRankBlock *b, const RdPerfRankInf
         }
         put(o, "%slist %d %.1f ms measured: its triangles", sep, l, e.ms);
         sep = "; ";
-        term(o, e.bound, e.triMs, e.triWhy);
+        term(o, e.triMs, e.triWhy);
         put(o, " (");
         if (e.triMs >= 0.0) {
             put(o, "%.1fk x %.2f ns, each with its three corners and one 2x2 quad of fragments; ",
@@ -380,23 +379,23 @@ static void explained_line(Out *o, const RdPerfRankBlock *b, const RdPerfRankInf
         }
         put(o, "%.1fk%s drawn again by a later pass, %.1fk the shadow volumes'), its corners alone",
             e.again / 1000.0, e.triMs >= 0.0 ? " of them" : "", e.shadow / 1000.0);
-        term(o, e.bound, e.vertexMs, e.vertexWhy);
+        term(o, e.vertexMs, e.vertexWhy);
         if (e.vertexMs >= 0.0) {
-            put(o, " (%.1fk x %.2f ns%s)", e.corners / 1000.0, r->vertex.v,
-                e.bound ? ": the card's corner also holds one pre-pass vertex" : "");
+            put(o, " (%.1fk x %.2f ns, inside the triangles'%s)", e.corners / 1000.0, r->vertex.v,
+                e.prepass ? "; the card's corner also holds one pre-pass vertex" : "");
         }
         put(o, ", passes");
         if (e.passMs >= 0.0) {
-            put(o, " %.1f ms (%.1f x %.3f ms, an empty SCENE pass each)", e.passMs, e.passes,
+            put(o, " about %.1f ms (%.1f x %.3f ms, an empty SCENE pass each)", e.passMs, e.passes,
                 r->pass.v);
         } else {
             put(o, ": no rate card figure (%s)", e.passWhy);
         }
-        if (e.gapMs >= 0.0) {
-            put(o,
-                ", so at least %.1f ms of it is not vertices or triangles by the card: "
-                "fragments, loads and stores, or a stall",
-                e.gapMs);
+        /* never "at least N ms is something else": that needs the
+           triangles' figure to bound play's (rd_perf_where.h), unproven */
+        if (e.cardMs >= 0.0) {
+            put(o, ", so the card's units account for about %.1f of %.1f ms (%s)", e.cardMs, e.ms,
+                e.passMs >= 0.0 ? "the triangles and the passes" : "the triangles alone");
         }
     }
     if (sep[0] == ' ') {
