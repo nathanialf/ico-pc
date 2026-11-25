@@ -20,6 +20,7 @@
 #include "exit_info.h"
 #include "host_fs.h"
 #include "last_run.h"
+#include "compact_mark.h" /* compact_mark_stage_read */
 #include "vu_zero_mark.h"
 
 static const char kHead[] = "the previous run: discard-free twins: ";
@@ -182,6 +183,10 @@ int nodiscard_mark_step(const char *activityPath, const char *version, int exitR
            (onepass_mark.h) */
         beside = VU_ZERO_STAGE_TRYING;
         vu_zero_mark_beside_words("the one-pass blend was");
+    } else if (beside != VU_ZERO_STAGE_TRYING &&
+               compact_mark_stage_read() == VU_ZERO_STAGE_TRYING) {
+        beside = VU_ZERO_STAGE_TRYING; /* the index compaction's (its step ran first) */
+        vu_zero_mark_beside_words("the index compaction was");
     } else if (beside != VU_ZERO_STAGE_TRYING && vu_zero_mark_ratecard_measuring(activityPath)) {
         beside = VU_ZERO_STAGE_TRYING; /* the rate card's end (REV4R N3) */
         vu_zero_mark_beside_words("the rate card was");

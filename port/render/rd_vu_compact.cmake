@@ -215,6 +215,19 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_compact_ab.cmake")
     set_tests_properties(rd_vu_compact_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                          TIMEOUT 7200)
+    # rd_vu_compact_play (test/rd_vu_compact_play.cmake): the Mali-G52 form
+    # turned off in play by v0.11.6's sign (ICO_RD_HEALTH_FAKE=play), the
+    # mark failed; the same replay without the fake keeps it on
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_compact_play")
+    add_test(NAME rd_vu_compact_play
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/vu_flat0.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_compact_play"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_compact_play.cmake")
+    set_tests_properties(rd_vu_compact_play PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         TIMEOUT 600)
     set(_cmp_list "${CMAKE_CURRENT_BINARY_DIR}/rd_vu_compact_pixel_dumps.txt")
     file(WRITE "${_cmp_list}"
          "corpus rd_pixel_vu.rddump\ncorpus rd_pixel_vu36.rddump\ncorpus rd_pixel_frame.rddump\n")

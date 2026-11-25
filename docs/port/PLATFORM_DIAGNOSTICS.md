@@ -930,8 +930,8 @@ it), `counting <v>` (the test passed), `on <v>` (250 pictures read back with it)
 test refused it; a test that could not check removes the file) or `blocked <v>`; the renderer gets
 `ICO_COMPACT_BLOCK`, `ICO_COMPACT_MARK` and `ICO_COMPACT_VERSION`. Its test runs before the other
 attempts' self-tests write their marks, so its step reads their files as the previous run left them
-(`vu_zero_mark_stage_beside`: the cull's, the twins', the fast pixel build's, the lean vertex
-outputs', the one-pass blend's) and the rate card's: at `counting` or `on`, a bad end while one of them was trying is
+(`vu_zero_mark_stage_beside`: the cull's, the twins', the fast pixel build's, the one-pass
+blend's) and the rate card's: at `counting` or `on`, a bad end while one of them was trying is
 theirs. One line where there was a mark: `ico_pc: the previous run: index compaction: was being
 tried when it ended (a lost graphics device): off on this install until the version changes
 (blocked <version>)`, `... was on, its first pictures being counted, when it ended (a crash): the
@@ -951,6 +951,12 @@ the fast build's steps read its mark before it is rewritten (a bad end while it 
 its own: `...: the one-pass blend was being tried then (its mark): tried again` on their lines),
 and its step takes their stages as their steps read them (`fastps_mark_stage_read` the fast
 build's). The crash report's zip takes the file with the other marks.
+
+The other four steps read the compaction's stage as its step read it (`compact_mark_stage_read`,
+its step runs first): a bad end while it said `trying` (its test run again after a graphics API
+switch, their marks already `counting` or `on`) is its own, `...: the index compaction was being
+tried then (its mark): tried again` on their lines. The crash report's zip takes
+`compact-mark.txt` with the other marks.
 
 Each mark blocks only its own subject (`vu_zero_mark_blocks_beside`): the cull's step reads both
 marks before either is rewritten, so a bad end while the other attempt's mark said `trying` is that

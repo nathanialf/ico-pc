@@ -318,6 +318,10 @@ int main(int argc, char **argv)
         if (nd != NULL && nd[0] != '\0') {
             (void)remove(nd); /* the discard-free twins' (rd_nodiscard.h) */
         }
+        const char *cm = getenv("ICO_COMPACT_MARK");
+        if (cm != NULL && cm[0] != '\0') {
+            (void)remove(cm); /* the index compaction's (rd_vu_compact.h) */
+        }
         const char *op = getenv("ICO_ONEPASS_MARK");
         if (op != NULL && op[0] != '\0') {
             (void)remove(op); /* the one-pass blend's (rd_onepass.h) */

@@ -35,6 +35,7 @@ static const char kTrace[] = "\x08\x01\x12\x04tomb"; /* a tombstone's protobuf b
 static const char kZeroMark[] = "ico-pc vu-zero mark: stage on\n";
 static const char kAheadMark[] = "ico-pc ahead mark: on\n";
 static const char kOnepassMark[] = "counting v0.11.16\n";
+static const char kCompactMark[] = "failed v0.11.16\n";
 static const char kVerdict[] = "the previous run ended: it was killed (signal 9, SIGKILL) (...)";
 
 #define CHECK(cond)                                                                                \
@@ -138,6 +139,9 @@ int main(int argc, char **argv)
         /* the one-pass blend's (onepass_mark.h): there, so in the zip */
         snprintf(p, sizeof p, "%s/onepass-mark.txt", dir);
         CHECK(put(p, kOnepassMark, sizeof kOnepassMark - 1) == 0);
+        /* the index compaction's (compact_mark.h): there, so in the zip */
+        snprintf(p, sizeof p, "%s/compact-mark.txt", dir);
+        CHECK(put(p, kCompactMark, sizeof kCompactMark - 1) == 0);
     }
     ico_report_set_exit_info(kVerdict, "exit-trace-1794862215000.pb");
 
@@ -197,6 +201,8 @@ int main(int argc, char **argv)
         CHECK(mz_zip_reader_locate_file(&z, "fastps-mark.txt", NULL, 0) < 0);
         CHECK(entry(&z, "onepass-mark.txt", (const unsigned char *)kOnepassMark,
                     sizeof kOnepassMark - 1, &st));
+        CHECK(entry(&z, "compact-mark.txt", (const unsigned char *)kCompactMark,
+                    sizeof kCompactMark - 1, &st));
     }
     {
         /* the verdict in report.txt's head, after the memory line */
@@ -231,6 +237,8 @@ int main(int argc, char **argv)
         snprintf(p, sizeof p, "%s/ahead-mark.txt", dir);
         (void)ico_remove(p);
         snprintf(p, sizeof p, "%s/onepass-mark.txt", dir);
+        (void)ico_remove(p);
+        snprintf(p, sizeof p, "%s/compact-mark.txt", dir);
         (void)ico_remove(p);
         /* the trace stays on disc: the report takes it only when named */
     }

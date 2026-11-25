@@ -480,10 +480,19 @@ void rd__vu_compact_own_selftest(RdTargetRec *t)
                                           px + (size_t)k * size, size);
         }
         char where[256] = "";
-        if (!okRef || !okWith || rhi_device_lost()) {
+        if (!okRef) {
+            /* the references are drawn without it: never its verdict */
+            snprintf(unchecked, sizeof unchecked, "its replays without it failed%s",
+                     rhi_device_lost() ? " (the graphics device lost)" : "");
+        } else if (rhi_device_lost()) {
+            /* a loss with it is measured, and its mark keeps it off;
+               anything else that stopped a replay or a read (a command
+               list, a texture, a staging buffer) is no verdict */
             result = 0;
-            snprintf(why, sizeof why, "the device failed in its replays %s it",
-                     !okRef ? "without" : "with");
+            snprintf(why, sizeof why, "the graphics device was lost in its replays with it");
+        } else if (!okWith) {
+            snprintf(unchecked, sizeof unchecked,
+                     "a replay with it could not be made, the device not lost");
         } else if (!okRead) {
             snprintf(unchecked, sizeof unchecked, "its pictures could not be read back");
         } else if (fallbacks != 0u) {

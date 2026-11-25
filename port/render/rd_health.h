@@ -1,7 +1,10 @@
 /* rd_health.h: the picture-health report (rd_health.c the pure rule,
  * rd_health_live.c the renderer's part; docs/port/ANDROID_DIAGNOSTICS.md
  * "The picture-health report"; issue 179).  It reports only: nothing is
- * switched off by it.
+ * switched off by it, but every collected record with VU draws outside the
+ * self-tests is handed to the index compaction's Mali-G52 form
+ * (rd_vu_compact.h rd__vu_compact_play_health), which turns itself off at
+ * the first one with stamps unwritten.
  *
  * v0.11.6 drew a black picture on the Mali-G52 MC2 of issue 179's reporter
  * (driver v1.r32p1): from the first 3D picture on, every picture's GPU work
@@ -30,7 +33,9 @@
  *
  * The tests' fake ICO_RD_HEALTH_FAKE=selftest (docs/port/TESTING.md; no
  * setting): every record collected inside the index compaction's start-up
- * self-test read as a hang (the self-test then fails). */
+ * self-test read as a hang (the self-test then fails); =play every record
+ * with VU draws outside the self-tests (the compaction's form then turns
+ * off in play). */
 #ifndef PORT_RENDER_RD_HEALTH_H
 #define PORT_RENDER_RD_HEALTH_H
 
