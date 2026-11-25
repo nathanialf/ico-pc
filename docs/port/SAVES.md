@@ -433,7 +433,10 @@ whole state and a table once per file). When it still refuses a changed function
 in, the log line says how it was compared: `the function <f> changed (its instructions differ)`
 under the current code hash rules, or `(here it holds a linker patch site, which the saving
 build's code hash rules count: maybe not its code)` when the state's older rules count this
-build's patch site as code and no table translated them. That work runs on a worker thread
+build's patch site as code and no table translated them. A word into read-only data whose
+bytes around it are found nowhere here may be placed by its bytes from the word on alone, found
+exactly once: by content, not proven, logged per word ([PLATFORM.md](PLATFORM.md#saving-and-loading)).
+That work runs on a worker thread
 (`port/save/state_verdicts.h`): the page lists every slot from its header at once and a row fills
 when its verdict comes (`state: slot N's verdict in T ms: exact E ms (legacy table L ms),
 checkpoint C ms`); a Load takes the slot's verdict when the file and the settings are unchanged,

@@ -77,7 +77,25 @@
  * that holds them (by the prefix and the hash for the second form): one
  * place translates the word to it plus the offset; none refuses ("the text
  * ... is missing here"), more than one refuses ("... is in more than one
- * place here"): a load never picks one.
+ * place here"): a load never picks one.  The window holds the bytes before
+ * the word too: the word may name an object starting at it or one ending at
+ * it (C's end pointer), and only the same bytes on both sides here prove
+ * one translation serves both.  The linker merges and orders the program's
+ * anonymous constants (.rodata.cst8, .rodata.cst16) anew in every link, so
+ * a word at the start of one (most likely a stale page value in a live
+ * frame: 0x294000 in the owner's v0.11.15-rc6 state) finds no window in a
+ * later build.  Only then a second attempt (the owner's choice, by
+ * content, NOT proven): the window's bytes from the word on (at least 8)
+ * found exactly once in this build's read-only data place the word there,
+ * when they are not one repeated byte (fill: zeros, 0xff, padding, whose
+ * place says nothing of an object) and the word is no page word of the
+ * record (a page an ADRP of a function with a live frame makes: the page
+ * rule decides those, never this).  Each such placement is counted and
+ * logged (IcoXbVerdict.fwd); an 8-byte coincidence could misplace a live
+ * pointer, which would show as wrong behaviour after the resume.  Else the
+ * refusal says where the save found the word and whether its bytes from the
+ * word on lie here once (or twice).  The points do not stop at the first
+ * that blocks: every one is counted and named (IcoXbVerdict.more).
  *
  * Page words (arm64).  clang keeps an ADRP's page address in a
  * callee-saved register across calls and adds a variable's offset in its
@@ -131,7 +149,8 @@
  * pool's size and the list's count after it), then the units (48 bytes
  * each), data (48; 40 in a version 1 record, without the input section),
  * points (48; 64 in version 3, a window's length, offset, hash, pool place
- * and nearest symbol) and blocks (40) records, in version 3 the list of
+ * and nearest symbol, and since rules 3 where the save found the word: its
+ * region's name at 44 and its address at 56, zeros before) and blocks (40) records, in version 3 the list of
  * words nothing names (40 each), then the names, and in version 3 the pool
  * of the windows' bytes.  The header's word at 60 counts the words nothing
  * names (0 in a record from before it was counted).  Versions 1 and 2 are
@@ -343,6 +362,22 @@ enum {
     ICO_XB_BAD     /* the section is damaged */
 };
 
+/* a read-only word placed by its forward bytes alone (ico_xb_check: its
+   two-sided window found nowhere here; not proven, logged) */
+#define ICO_XB_FORWARD_LOG 16
+
+typedef struct IcoXbForward {
+    uint64_t old, now; /* the word in the saving build, its place here */
+    char old_sym[48];  /* the symbol nearest at or below old there ("" none) */
+    uint64_t old_off;  /* old minus that symbol */
+    char now_sym[48];  /* the same here */
+    uint64_t now_off;
+    char where[48];         /* where the save found the word ("" not recorded) */
+    uint64_t where_at;      /* the word's address there */
+    unsigned char bytes[8]; /* the first forward bytes (n_bytes of them shown) */
+    unsigned n_bytes;       /* how many forward bytes matched in all */
+} IcoXbForward;
+
 typedef struct IcoXbVerdict {
     int kind;      /* ICO_XB_* */
     char why[200]; /* the log's words for the blocker ("" when ok) */
@@ -377,6 +412,14 @@ typedef struct IcoXbVerdict {
        alone), 2 when compared under the current rules (the instructions
        differ: a patch site compares as the load it stands for), 0 else */
     int code_patch;
+    /* the words placed by their forward bytes alone (all counted; the first
+       ICO_XB_FORWARD_LOG kept for the log) */
+    unsigned forward;
+    IcoXbForward fwd[ICO_XB_FORWARD_LOG];
+    /* the points that blocked it: their count, the first in why, the others
+       (as many as fit) in more */
+    unsigned blocked;
+    char more[480];
     /* text windows of whole literals found at several literal starts, all
        the same bytes: the first in address order taken (state_xbuild.c) */
     unsigned twins;

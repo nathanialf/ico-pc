@@ -1090,6 +1090,7 @@ typedef struct Pg {
 } Pg;
 
 static int s_pg_legacy, s_pg_twice;
+static const char *s_pg_extra; /* more symbol lines (test_window_page) */
 /* test_pages_plain: s_big's offset in the image (0: none), a data object
    across a page start, and f_s (f_b + 0x40): an ADRP of s_big + 0x180 */
 static uint64_t s_pg_big;
@@ -1191,6 +1192,9 @@ static int pg_make(Pg *g, uint64_t f_a, uint64_t f_b, uint64_t bss, uint64_t buf
     }
 #undef L3
 #undef L4
+    if (s_pg_extra != NULL) {
+        n += (size_t)snprintf(nm + n, sizeof nm - n, "%s", s_pg_extra);
+    }
     memcpy(g->nm, nm, n);
     g->nm_n = n;
     memset(&e, 0, sizeof e);
@@ -1910,6 +1914,255 @@ static void test_xlate(void)
     pg_free(&b);
 }
 
+/* --- a word at the start of an anonymous constant ---------------------------------- */
+
+#define WP_RO 0x8000u /* this test's read-only range: [WP_RO, WP_RO + 0x2000) */
+
+static void wp_put(Pg *g, uint64_t off, uint8_t seed, size_t n)
+{
+    size_t i;
+
+    for (i = 0; i < n; i++) {
+        g->mem[off + i] = (uint8_t)(seed + 7u * i + 1u);
+    }
+    g->mem[off] = 0x01; /* no text: a constant's bytes */
+}
+
+static void wp_image(const Pg *g, IcoStateImage *im)
+{
+    pg_image(g, im);
+    im->n_ro = 1;
+    im->ro_lo[0] = g->lo + WP_RO;
+    im->ro_hi[0] = g->lo + WP_RO + 0x2000u;
+}
+
+/* A's record of a word on fiber 1's stack and one in the arena */
+static void *wp_save(const Pg *a, const uint64_t *stack, int ns, const uint64_t *arena, int na,
+                     size_t *n)
+{
+    IcoXbProc p;
+    IcoXbRefs *r;
+    IcoXbStats st;
+    void *sec = NULL;
+
+    memset(&p, 0, sizeof p);
+    p.tab = a->tab;
+    wp_image(a, &p.image);
+    p.game_lo[1] = a->lo + a->bss;
+    p.game_hi[1] = p.game_lo[1] + PG_BSS_N;
+    p.any_address = 1;
+    p.judge_lo = 0x0000007400000000ull;
+    *n = 0;
+    r = ico_xb_begin(&p);
+    if (r == NULL) {
+        return NULL;
+    }
+    ico_xb_frames(r, 1);
+    ico_xb_where(r, "fiber slot 0's stack");
+    ico_xb_scan(r, stack, (size_t)ns * 8u, (uint64_t)(uintptr_t)stack, 1);
+    ico_xb_frames(r, 0);
+    ico_xb_where(r, "the arena");
+    ico_xb_scan(r, arena, (size_t)na * 8u, (uint64_t)(uintptr_t)arena, 1);
+    CHECK(ico_xb_finish(r, &sec, n, &st) == 0 && st.windows == (unsigned)(ns + na),
+          "ico_xb_finish: %u windows", st.windows);
+    return sec;
+}
+
+/* wp_save without its windows' count (a page word, a return address) */
+static void *wp_save2(const Pg *a, const uint64_t *stack, int ns, const uint64_t *arena, int na,
+                      size_t *n)
+{
+    IcoXbProc p;
+    IcoXbRefs *r;
+    IcoXbStats st;
+    void *sec = NULL;
+
+    memset(&p, 0, sizeof p);
+    p.tab = a->tab;
+    wp_image(a, &p.image);
+    p.game_lo[1] = a->lo + a->bss;
+    p.game_hi[1] = p.game_lo[1] + PG_BSS_N;
+    p.any_address = 1;
+    p.judge_lo = 0x0000007400000000ull;
+    *n = 0;
+    r = ico_xb_begin(&p);
+    if (r == NULL) {
+        return NULL;
+    }
+    ico_xb_frames(r, 1);
+    ico_xb_where(r, "fiber slot 0's stack");
+    ico_xb_scan(r, stack, (size_t)ns * 8u, (uint64_t)(uintptr_t)stack, 1);
+    ico_xb_frames(r, 0);
+    ico_xb_where(r, "the arena");
+    ico_xb_scan(r, arena, (size_t)na * 8u, (uint64_t)(uintptr_t)arena, 1);
+    CHECK(ico_xb_finish(r, &sec, n, &st) == 0, "ico_xb_finish");
+    return sec;
+}
+
+static int wp_check(const void *sec, size_t n, const Pg *b, const Pg *a, IcoXbVerdict *v)
+{
+    IcoXbNow now;
+
+    memset(&now, 0, sizeof now);
+    now.tab = b->tab;
+    wp_image(b, &now.image);
+    now.game_lo[1] = b->lo + b->bss;
+    now.game_hi[1] = now.game_lo[1] + PG_BSS_N;
+    now.old_game_lo[1] = a->lo + a->bss;
+    now.old_game_hi[1] = now.old_game_lo[1] + PG_BSS_N;
+    now.old_image_lo = 0x0000007400000000ull;
+    return ico_xb_check(sec, n, &now, v);
+}
+
+/* A's ADRP x26 of `page` in f_w (f_b + 0x80), as a function with a live
+   frame on fiber 1 holds it */
+static void wp_adrp(Pg *g, uint64_t page)
+{
+    put32le(g->mem + g->f_b + 0x80, adrp(g->lo + g->f_b + 0x80, g->lo + page, 26));
+    put32le(g->mem + g->f_b + 0x84, 0xD503201Fu); /* nop */
+    put32le(g->mem + g->f_b + 0x88, 0xD65F03C0u); /* ret */
+}
+
+/* the owner's v0.11.15-rc6 state rebuilt: a word on a thread's stack at a
+   page start between two named objects, the start of a 16-byte anonymous
+   constant whose 8-byte neighbour before it the next link put elsewhere
+   (merged constants are ordered anew): its two-sided window is found
+   nowhere, and its 8 bytes from the word on, found once, place it (the
+   owner's choice: by content, not proven), counted and kept for the log.
+   Refused instead: those bytes found twice, one repeated byte, and a word
+   the record holds as a page word too (an ADRP of a function with a live
+   frame makes it; the page rule decides such a word, never the bytes).  A
+   page word alone goes by its ADRP.  The two-sided window wins where it is
+   found; a word inside an object that moved whole is translated by it; two
+   words that block are both named */
+static void test_window_page(void)
+{
+    static const char extra[] = "0000000000008f00 00000000000000f0 r kObjA\n"
+                                "0000000000009100 0000000000000040 r kObjB\n"
+                                "0000000000001180 T f_w\n";
+    static const char extra_b[] = "0000000000008f00 00000000000000f0 r kObjA\n"
+                                  "0000000000009100 0000000000000040 r kObjB\n"
+                                  "0000000000001380 T f_w\n";
+    Pg a, b;
+    IcoXbVerdict v;
+    uint64_t stack[2], arena[2];
+    void *sec;
+    size_t n = 0;
+    int k;
+
+    s_pg_extra = extra;
+    k = pg_make(&a, 0x1000, 0x1100, PG_BSS, 0x13000);
+    s_pg_extra = extra_b;
+    if (k != 0 || pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) != 0) {
+        s_pg_extra = NULL;
+        pg_free(&a);
+        pg_free(&b);
+        return;
+    }
+    s_pg_extra = NULL;
+    /* A: the 8-byte constant at 0x8ff8, the 16-byte one at the page start
+       0x9000 after it (between kObjA and kObjB); B: the two apart */
+    wp_put(&a, WP_RO + 0xFF8u, 0x10, 8);
+    wp_put(&a, WP_RO + 0x1000u, 0x60, 16);
+    wp_put(&b, WP_RO + 0x1800u, 0x10, 8);
+    wp_put(&b, WP_RO + 0x400u, 0x60, 16);
+    stack[0] = a.lo + WP_RO + 0x1000u;
+    sec = wp_save(&a, stack, 1, NULL, 0, &n);
+    k = sec != NULL ? wp_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_OK && v.forward == 1 && pg_xlate(&v, stack[0], 1) == b.lo + WP_RO + 0x400u &&
+              v.fwd[0].old == stack[0] && v.fwd[0].now == b.lo + WP_RO + 0x400u &&
+              v.fwd[0].n_bytes == 8 && v.fwd[0].bytes[0] == 0x01 &&
+              strcmp(v.fwd[0].where, "fiber slot 0's stack") == 0 &&
+              v.fwd[0].where_at == (uint64_t)(uintptr_t)&stack[0] &&
+              strcmp(v.fwd[0].old_sym, "kObjA") == 0 && v.fwd[0].old_off == 0x100,
+          "the owner's word: placed by its forward bytes, kept for the log: %d %u %s", k, v.forward,
+          v.why);
+    ico_xb_verdict_free(&v);
+    /* its forward bytes twice in B: refused, said so */
+    wp_put(&b, WP_RO + 0x1C00u, 0x60, 8);
+    k = sec != NULL ? wp_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_DATA && v.forward == 0 &&
+              strstr(v.why, "(16 bytes) is missing here, a word of fiber slot 0's stack at 0x") !=
+                  NULL &&
+              strstr(v.why, "its 8 bytes from the word on lie here more than once") != NULL,
+          "its forward bytes twice here: refused: %d %s", k, v.why);
+    ico_xb_verdict_free(&v);
+    memset(b.mem + WP_RO + 0x1C00u, 0, 8);
+    /* the neighbour kept beside it in B: the two-sided window places it */
+    wp_put(&b, WP_RO + 0x3F8u, 0x10, 8);
+    k = sec != NULL ? wp_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_OK && v.forward == 0 && pg_xlate(&v, stack[0], 1) == b.lo + WP_RO + 0x400u,
+          "the two-sided window found: it wins: %d %u %s", k, v.forward, v.why);
+    ico_xb_verdict_free(&v);
+    memset(b.mem + WP_RO + 0x3F8u, 0, 8);
+    free(sec);
+    /* one repeated byte from the word on (eight 0x07 after the 8-byte
+       constant), found once here: refused all the same */
+    wp_put(&a, WP_RO + 0x17F8u, 0x30, 8);
+    memset(a.mem + WP_RO + 0x1800u, 0x07, 8);
+    wp_put(&b, WP_RO + 0x1A00u, 0x30, 8);
+    b.mem[WP_RO + 0x1A08u] = 0x55;            /* B: the window is missing */
+    memset(b.mem + WP_RO + 0x1B00u, 0x07, 8); /* and eight 0x07 lie here once */
+    stack[0] = a.lo + WP_RO + 0x1800u;        /* 0x9800: eight 0x07 after the constant */
+    sec = wp_save(&a, stack, 1, NULL, 0, &n);
+    k = sec != NULL ? wp_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_DATA && v.forward == 0 && strstr(v.why, "is missing here") != NULL &&
+              strstr(v.why, "lie here") == NULL,
+          "one repeated byte from the word on: refused: %d %s", k, v.why);
+    ico_xb_verdict_free(&v);
+    free(sec);
+    /* the word a page word as well (f_w, a function with a live frame on
+       fiber 1, makes its page by ADRP) and an ordinary address in the arena:
+       the bytes never place it, refused; as a page word alone, the page
+       rule translates it by f_w's ADRP here */
+    wp_adrp(&a, WP_RO + 0x1000u);
+    wp_adrp(&b, WP_RO + 0x1000u);
+    stack[0] = a.lo + WP_RO + 0x1000u;
+    stack[1] = a.lo + a.f_b + 0x84; /* a return address in f_w */
+    arena[0] = a.lo + WP_RO + 0x1000u;
+    sec = wp_save2(&a, stack, 2, arena, 1, &n);
+    k = sec != NULL ? wp_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_DATA && v.forward == 0 && strstr(v.why, "is missing here") != NULL &&
+              strstr(v.why, "a page word too, which its bytes never place") != NULL,
+          "a page word that is an ordinary address too: the bytes do not place it: %d %s", k,
+          v.why);
+    ico_xb_verdict_free(&v);
+    free(sec);
+    sec = wp_save2(&a, stack, 2, NULL, 0, &n);
+    k = sec != NULL ? wp_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_OK && v.forward == 0 && v.pages == 1 &&
+              pg_xlate(&v, stack[0], 1) == b.lo + WP_RO + 0x1000u,
+          "a page word alone: its ADRP here decides: %d %u %s", k, v.pages, v.why);
+    ico_xb_verdict_free(&v);
+    free(sec);
+    /* a word 8 bytes into a 32-byte object that moved whole, and two words
+       that block (the 8-byte constant at 0x8ff8's end, missing both ways;
+       the repeated-byte one): both named */
+    wp_put(&a, WP_RO + 0x800u, 0xA0, 32);
+    wp_put(&b, WP_RO + 0xC00u, 0xA0, 32);
+    arena[0] = a.lo + WP_RO + 0x808u;
+    sec = wp_save2(&a, stack, 0, arena, 1, &n);
+    k = sec != NULL ? wp_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_OK && pg_xlate(&v, arena[0], 0) == b.lo + WP_RO + 0xC08u,
+          "a word inside an object that moved whole: translated: %d %s", k, v.why);
+    ico_xb_verdict_free(&v);
+    free(sec);
+    memset(b.mem + WP_RO + 0x1A00u, 0, 9);
+    arena[0] = a.lo + WP_RO + 0x1800u;
+    arena[1] = a.lo + WP_RO + 0x804u;
+    memset(b.mem + WP_RO + 0xC00u, 0, 32);
+    sec = wp_save2(&a, stack, 0, arena, 2, &n);
+    k = sec != NULL ? wp_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_DATA && v.blocked == 2 && strstr(v.more, "is missing here") != NULL,
+          "two words that block: both named: %d %u %s / %s", k, v.blocked, v.why, v.more);
+    ico_xb_verdict_free(&v);
+    free(sec);
+    printf("state_name: a read-only word placed by its forward bytes, the refusals and the page "
+           "rule\n");
+    pg_free(&a);
+    pg_free(&b);
+}
+
 /* one page word on two fibers: fiber 1 holds the page f_s's ADRP of s_big
    + 0x180 makes, fiber 2 the same value as an ordinary address into s_big
    (no producer there): each fiber's word read as it holds it, the second
@@ -1973,5 +2226,6 @@ int main(void)
     test_pages_plain();
     test_legacy();
     test_xlate();
+    test_window_page();
     return ico_check_summary("state_name");
 }
