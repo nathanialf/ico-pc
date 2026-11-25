@@ -624,13 +624,15 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   (`ICO_RD_AB=off`): on, no pair in one pass, nothing unfused, every pair the second run took kept
   as "timed without it" (the judge's way back taken), every target the first run's. No device: SKIP.
 - `rd_vuprepass_selftest_onepass`, `_onepass_dynamic`, `_onepass_sabotage`, `_onepass_cut`,
-  `_onepass_unchecked`, `_onepass_marked` (`rd_onepass.cmake`, through
+  `_onepass_unchecked`, `_onepass_sliver`, `_onepass_readfail`, `_onepass_marked` (`rd_onepass.cmake`, through
   `rd_vuprepass_selftest_test` and `test/rd_vuprepass_selftest.cmake`, the Mali fakes without
   dual-source blending, the mark in a file of each test's own): the device check with every state
   in the pipeline keys and with dynamic blend state: a code 32 frame with pairs in one pass under
   A, a code 36 frame fused today and unfused under B and C with pairs in one pass (the reporter's
-  pattern drawn), every arm measured over the 13 cases (lavapipe's blender decides between "the
-  same bytes" and "differs"), arm D none, the verdict and the mark `counting` or `failed`; the
+  pattern drawn), A, B and C the same bytes over the 13 cases, arm D none, both classes in use and
+  the mark `counting`; a texel added to C on the frames today's drew nothing on (`sliver`): C
+  differs, the plain class alone; the first reference read failed without a loss (`read`): A not
+  checked, no verdict, the mark removed; the
   constant 127/255 in A and C caught: nothing in use, the mark `failed`; 127/255 in C alone: the
   plain class alone in use; every one-pass pipeline not made: A and C not checked, no verdict, the
   mark removed; the install's mark (`ICO_ONEPASS_BLOCK`): off, no check, the mark not written.

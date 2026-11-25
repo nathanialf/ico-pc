@@ -1407,3 +1407,17 @@ const char *rd__nd_clip_case(int k, uint32_t w, uint32_t h, float out[3][3])
     caseCorners(k, w, h, out);
     return kClip[k].name;
 }
+
+/* the texel centres case k's corners should cover on SCENE t (the clipper
+   check's own estimate, expectedAt: code32 the region test's whole
+   triangle, else the one cut at GS Z 0); 0 for the cases whose plane runs
+   through the eye */
+uint64_t rd__nd_clip_case_expected(int k, const RdTargetRec *t, bool code32)
+{
+    if (k < 0 || k >= NC_CASES || t == NULL) {
+        return 0;
+    }
+    float c[3][3];
+    caseCorners(k, t->w, t->h, c);
+    return expectedAt((const float (*)[3])c, t, code32);
+}

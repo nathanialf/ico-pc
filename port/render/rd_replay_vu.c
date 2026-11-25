@@ -1252,12 +1252,6 @@ static int vuFuseVerdict(const Replay *r, const RdStateBlock *fan, const DrawSet
        vu_common.hlsli vu_dual_out_f's fused argument */
     RdDrawPass joined;
     const bool split = vuNoDualJoin(cut, nc, &joined);
-    if (split && rd__op_unfuse(cut, nc, kick, nk, s_vuAlpha.hi)) {
-        /* the one-pass blend (rd_onepass.h): the cut's pair in one pass, so
-           not fused: the cut once and the kick once, each under its own
-           state (the draws the fusion stands for) */
-        return RD_VU_FUSE_PASSES;
-    }
     if ((!split && nc != 1) || nk != 1) {
         return RD_VU_FUSE_PASSES;
     }
@@ -1290,7 +1284,16 @@ static int vuFuseVerdict(const Replay *r, const RdStateBlock *fan, const DrawSet
         off.fix = r->st.ds.blendFix;
         off.dstWant = 0;
     }
-    return vuPassEqual(&off, &kick[0]) ? VU_FUSE_YES : RD_VU_FUSE_PLANS;
+    if (!vuPassEqual(&off, &kick[0])) {
+        return RD_VU_FUSE_PLANS;
+    }
+    if (split && rd__op_unfuse(cut, nc, kick, nk, s_vuAlpha.hi)) {
+        /* the one-pass blend (rd_onepass.h): a pair that would fuse, its
+           cut's pair in one pass, so not fused: the cut once and the kick
+           once, each under its own state (the draws the fusion stands for) */
+        return RD_VU_FUSE_PASSES;
+    }
+    return VU_FUSE_YES;
 }
 
 /* One VU draw call under the planned passes of state s.  vs: the vertex

@@ -33,7 +33,7 @@
 enum { O_HELD, O_ON, O_OFF };
 
 /* ICO_RD_ONEPASS_SABOTAGE (tests) */
-enum { OS_NONE, OS_CONSTANT, OS_CUT, OS_UNMADE };
+enum { OS_NONE, OS_CONSTANT, OS_CUT, OS_UNMADE, OS_SLIVER, OS_READ };
 
 static struct {
     int state;
@@ -139,6 +139,8 @@ void rd__op_init(void)
                    : strcmp(sb, "constant") == 0 ? OS_CONSTANT
                    : strcmp(sb, "cut") == 0      ? OS_CUT
                    : strcmp(sb, "unmade") == 0   ? OS_UNMADE
+                   : strcmp(sb, "sliver") == 0   ? OS_SLIVER
+                   : strcmp(sb, "read") == 0     ? OS_READ
                                                  : OS_NONE;
     if (s_o.sabotage != OS_NONE) {
         rd__log("one-pass blend: ICO_RD_ONEPASS_SABOTAGE: %s",
@@ -146,6 +148,11 @@ void rd__op_init(void)
                                               "and C (both must differ)"
                 : s_o.sabotage == OS_CUT    ? "the constant's alpha 127/255 in the check's arm C "
                                               "on its code 36 frames (C must differ, A not)"
+                : s_o.sabotage == OS_SLIVER ? "arm C's picture given a texel on the code 36 "
+                                              "frames today's two passes drew nothing on (C must "
+                                              "differ)"
+                : s_o.sabotage == OS_READ   ? "the first frame's reference read taken as failed "
+                                              "without a device loss (not checked, no verdict)"
                                             : "every one-pass pipeline taken as not made in the "
                                               "check (its arms not checked)");
     }
@@ -472,6 +479,11 @@ bool rd__op_try_begin(void)
 
 void rd__op_verdict(uint32_t classes, bool measured, const char *why)
 {
+    if (s_o.state == O_OFF && s_o.tried && s_o.markPath[0] != '\0') {
+        /* turned off during the check (a background fault): no verdict of
+           the check's, never "trying" left for a later end to be blamed on */
+        (void)ico_remove(s_o.markPath);
+    }
     if (s_o.state == O_OFF || s_o.forced) {
         return;
     }

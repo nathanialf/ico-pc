@@ -107,7 +107,10 @@
  * ICO_RD_ONEPASS_SABOTAGE=constant (the constant 127/255 in arms A and C:
  * both fail), =cut (127/255 on the code 36 frames' C alone: C fails, A
  * stays), =unmade (every one-pass pipeline taken as not made in the check:
- * "not checked"). */
+ * "not checked"), =sliver (arm C's picture given a texel on a code 36 frame
+ * where today's two passes drew nothing: C must differ), =read (the first
+ * frame's reference read taken as failed without a device loss: not
+ * checked, no verdict). */
 #ifndef PORT_RENDER_RD_ONEPASS_H
 #define PORT_RENDER_RD_ONEPASS_H
 
@@ -264,7 +267,9 @@ void rd__op_check_take(uint64_t one[2], uint64_t *unfused, uint64_t *unmade);
 void rd__op_verdict(uint32_t classes, bool measured, const char *why);
 /* the check's mark "trying" (synced; false: not written, not tried) */
 bool rd__op_try_begin(void);
-/* the tests' sabotage words: 0 none, 1 constant, 2 cut, 3 unmade */
+/* the tests' sabotage words: 0 none, 1 constant, 2 cut, 3 unmade, 4 sliver
+   (arm C's picture changed on a code 36 frame today's drew nothing on),
+   5 read (the first frame's reference read taken as failed, no loss) */
 int rd__op_sabotage(void);
 /* the tests' forced state (ICO_RD_ONEPASS=plain|full): no check */
 bool rd__op_forced(void);
@@ -281,6 +286,9 @@ uint32_t rd__pipeline_count_onepass(void);
    frame w x h GS pixels (model space), its name */
 int rd__nd_clip_case_count(void);
 const char *rd__nd_clip_case(int k, uint32_t w, uint32_t h, float out[3][3]);
+/* the texel centres case k should cover on SCENE t (the clipper check's
+   estimate; code32 the whole triangle, else the one cut at GS Z 0) */
+uint64_t rd__nd_clip_case_expected(int k, const struct RdTargetRec *t, bool code32);
 
 /* The 10 s VU line's clause (port/platform/window_host.c, after the fast
    pixel build's), the block's n replays: "; one-pass blend: P pairs a

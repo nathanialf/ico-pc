@@ -2174,10 +2174,16 @@ one-pass blend draws a proven pair once. `port/render/rd_onepass.h` says it all.
   kept (the suspect alone); C both classes and the unfuse; each compared with REF byte for byte.
   A positive control (the constant 127/255) must differ where an arm took a pair. Every frame's
   and arm's pipelines are gathered in one gathering first; a replay that found a pipeline not made
-  is drawn again once the background queue is made, and one still without it compares nothing
-  ("not checked"), never a verdict. In use: the plain class where A passed; the cut class where C,
-  A and B passed (or nothing fused on the device). Only arms not checked: no verdict, the mark
-  removed, the check again at the next start.
+  is drawn again once the background queue is made, and one still without it, or one whose replay
+  or read failed without a device loss, compares nothing ("not checked"), never a verdict. A frame
+  is compared whenever either form drew: nothing through today's two passes and something through
+  the arm is a difference (the shape of the stretched slivers); nothing through either is the same
+  where the case covers no texel by design (an edge on a view ray) and "not tested" where it should
+  have drawn. In use: the plain class where A passed; the cut class where C, A and B passed, B with
+  "nothing fused" only where the device fuses no command at all (the fuse or its merge builds
+  off): frames that did not fuse on a device that fuses leave B not tested and the cut class off.
+  Only arms not checked, a failed read or a frame that could not be built: no verdict, the mark
+  removed, the check again at the next start; a device loss is measured (`failed`).
 - **Never waited for:** its pipelines go through the twins' background queue: a pair whose
   one-pass pipeline is not made yet is drawn in two passes, and a code 36 command is unfused only
   once the cut's one-pass pipeline and the kick's own are made. With the device's dynamic blend
