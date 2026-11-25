@@ -2163,6 +2163,99 @@ static void test_window_page(void)
     pg_free(&b);
 }
 
+/* --- two ADRPs of one page there, two pages here ------------------------------------ */
+
+/* f_p at f_b + 0x100: two ADRPs of the bss's first page (0x100 and 0xe00
+   into it; in B, whose bss lies 0x400 on, two pages) and a call (its
+   return address the thread's).  kind 0: the first's page dies in place
+   (an ADD of its offset), the second, x25, lives across the call;
+   1: both live (the first stored to the stack too); 2: both die in place */
+static void pp_code(Pg *g, int kind)
+{
+    const uint64_t f = g->f_b + 0x100, t1 = g->bss + 0x100, t2 = g->bss + 0xE00;
+    const uint64_t at = g->lo + f;
+    uint32_t w[8];
+    int n = 0, i;
+
+    w[n++] = adrp(at, g->lo + t1, 1);
+    w[n++] = kind == 1 ? 0xF90007E1u                                  /* str x1, [sp, #8] */
+                       : 0x91000021u | (uint32_t)(t1 & 0xFFFu) << 10; /* add x1, x1, #lo */
+    w[n++] = adrp(at + 8, g->lo + t2, kind == 2 ? 2 : 25);
+    w[n++] = kind == 2 ? 0x91000042u | (uint32_t)(t2 & 0xFFFu) << 10 /* add x2, x2, #lo */
+                       : 0xD503201Fu;                                /* nop */
+    w[n] = 0x94000000u | (uint32_t)(((int64_t)0x1800 - (int64_t)(f + 4u * (uint64_t)n)) / 4 &
+                                    0x3FFFFFF); /* bl ico_diag_init */
+    n++;
+    w[n++] = kind == 2
+                 ? 0xD503201Fu
+                 : 0xB9400328u | (uint32_t)((t2 & 0xFFFu) / 4u) << 10; /* ldr w8, [x25, #lo] */
+    w[n++] = 0xD65F03C0u;
+    for (i = 0; i < n; i++) {
+        put32le(g->mem + f + 4u * (uint64_t)i, w[i]);
+    }
+}
+
+/* the owner's rc10 log, line 1004 (iosMcManager+0x2c and +0x78): a page word
+   on fiber 1 that two ADRPs of the function it waits in make there, and that
+   are two pages here.  The one whose page dies in place (an ADD consumes it
+   before any call) cannot be what the thread holds: taken from the other,
+   logged; both live: refused, both named; both die in place: refused.  A
+   refusal goes on: a window found nowhere and the page are both named */
+static void test_page_split(void)
+{
+    static const char ea[] = "0000000000001200 T f_p\n";
+    static const char eb[] = "0000000000001400 T f_p\n";
+    Pg a, b;
+    IcoXbVerdict v;
+    uint64_t regs[2];
+    void *sec;
+    size_t n = 0;
+    IcoXbStats st;
+    int k, kind;
+
+    for (kind = 0; kind < 3; kind++) {
+        s_pg_extra = ea;
+        k = pg_make(&a, 0x1000, 0x1100, PG_BSS, 0x13000);
+        s_pg_extra = eb;
+        if (k != 0 || pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) != 0) {
+            s_pg_extra = NULL;
+            pg_free(&a);
+            pg_free(&b);
+            return;
+        }
+        s_pg_extra = NULL;
+        pp_code(&a, kind);
+        pp_code(&b, kind);
+        regs[0] = a.lo + a.f_b + 0x100 + 20; /* the return address after f_p's call */
+        regs[1] = a.lo + PG_BSS;             /* the page both ADRPs make in A */
+        sec = pg_save(&a, regs, 2, NULL, 0, NULL, 0, &n, &st);
+        CHECK(sec != NULL && st.pages == 1 && st.producers == 2,
+              "kind %d: one page word, two producers (%u, %u)", kind, st.pages, st.producers);
+        k = sec != NULL ? pg_check(sec, n, &b, &a, &v) : ICO_XB_BAD;
+        if (kind == 0) {
+            CHECK(k == ICO_XB_OK && v.page_resolved == 1 &&
+                      pg_xlate(&v, regs[1], 1) == b.lo + PG_BSS + 0x1000u &&
+                      strcmp(v.pres[0].by, "f_p+0x8") == 0 &&
+                      strstr(v.pres[0].all, "f_p+0x0 (its page dies in place)") != NULL,
+                  "the first's page dies in place: taken from x25's ADRP: %d %u %s / %s", k,
+                  v.page_resolved, v.why, v.pres[0].all);
+        } else if (kind == 1) {
+            CHECK(k == ICO_XB_DATA && v.page_resolved == 0 &&
+                      strstr(v.why, "f_p+0x0 and f_p+0x8 make: here they make two pages") != NULL,
+                  "both live: refused, both named: %d %s", k, v.why);
+        } else {
+            CHECK(k == ICO_XB_DATA &&
+                      strstr(v.why, "none of them can keep it past its own uses") != NULL,
+                  "both die in place: refused: %d %s", k, v.why);
+        }
+        ico_xb_verdict_free(&v);
+        free(sec);
+        pg_free(&a);
+        pg_free(&b);
+    }
+    printf("state_name: a page two ADRPs made, two pages here: by which page lives\n");
+}
+
 /* one page word on two fibers: fiber 1 holds the page f_s's ADRP of s_big
    + 0x180 makes, fiber 2 the same value as an ordinary address into s_big
    (no producer there): each fiber's word read as it holds it, the second
@@ -2227,5 +2320,6 @@ int main(void)
     test_legacy();
     test_xlate();
     test_window_page();
+    test_page_split();
     return ico_check_summary("state_name");
 }

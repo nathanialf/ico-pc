@@ -2092,10 +2092,21 @@ static void xb_log_extra(const IcoXbVerdict *v)
         fprintf(stderr, "state: %u more read-only words placed by their forward bytes alone\n",
                 v->forward - ICO_XB_FORWARD_LOG);
     }
+    for (i = 0; i < v->page_resolved && i < ICO_XB_PAGE_LOG; i++) {
+        const IcoXbPageRes *e = &v->pres[i];
+
+        fprintf(
+            stderr,
+            "state: fiber slot %u's page 0x%llx is taken here as 0x%llx, from the ADRP in %s: of "
+            "the ADRPs that made it there (%s), the others' pages die in place (used only as a "
+            "base before any call, return or store of it), so no paused thread holds them\n",
+            (unsigned)e->fiber, (unsigned long long)e->old, (unsigned long long)e->now, e->by,
+            e->all);
+    }
     if (v->blocked > 1) {
         fprintf(
             stderr,
-            "state: %u words block it, the first named in the slot's refusal line; the others: %s\n",
+            "state: %u things block it, the first named in the slot's refusal line; the others: %s\n",
             v->blocked, v->more);
     }
 }
@@ -3495,9 +3506,10 @@ static void perform_load(int slot)
                 "unchanged here, so it is translated (%u functions, %u data symbols, %u start-up "
                 "values and texts, %zu spans, %zu points; %u dead-frame words without one; %u "
                 "words naming nothing kept as numbers, first 0x%llx; %u texts had identical "
-                "twins, the first taken; %u words placed by forward bytes alone, not proven)\n",
+                "twins, the first taken; %u words placed by forward bytes alone, not proven; %u "
+                "page words taken from the ADRPs whose page lives)\n",
                 slot, sv, tv, xv.units, xv.data, xv.points, xv.n_span, xv.n_point, xv.soft_left,
-                xv.left, (unsigned long long)xv.first_left, xv.twins, xv.forward);
+                xv.left, (unsigned long long)xv.first_left, xv.twins, xv.forward, xv.page_resolved);
         log_fresh_blocks(slot, &xv);
     }
     {
