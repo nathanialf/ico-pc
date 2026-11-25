@@ -2056,6 +2056,50 @@ done:
    lock, read by vd_compute under the work lock) */
 static double s_legacy_ms;
 
+/* what a check adds to the log beyond its verdict: each read-only word it
+   placed by its forward bytes alone (state_xbuild.h: by content, not
+   proven), and every point that blocks it past the first */
+static void xb_log_extra(const IcoXbVerdict *v)
+{
+    unsigned i;
+
+    for (i = 0; i < v->forward && i < ICO_XB_FORWARD_LOG; i++) {
+        const IcoXbForward *e = &v->fwd[i];
+        char hex[3 * 8 + 1];
+        unsigned k;
+
+        hex[0] = '\0';
+        for (k = 0; k < e->n_bytes && k < sizeof e->bytes; k++) {
+            snprintf(hex + 2 * k, sizeof hex - 2 * k, "%02x", e->bytes[k]);
+        }
+        char where[96];
+
+        if (e->where[0] != '\0') {
+            snprintf(where, sizeof where, "a word of %s at 0x%llx", e->where,
+                     (unsigned long long)e->where_at);
+        } else {
+            snprintf(where, sizeof where, "where the save found it not recorded");
+        }
+        fprintf(stderr,
+                "state: the read-only word 0x%llx (%s+0x%llx in the saving build), %s, placed at "
+                "0x%llx (%s+0x%llx here) by its %u bytes from the word on (%s...) alone (not "
+                "proven): its two-sided window is found nowhere here\n",
+                (unsigned long long)e->old, e->old_sym[0] ? e->old_sym : "?",
+                (unsigned long long)e->old_off, where, (unsigned long long)e->now,
+                e->now_sym[0] ? e->now_sym : "?", (unsigned long long)e->now_off, e->n_bytes, hex);
+    }
+    if (v->forward > ICO_XB_FORWARD_LOG) {
+        fprintf(stderr, "state: %u more read-only words placed by their forward bytes alone\n",
+                v->forward - ICO_XB_FORWARD_LOG);
+    }
+    if (v->blocked > 1) {
+        fprintf(
+            stderr,
+            "state: %u words block it, the first named in the slot's refusal line; the others: %s\n",
+            v->blocked, v->more);
+    }
+}
+
 static int xb_probe_locked(const char *path, const char *commit, IcoXbVerdict *v)
 {
     static const char *names[ICO_STATE_MAX_ENTRIES];
@@ -2124,6 +2168,7 @@ static int xb_probe_locked(const char *path, const char *commit, IcoXbVerdict *v
 
         if (lr == 0) {
             k = ico_xb_check(sec3, n3, &now, v);
+            xb_log_extra(v);
             free(sec3);
             copy_free(&c);
             return k;
@@ -2188,6 +2233,7 @@ static int xb_probe_locked(const char *path, const char *commit, IcoXbVerdict *v
             }
         }
         k = ico_xb_check(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], &now, v);
+        xb_log_extra(v);
         if (v->xlated == 1) {
             fprintf(stderr,
                     "state: its code compared through the legacy table %s: rules %u hashes "
@@ -3449,9 +3495,9 @@ static void perform_load(int slot)
                 "unchanged here, so it is translated (%u functions, %u data symbols, %u start-up "
                 "values and texts, %zu spans, %zu points; %u dead-frame words without one; %u "
                 "words naming nothing kept as numbers, first 0x%llx; %u texts had identical "
-                "twins, the first taken)\n",
+                "twins, the first taken; %u words placed by forward bytes alone, not proven)\n",
                 slot, sv, tv, xv.units, xv.data, xv.points, xv.n_span, xv.n_point, xv.soft_left,
-                xv.left, (unsigned long long)xv.first_left, xv.twins);
+                xv.left, (unsigned long long)xv.first_left, xv.twins, xv.forward);
         log_fresh_blocks(slot, &xv);
     }
     {

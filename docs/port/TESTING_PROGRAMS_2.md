@@ -150,11 +150,15 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   address translated; a table of another build (one row not the record's hash: `another
   build's`) or checking by other rules is not used, and a function whose current-rules hash
   differs too is refused with `(its instructions differ)` (`test_xlate`). A word on a thread's
-  stack at a page start where a 16-byte anonymous constant follows an 8-byte one, the two apart
-  in B: refused (`(16 bytes) is missing here`) naming where the save found it (`a word of fiber
-  slot 0's stack at 0x..`) and that its 8 bytes from the word on lie in B once; with the
-  neighbour kept beside it in B it loads, translated to the constant's place; a word 8 bytes into
-  a 32-byte object that moved whole is translated by its bytes (`test_window_page`).
+  stack at a page start between two named objects, where a 16-byte anonymous constant follows
+  an 8-byte one that B put elsewhere: placed by its 8 bytes from the word on, found once in B,
+  counted and kept for the log (old and new place, the saving build's nearest symbol, where the
+  save found it, the bytes); those bytes twice in B: refused (`lie here more than once`); the
+  neighbour kept beside it: the two-sided window places it, none by forward bytes; eight 0x07
+  bytes from the word on, found once: refused (one repeated byte); the word a page word too
+  (a function with a live frame makes its page by ADRP) and an ordinary address in the arena:
+  refused; a page word alone: its ADRP here translates it; a word inside an object that moved
+  whole: translated; two words that block: both counted and named (`test_window_page`).
 
 - `dump_zip_test.c`, its scene ledger case (`dump_zip`): with a ledger text set
   (`ico_dump_zip_set_ledger`, [SCENE_LEDGER.md](SCENE_LEDGER.md#the-report)) a capture's zip that

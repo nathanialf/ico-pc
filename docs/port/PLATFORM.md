@@ -1365,7 +1365,7 @@ unchanged. Each distinct word is classed:
 | into a named variable of a unique name | the variable: name, ordinal, old start, size (exact when the file gave one); without a size (a GNU ld map names globals only, so its span runs to the next item and may hold the object's statics) also its input section's size and its offset in it | the variable, still unique, of the same exact size; without one, in an input section of the same size at the same offset (`the data around the variable <name> changed`) |
 | into a sized variable of a repeated name in data read-only once loaded (the read-only data, a section named `.data.rel.ro*`, `.rodata*` or `.rdata*`) | the variable by name and ordinal, its size and the XXH3-64 of its bytes with every 8-byte-aligned word that lies in the image masked (a relocated pointer: another value in every build and run; where the pointers lie stays in the hash) | the variable of that name and ordinal, of the same size and masked hash (`the read-only data <name> (number N of its name) changed`) |
 | at a value the game's data held at start-up (an initialised table's pointer, or one the game copied from it) | a point: the value's offset in the data range | its own start-up value at that offset, in its image |
-| into read-only data (a text of any length or encoding, a constant without a symbol, a sized constant's end address) | a window: bytes around it, grown until they occur once in the saving image's read-only data, and the word's offset in them (the bytes whole, or their length, hash and first 24 bytes past the record's pool) | the bytes in exactly one place of its read-only data (`the text "<text>" is missing here`, `... is in more than one place here`; `the read-only data at <symbol>+0x.. (N bytes) ...` for no text, then where the save found the word, `, a word of <region> at 0x..`, and for a missing window whose bytes from the word on lie here once, `; its N bytes from the word on lie here once, not those before`) |
+| into read-only data (a text of any length or encoding, a constant without a symbol, a sized constant's end address) | a window: bytes around it, grown until they occur once in the saving image's read-only data, and the word's offset in them (the bytes whole, or their length, hash and first 24 bytes past the record's pool) | the bytes in exactly one place of its read-only data (`the text "<text>" is missing here`, `... is in more than one place here`; `the read-only data at <symbol>+0x.. (N bytes) ...` for no text, then where the save found the word, `, a word of <region> at 0x..`, and for a missing window, how often its bytes from the word on lie here (`; its N bytes from the word on lie here more than once`); found once, they place the word, not proven (below)) |
 
 The start-up values are a copy of the game data range taken by a constructor in `state_host.c`,
 after the loader relocated the initialised pointers and before any game code.
@@ -1587,14 +1587,26 @@ ADR, which still hashes apart (whether that link uses the fix is not checked her
 constants (`.rodata.cst8`, `.rodata.cst16`) and can order them anew in each link. A word equal to
 the address where one such constant starts, after another, gets a window over both (the word
 may name the one starting there, or be the end pointer of the one before), and in a later build
-the two lie apart: the window is missing and the state is refused. A page-aligned
-word that no ADRP of a function on its thread's stack makes (most likely a stale value in a live
-frame's unwritten slot) is read this way: it is not a page any live code uses, but nothing proves
-it is not a pointer, and the readings left (the constant at it, the end of the one before, the
-pages other functions make there) translate to different places. The refusal says where the save
-found the word and whether its bytes from the word on lie here once; it is not lifted, because no
-reading is proven. Telling such a slot dead would need the frame's liveness (the function's own
-stack maps), which the save does not have.
+the two lie apart: the window is found nowhere. A page-aligned word that no ADRP of a function
+on its thread's stack makes (most likely a stale value in a live frame's unwritten slot) is read
+this way. Only then, by the owner's choice, a second attempt places the word **by content, not
+proven**: the window's bytes from the word on (at least 8) found exactly once in this build's
+read-only data place it there, when they are not one repeated byte (zeros, 0xff or other fill,
+whose place says nothing of an object; "exactly once" turns away most other common patterns
+itself) and the record holds no page word of that value (an ADRP of a function with a live
+frame makes such a page: the page rule decides it, never the bytes). An 8-byte coincidence
+could misplace a live pointer, which would show as wrong behaviour after the resume. Each
+placement is logged: `state: the read-only word 0x.. (<symbol>+0x.. in the saving build), a word
+of <region> at 0x.., placed at 0x.. (<symbol>+0x.. here) by its N bytes from the word on (<bytes>...)
+alone (not proven): its two-sided window is found nowhere here`, and the resume's line counts
+them (`N words placed by forward bytes alone, not proven`). The Save states page's verdict
+goes through the same check, so such a slot is listed as resuming. Otherwise the refusal says
+where the save found the word and whether its bytes from the word on lie here once or more
+than once. The check goes on through every point, so a refusal names every word that blocks:
+the first in the slot's line, the others in `state: N words block it, the first named in the
+slot's refusal line; the others: ...`. This applies to every format 3 record (Android, the
+Linux and Windows programs) and to an earlier Android version's format 2 record named again with
+its legacy table, whose words reach the same check.
 
 **Words nothing names.** Only a word the record confirms is translated: a word in a unit (the
 hash rule above), in a game range, a block or a unique variable, or at a start-up value or a

@@ -2340,33 +2340,75 @@ static const UMap *umap_find(const UMap *m, size_t n, uint64_t old)
     return lo < n && m[lo].old == old ? &m[lo] : NULL;
 }
 
-/* a window's refusal: what, missing or twice, where the save found the
-   word (a record that says so), and for a missing window that is no text
-   whether its bytes from the word on lie here once while the ones before it
-   do not (a neighbour of other contents: the linker's merged constants are
-   ordered anew in every link).  That says nothing of which object the word
-   names (the one starting at it, one ending at it, a page), so the state is
-   still refused (state_xbuild.h) */
-static void window_why(IcoXbVerdict *v, const IcoStateImage *im, const uint32_t *freq,
-                       const char *what, unsigned found, const unsigned char *b, size_t stored,
-                       size_t len, size_t at, int hashed, const char *where, uint64_t where_at)
+/* a point that blocks the state: the first in why (and kind), the others
+   after it in more as they fit; all counted (the check goes on through the
+   points, so one refusal names every word that blocks) */
+static void block(IcoXbVerdict *v, int kind, const char *fmt, ...)
 {
-    char held[96], tail[64];
-    uint64_t first = 0;
+    char m[200];
+    va_list ap;
 
-    held[0] = tail[0] = '\0';
-    if (where[0] != '\0') {
-        snprintf(held, sizeof held, ", a word of %.40s at 0x%llx", where,
-                 (unsigned long long)where_at);
+    va_start(ap, fmt);
+    vsnprintf(m, sizeof m, fmt, ap);
+    va_end(ap);
+    if (v->blocked == 0) {
+        v->kind = kind;
+        snprintf(v->why, sizeof v->why, "%s", m);
+    } else {
+        const size_t k = strlen(v->more);
+
+        if (k + 4 < sizeof v->more) {
+            snprintf(v->more + k, sizeof v->more - k, "%s%s", k > 0 ? "; " : "", m);
+        }
     }
-    if (found == 0 && !hashed && at > 0 && at < stored && stored == len &&
-        find_in(im, 0, freq, b + at, stored - at, len - at, 0, 0, 0, 2, &first) == 1) {
-        snprintf(tail, sizeof tail,
-                 "; its %u bytes from the word on lie here once, not those before",
-                 (unsigned)(stored - at));
+    v->blocked++;
+}
+
+/* 1 when the n bytes are one value repeated (fill: zeros, 0xff, padding;
+   where such a run lies says nothing of an object) */
+static int one_byte(const unsigned char *b, size_t n)
+{
+    size_t i;
+
+    for (i = 1; i < n; i++) {
+        if (b[i] != b[0]) {
+            return 0;
+        }
     }
-    verdict(v, ICO_XB_DATA, "%s is %s here%s%s", what,
-            found == 0 ? "missing" : "in more than one place", held, tail);
+    return 1;
+}
+
+/* 1 when the record lists w as a page word (an ADRP of a function with a
+   live frame on some fiber makes it: the page rule decides it) */
+static int page_word(const unsigned char *pg, uint32_t npg, uint64_t w)
+{
+    uint32_t i;
+
+    for (i = 0; i < npg; i++) {
+        if (get64(pg + (size_t)i * PAGE_BYTES) == w) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* The second attempt for a read-only word whose window was found nowhere
+   here (state_xbuild.h: by content, NOT proven): the window's bytes from the
+   word on, at least 8, not one repeated byte, found exactly once in this
+   build's read-only data, for a word that is no page word of the record.
+   1 and *now (the word's place here), 0 when the bytes from the word on
+   are not usable (*twice then says whether they lie here more than once) */
+static int forward_place(const IcoStateImage *im, const uint32_t *freq, const unsigned char *b,
+                         size_t stored, size_t at, int text, int hashed, const unsigned char *pg,
+                         uint32_t npg, uint64_t old, uint64_t *now, unsigned *count)
+{
+    *count = 0;
+    if (text || hashed || at == 0 || at >= stored || stored - at < 8 ||
+        one_byte(b + at, stored - at) || ((old & 0xFFFu) == 0 && page_word(pg, npg, old))) {
+        return 0;
+    }
+    *count = find_in(im, 0, freq, b + at, stored - at, stored - at, 0, 0, 0, 2, now);
+    return *count == 1;
 }
 
 /* IcoXbVerdict.code_patch for this build's function w compared under
@@ -2724,11 +2766,13 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             uint64_t w;
 
             if (now->snap == NULL || off / 8 >= now->snap_words) {
-                FAIL(v, ICO_XB_DATA, "the game's start-up data changed");
+                block(v, ICO_XB_DATA, "the game's start-up data changed");
+                continue;
             }
             w = now->snap[off / 8];
             if (w == 0 || w < now->image.lo || w > now->image.hi) {
-                FAIL(v, ICO_XB_DATA, "the game's start-up data changed");
+                block(v, ICO_XB_DATA, "the game's start-up data changed");
+                continue;
             }
             span_add(&points, old, old, w);
         } else if (kind == XP_WINDOW && ver >= 3) {
@@ -2781,9 +2825,53 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                              sym[0] != '\0' ? sym : "?", (unsigned long long)get64(r + 48),
                              (unsigned)len);
                 }
-                window_why(v, &im, freq, what, found, pool + pool_at, stored, len, at, hashed,
-                           NAME_AT(get32(r + 44)), get64(r + 56));
-                goto fail;
+                const char *where = NAME_AT(get32(r + 44));
+                char held[96], tail[64];
+                uint64_t fw = 0;
+                unsigned fc = 0;
+
+                if (found == 0 && stored == len &&
+                    forward_place(&im, freq, pool + pool_at, stored, at, text, hashed, pg, npg, old,
+                                  &fw, &fc)) {
+                    /* placed by its bytes from the word on alone (not proven) */
+                    if (v->forward < ICO_XB_FORWARD_LOG) {
+                        IcoXbForward *e = &v->fwd[v->forward];
+                        const char *nsym;
+                        uint64_t noff = 0;
+
+                        e->old = old;
+                        e->now = fw;
+                        snprintf(e->old_sym, sizeof e->old_sym, "%s", NAME_AT(get32(r + 40)));
+                        e->old_off = get64(r + 48);
+                        nsym = t != NULL ? ico_symtab_nearest(t, fw, &noff) : NULL;
+                        snprintf(e->now_sym, sizeof e->now_sym, "%s", nsym != NULL ? nsym : "");
+                        e->now_off = nsym != NULL ? noff : 0;
+                        snprintf(e->where, sizeof e->where, "%s", where);
+                        e->where_at = get64(r + 56);
+                        e->n_bytes = stored - at;
+                        memcpy(e->bytes, pool + pool_at + at,
+                               e->n_bytes < sizeof e->bytes ? e->n_bytes : sizeof e->bytes);
+                    }
+                    v->forward++;
+                    span_add(&points, old, old, fw);
+                    v->windows++;
+                    v->points++;
+                    continue;
+                }
+                held[0] = tail[0] = '\0';
+                if (where[0] != '\0') {
+                    snprintf(held, sizeof held, ", a word of %.40s at 0x%llx", where,
+                             (unsigned long long)get64(r + 56));
+                }
+                if ((old & 0xFFFu) == 0 && page_word(pg, npg, old)) {
+                    snprintf(tail, sizeof tail, "; a page word too, which its bytes never place");
+                } else if (fc > 0) {
+                    snprintf(tail, sizeof tail, "; its %u bytes from the word on lie here %s",
+                             (unsigned)(stored - at), fc == 1 ? "once" : "more than once");
+                }
+                block(v, ICO_XB_DATA, "%s is %s here%s%s", what,
+                      found == 0 ? "missing" : "in more than one place", held, tail);
+                continue;
             }
             span_add(&points, old, old, w + at);
             v->windows++;
@@ -2800,7 +2888,8 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             w = find_text(&im, r + 24, len);
             if (w == 0) {
                 snprintf(name, sizeof name, "%s", (const char *)(r + 24));
-                FAIL(v, ICO_XB_DATA, "the text \"%s\" is missing here", name);
+                block(v, ICO_XB_DATA, "the text \"%s\" is missing here", name);
+                continue;
             }
             span_add(&points, old, old, w);
         } else {
@@ -2809,6 +2898,9 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
         v->points++;
     }
 #undef NAME_AT
+    if (v->blocked > 0) {
+        goto fail; /* every point that blocks it named (block) */
+    }
     if (spans.failed || points.failed) {
         FAIL(v, ICO_XB_BAD, "no memory for the translation");
     }
