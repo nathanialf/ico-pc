@@ -131,7 +131,7 @@ int main(int argc, char **argv)
     FILE *f;
     char line[512];
     Ent *cur = NULL;
-    int rels = 0, writes = 0, i, sites_b = -1, sites_a = -1;
+    int rels = 0, writes = 0, carried = 0, i, sites_b = -1, sites_a = -1;
 
     if (argc < 2 || (f = fopen(argv[1], "r")) == NULL) {
         fprintf(stderr,
@@ -224,6 +224,38 @@ int main(int argc, char **argv)
                   "writes %08x: %08x (rules 2: %08x), the file says %s %s", w,
                   ico_code_a64_writes_rules(3, w), ico_code_a64_writes_rules(2, w), t[2], t[3]);
             writes++;
+        } else if (strcmp(t[0], "carried") == 0 && n == 4) {
+            const Ent *x = find(t[1]);
+            const unsigned long k = strtoul(t[2], NULL, 10);
+
+            CHECK(x != NULL && k < x->n, "carried %s %s", t[1], t[2]);
+            if (x != NULL && k < x->n) {
+                uint32_t *ws = (uint32_t *)malloc(x->n * sizeof *ws);
+                uint8_t st[MAX_STUB * 8 + 8];
+                IcoA64Text tx;
+                int got = -2;
+
+                if (ws != NULL) {
+                    memset(&tx, 0, sizeof tx);
+                    if (x->n_stub == 1) { /* the corpus' patched functions hold one stub */
+                        int j;
+
+                        for (j = 0; j < 8; j++) {
+                            st[j] = (uint8_t)(x->stub_w[0][j / 4] >> (8 * (j % 4)));
+                        }
+                        tx.bytes = st;
+                        tx.lo = x->stub[0];
+                        tx.hi = x->stub[0] + 8;
+                    }
+                    (void)ico_code_a64_unpatch(x->w, x->n, x->addr, x->n_stub == 1 ? &tx : NULL,
+                                               ws);
+                    got = ico_code_a64_page_carried(ws, x->n, (size_t)k);
+                    free(ws);
+                }
+                CHECK(got == atoi(t[3]), "carried %s %lu: %d, the Python twin's %s", t[1], k, got,
+                      t[3]);
+                carried++;
+            }
         } else {
             CHECK(0, "corpus line %s", t[0]);
         }
@@ -258,9 +290,10 @@ int main(int argc, char **argv)
           "the corpus: %d functions, %d relations, %d "
           "instructions",
           s_n, rels, writes);
+    CHECK(carried >= 600, "the corpus: %d carry verdicts", carried);
     printf("code_hash_corpus: %d functions under rules 1 to 3, %d relations, %d instructions' "
-           "writes\n",
-           s_n, rels, writes);
+           "writes, %d carry verdicts\n",
+           s_n, rels, writes, carried);
     for (i = 0; i < s_n; i++) {
         free(s_ent[i].w);
     }

@@ -143,6 +143,31 @@ static int manifest_has(const Dir *d, const char *name, const char *key)
     return hit;
 }
 
+/* its ADRPs' verdicts (carry.z): loaded, a row per code hash, a judged row
+   answering for its own count of ADRPs and refusing another */
+static void check_carry(const char *name, const IcoLegacyTable *t)
+{
+    size_t i, judged = 0, with = 0;
+
+    CHECK(t->carry != NULL && t->carry_n != NULL && t->carry_at != NULL,
+          "%s: its ADRPs' verdicts (carry.z) load", name);
+    if (t->carry == NULL) {
+        return;
+    }
+    for (i = 0; i < t->n_hash; i++) {
+        judged += t->carry_n[i] != ICO_LEGACY_UNJUDGED;
+        if (t->carry_n[i] != ICO_LEGACY_UNJUDGED && t->carry_n[i] > 0) {
+            const int c = ico_legacy_carried(t, t->hash[3 * i], 0, t->carry_n[i]);
+
+            with += c == 0 || c == 1;
+            CHECK(ico_legacy_carried(t, t->hash[3 * i], 0, t->carry_n[i] + 1u) == -1,
+                  "%s: another count of ADRPs is not judged", name);
+        }
+    }
+    CHECK(judged + 2 >= t->n_hash && with > 1000, "%s: %zu of %zu functions judged, %zu with ADRPs",
+          name, judged, t->n_hash, with);
+}
+
 static void check_rows(const char *name, const IcoLegacyTable *t)
 {
     IcoSymTabEnv env;
@@ -217,6 +242,7 @@ static void check_table3(const Dir *d, const char *name, const char *commit)
         differ += t->hash[3 * i + 1] != t->hash[3 * i + 2];
     }
     CHECK(sorted, "%s: the code hashes in address order", name);
+    check_carry(name, t);
     CHECK(differ > 0 && differ < t->n_hash / 100,
           "%s: %zu functions hash apart under rules 2 and 3 (a few: the rules changed little)",
           name, differ);
@@ -291,6 +317,7 @@ static void check_table(const Dir *d, const char *name, const char *platform, co
         CHECK(nls == manifest_num(d, name, "lstarts") && nls > 0 && nls < (long)t->n_run,
               "%s: %ld runs start a literal, as its manifest says", name, nls);
     }
+    check_carry(name, t);
     check_rows(name, t);
     ico_legacy_free(t);
 }

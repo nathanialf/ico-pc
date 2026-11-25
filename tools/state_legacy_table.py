@@ -23,6 +23,10 @@ states an earlier Android version saved (format 2: port/platform/state_legacy.h)
       deflate; a state's own hashes are checked against the first at load, which proves the
       table is its build's; tools/code_hash_a64.py hashes as port/platform/code_hash.c does,
       reading an erratum patch site's stub from the library),
+      every ADRP's verdict (carry.z: per function in hashes.z's order, its ADRPs' count and a
+      bit each, set when a paused thread can hold the page it makes: code_hash_a64 page_carried
+      on that build's own words, the C twin's ico_code_a64_page_carried; a function longer than
+      16384 words is not judged),
       and manifest.txt: the commit text a state of that version carries in
       its header (checked against the library's bytes), the platform, the
       kind (release, or rc: a release candidate's table, packaged into
@@ -31,7 +35,7 @@ states an earlier Android version saved (format 2: port/platform/state_legacy.h)
       --record 2 (the default: versions before v0.11.9, whose records' hashes are of rules
       1) writes all of the above; --record 3 (v0.11.9 and later: a format 3 record names its
       own words, its hashes are of rules 2) writes the symbol file, the code hashes and the
-      manifest alone ("record 3", "hash_verify_rules 2"); with --hashes-only no symbol file (the
+      manifest alone ("record 3", "hash_verify_rules 2"), and carry.z; with --hashes-only no symbol file (the
       loader reads the code hashes alone; the gate reads the newest release table's symbol file,
       so only that one keeps it, which check enforces).
       Needs the NDK's llvm-readelf (tools/toolchain/android.env).
@@ -195,6 +199,44 @@ def unit_hashes(syms_text, sec_lines, so, verify_rules=1, names=None):
     return out
 
 
+CARRY_MAX_WORDS = 16384  # a longer unit (the code after the last symbol: the PLT) is not judged
+UNJUDGED = 0xFFFF         # state_legacy.h ICO_LEGACY_UNJUDGED
+
+
+def carry_rows(syms_text, sec_lines, so):
+    """carry.z's bytes before deflate (state_legacy.h): per unit, in hashes.z's order, its ADRPs'
+    count (16 bits) and one bit each, set when a paused thread can hold its page (code_hash_a64
+    page_carried on this build's own words, patch sites replaced)"""
+    lo, hi = code_range(sec_lines)
+    loads = load_map(so)
+    text = code_hash_a64.Text(va_bytes(so, loads, lo, hi), lo, hi)
+    out = bytearray()
+    for a, e, nm in unit_starts(syms_text, lo, hi):
+        c = va_bytes(so, loads, a, e)
+        ws = [code_hash_a64.rd32(c, 4 * k) for k in range(len(c) // 4)]
+        ks = [k for k, w in enumerate(ws) if w & 0x9F000000 == 0x90000000]
+        if len(ws) > CARRY_MAX_WORDS or len(ks) >= UNJUDGED:
+            out += struct.pack("<H", UNJUDGED)
+            continue
+        ws = code_hash_a64.unpatch(ws, a, text)[0]
+        bits = bytearray((len(ks) + 7) // 8)
+        for i, k in enumerate(ks):
+            if code_hash_a64.page_carried(ws, k):
+                bits[i // 8] |= 1 << (i % 8)
+        out += struct.pack("<H", len(ks)) + bits
+    return bytes(out)
+
+
+def carry_count(raw):
+    """carry.z's rows (check)"""
+    at, n = 0, 0
+    while at + 2 <= len(raw):
+        c, = struct.unpack_from("<H", raw, at)
+        at += 2 + (0 if c == UNJUDGED else (c + 7) // 8)
+        n += 1
+    return n if at == len(raw) else -1
+
+
 def deflate(b):
     c = zlib.compressobj(9, zlib.DEFLATED, -15)
     return c.compress(b) + c.flush()
@@ -257,8 +299,11 @@ def build(a):
     for f in os.listdir(out):
         os.remove(os.path.join(out, f))
     hz = deflate(b"".join(struct.pack("<IQQ", a0, h1, h) for a0, h1, h in hashes))
+    cz = deflate(carry_rows(gzip.decompress(syms).decode(), sec_lines, so))
     if a.record == 3:
-        files = {"hashes.z": hz} if a.hashes_only else {"syms.gzip": syms, "hashes.z": hz}
+        files = {"hashes.z": hz, "carry.z": cz}
+        if not a.hashes_only:
+            files["syms.gzip"] = syms
         for name, b in files.items():
             if len(b) > CAP + 12000:
                 sys.exit("state_legacy_table: %s is %d bytes" % (name, len(b)))
@@ -284,7 +329,7 @@ def build(a):
     idx = b"".join(struct.pack("<II", ro_addr + s, (e - s) | (LSTART if s == 0 or ro[s - 1] == 0 else 0))
                    for s, e in runs)
     files = {"syms.gzip": syms, "sections.txt": ("".join(l + "\n" for l in sec_lines)).encode(),
-             "texts.idx": deflate(idx), "hashes.z": hz}
+             "texts.idx": deflate(idx), "hashes.z": hz, "carry.z": cz}
     k, at, step = 0, 0, 400000
     while at < len(blob):
         n = min(step, len(blob) - at)
@@ -357,16 +402,21 @@ def check(a):
             if len(hz) != 20 * int(m["hashes"]) or not hz:
                 bad.append("%s: the code hashes do not hold what the manifest says" % d)
             offs = [struct.unpack_from("<I", hz, i)[0] for i in range(0, len(hz), 20)]
+            if "carry.z" not in m["files"]:
+                bad.append("%s: no carry.z (its ADRPs' verdicts: rebuild the table)" % d)
+            elif carry_count(inflate(open(os.path.join(p, "carry.z"), "rb").read())) != len(offs):
+                bad.append("%s: carry.z does not hold a row per code hash" % d)
             if any(x >= y for x, y in zip(offs, offs[1:])):
                 bad.append("%s: the code hashes are not in address order" % d)
             if record == 3:
                 # the loader reads hashes.z alone; the newest release's also keeps its symbol
                 # file, which the package gate names the functions by
-                want = ["hashes.z", "syms.gzip"] if d == newest_release(root) else ["hashes.z"]
+                want = ["carry.z", "hashes.z", "syms.gzip"] if d == newest_release(root) else \
+                    ["carry.z", "hashes.z"]
                 if sorted(m["files"]) != want:
                     bad.append("%s: a record 3 table holds %s, not %s (the newest release's keeps its "
                                "symbol file for the gate, the others drop it: build --hashes-only)" %
-                               (d, " and ".join(want), sorted(m["files"])))
+                               (d, ", ".join(want), sorted(m["files"])))
                 continue
             nruns, nbytes = map(int, m["texts"].split())
             if int(m.get("text_index", "1")) != TEXT_INDEX:

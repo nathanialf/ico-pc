@@ -137,7 +137,11 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   file's, each pair hashes alike or apart as the file says (the builds' pairs alike under rules
   3 and apart under rules 2; every variant apart under rules 3), 43 instructions' written
   registers under rules 3 and under rules 1 and 2 are the file's, and the patch sites found are
-  one in the rc's bird and none in the release's.
+  one in the rc's bird and none in the release's; the carry verdicts (whether an ADRP's page
+  can be held by a paused thread, `ico_code_a64_page_carried`) of every ADRP of eight real
+  functions and of 16 hand-made ones (callee-saved or scratch register across a call, an
+  argument, a tail call, MOV and ADD of 0 copies, a store, LDAR and PRFM that write nothing, an
+  unknown word, an overwrite, a return, a jump table) equal the Python twin's.
 - `state_legacy_test.c`, its later cases (`state_legacy`): a format 2 table kept at rules 2 loads
   when its manifest says why (`hash_rules_kept`); the format 3 records' tables load with their
   code hashes alone (rules 2 and 3, address order, a few apart, no texts), and their symbol file
@@ -160,10 +164,14 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   refused; a page word alone: its ADRP here translates it; a word inside an object that moved
   whole: translated; two words that block: both counted and named (`test_window_page`). A page
   word on fiber 1 that two ADRPs of the function it waits in (f_p) make in A and that are two
-  pages in B: the first's page consumed by an ADD before the call, the second kept in x25 across
-  it: taken from the second, logged with the first marked (`its page dies in place`); both kept
-  (the first stored too): refused, both named; both consumed in place: refused (`none of them
-  can keep it past its own uses`) (`test_page_split`).
+  pages in B: the save records only the ADRPs whose page a paused thread can hold, judged on A's
+  words (`ICO_XB_CARRIED`): the first's page consumed by an ADD (not recorded), x25 kept across
+  the call: x25's page, nothing to resolve; both held (the first stored): refused; neither: no
+  producer, an ordinary bss address. The same record without the flag (as made before the rule) goes
+  by its version's table (`carry.z` bits): the first dead there although B stores it, taken
+  from x25's and counted (2 producers, 1 held, 1 not); both held by the table: refused; no
+  table: refused. 17 producers whose 17th makes another page here: every one counted, refused
+  (`test_page_split`).
 
 - `dump_zip_test.c`, its scene ledger case (`dump_zip`): with a ledger text set
   (`ico_dump_zip_set_ledger`, [SCENE_LEDGER.md](SCENE_LEDGER.md#the-report)) a capture's zip that

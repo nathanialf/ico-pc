@@ -619,6 +619,196 @@ uint32_t ico_code_a64_writes_rules(int rules, uint32_t w)
     return a64_writes_of(rules)(w);
 }
 
+/* --- what a paused thread can hold (ico_code_a64_page_carried) -------------- */
+
+#define A64_CARRY (0x1FFu | 0x3FFu << 19) /* x0-x8, x19-x28 */
+#define A64_CALL_KILL (0x7FFFFu | 1u << 30)
+
+/* the registers the word surely writes (code_hash.h: the over-claimed
+   classes write nothing here) */
+static uint32_t a64_must_writes(uint32_t w)
+{
+    uint32_t r;
+
+    if ((w & 0x7C000000u) == 0x14000000u) {
+        return 0;
+    }
+    if ((w & 0x0A000000u) == 0x08000000u) {
+        if ((w & 0x3E000000u) == 0x08000000u || (w & 0x3B000000u) == 0x19000000u ||
+            (w & 0xFFC00000u) == 0xF9800000u || (w & 0xFFE00400u) == 0xF8800000u ||
+            (w & 0xFFE00C00u) == 0xF8A00800u || (w & 0xFF000000u) == 0xD8000000u ||
+            (w & 0x3B200C00u) == 0x38200000u) {
+            return 0;
+        }
+    }
+    r = a64_writes_v3(w);
+    return r == ~0u ? 0u : r;
+}
+
+/* word j of n, entered with the page in regs: 1 when it may hand the page to
+   a paused thread */
+static int a64_carries(uint32_t w, uint32_t regs, size_t n, size_t j)
+{
+    const unsigned rt = w & 31u, rn = (w >> 5) & 31u, rt2 = (w >> 10) & 31u, rm = (w >> 16) & 31u;
+    const int carry = (regs & A64_CARRY) != 0;
+    int64_t t;
+#define HELD(r) (((regs >> (r)) & 1u) != 0)
+
+    if (a64_writes_v3(w) == ~0u) {
+        return regs != 0; /* not understood */
+    }
+    if ((w & 0x7C000000u) == 0x14000000u) {
+        if ((w & 0x80000000u) != 0) {
+            return carry; /* BL */
+        }
+        t = (int64_t)j + sign_extend(w & 0x3FFFFFFu, 26);
+        return (t < 0 || t >= (int64_t)n) && carry; /* B out of it: a tail call */
+    }
+    if ((w & 0xFF000000u) == 0x54000000u || (w & 0x7E000000u) == 0x34000000u) {
+        t = (int64_t)j + sign_extend((w >> 5) & 0x7FFFFu, 19);
+        return (t < 0 || t >= (int64_t)n) && carry;
+    }
+    if ((w & 0x7E000000u) == 0x36000000u) {
+        t = (int64_t)j + sign_extend((w >> 5) & 0x3FFFu, 14);
+        return (t < 0 || t >= (int64_t)n) && carry;
+    }
+    if ((w & 0xFE000000u) == 0xD6000000u) {
+        return carry; /* BLR, BR, RET */
+    }
+    if ((w & 0xFFE0FFE0u) == 0xAA0003E0u || (w & 0x7F800000u) == 0x11000000u ||
+        (w & 0x9F000000u) == 0x90000000u || (w & 0x9F000000u) == 0x10000000u) {
+        return 0; /* MOV, ADD of 0 (copies, followed), a base use, ADRP, ADR */
+    }
+    if ((w & 0x3B000000u) == 0x39000000u || (w & 0x3B200000u) == 0x38000000u) {
+        return ((w >> 22) & 3u) == 0 && ((w >> 26) & 1u) == 0 && HELD(rt);
+    }
+    if ((w & 0x3B200C00u) == 0x38200800u) {
+        return (((w >> 22) & 3u) == 0 && ((w >> 26) & 1u) == 0 && HELD(rt)) || HELD(rm);
+    }
+    if ((w & 0x3A000000u) == 0x28000000u) {
+        return ((w >> 22) & 1u) == 0 && ((w >> 26) & 1u) == 0 && (HELD(rt) || HELD(rt2));
+    }
+    if ((w & 0x0A000000u) == 0x08000000u) {
+        return HELD(rt) || HELD(rt2) || HELD(rm) || HELD(rn);
+    }
+    if ((w & 0x1C000000u) == 0x10000000u) {
+        if ((w & 0x1F800000u) == 0x12800000u) {
+            return ((w >> 29) & 3u) == 3u && HELD(rt);
+        }
+        return HELD(rn) || ((w & 0x1F800000u) == 0x13800000u && HELD(rm));
+    }
+    if ((w & 0x0E000000u) == 0x0A000000u) {
+        return HELD(rn) || HELD(rm) || ((w & 0x1F000000u) == 0x1B000000u && HELD(rt2));
+    }
+    if ((w & 0x0E000000u) == 0x0E000000u) {
+        return HELD(rn);
+    }
+    if ((w & 0xFFC00000u) == 0xD5000000u) {
+        return HELD(rt);
+    }
+    return HELD(rt) || HELD(rn) || HELD(rt2) || HELD(rm);
+#undef HELD
+}
+
+static int a64_carry_push(uint32_t *into, uint8_t *seen, size_t *work, size_t *nwork,
+                          uint8_t *queued, size_t n, int64_t j, uint32_t v)
+{
+    if (j < 0 || j >= (int64_t)n) {
+        return 0;
+    }
+    if (!seen[j] || (v & ~into[j]) != 0) {
+        seen[j] = 1;
+        into[j] |= v;
+        if (!queued[j]) {
+            queued[j] = 1;
+            work[(*nwork)++] = (size_t)j;
+        }
+    }
+    return 0;
+}
+
+int ico_code_a64_page_carried(const uint32_t *ws, size_t n, size_t k)
+{
+    uint32_t *into;
+    uint8_t *seen, *queued;
+    size_t *work, nwork = 0;
+    int out = 0;
+
+    if (k >= n) {
+        return 1;
+    }
+    into = (uint32_t *)calloc(n, sizeof *into);
+    seen = (uint8_t *)calloc(n, 1);
+    queued = (uint8_t *)calloc(n, 1);
+    work = (size_t *)malloc(n * sizeof *work);
+    if (into == NULL || seen == NULL || queued == NULL || work == NULL) {
+        free(into);
+        free(seen);
+        free(queued);
+        free(work);
+        return -1;
+    }
+    (void)a64_carry_push(into, seen, work, &nwork, queued, n, (int64_t)k + 1, 1u << (ws[k] & 31u));
+    while (nwork > 0 && !out) {
+        const size_t j = work[--nwork];
+        const uint32_t w = ws[j], v = into[j];
+        uint32_t o;
+        const unsigned d = w & 31u;
+
+        queued[j] = 0;
+        if (v == 0) {
+            continue;
+        }
+        if (a64_carries(w, v, n, j)) {
+            out = 1;
+            break;
+        }
+        if ((w & 0xFC000000u) == 0x94000000u ||
+            ((w & 0xFE000000u) == 0xD6000000u && ((w >> 21) & 3u) == 1u)) {
+            o = v & ~A64_CALL_KILL & ~a64_must_writes(w);
+        } else {
+            o = v & ~a64_must_writes(w);
+            if ((w & 0xFFE0FFE0u) == 0xAA0003E0u && ((v >> ((w >> 16) & 31u)) & 1u) != 0 &&
+                d != 29 && d != 31) {
+                o |= 1u << d;
+            }
+            if ((w & 0xFF800000u) == 0x91000000u && ((v >> ((w >> 5) & 31u)) & 1u) != 0 &&
+                ((w >> 10) & 0xFFFu) == 0 && d != 29 && d != 31) {
+                o |= 1u << d; /* ADD Xd, Xn, #0 */
+            }
+        }
+        if ((w & 0xFC000000u) == 0x14000000u) {
+            (void)a64_carry_push(into, seen, work, &nwork, queued, n,
+                                 (int64_t)j + sign_extend(w & 0x3FFFFFFu, 26), o);
+        } else if ((w & 0xFF000010u) == 0x54000000u || (w & 0x7E000000u) == 0x34000000u) {
+            if ((w & 0xFF00001Fu) != 0x5400000Eu) {
+                (void)a64_carry_push(into, seen, work, &nwork, queued, n, (int64_t)j + 1, o);
+            }
+            (void)a64_carry_push(into, seen, work, &nwork, queued, n,
+                                 (int64_t)j + sign_extend((w >> 5) & 0x7FFFFu, 19), o);
+        } else if ((w & 0x7E000000u) == 0x36000000u) {
+            (void)a64_carry_push(into, seen, work, &nwork, queued, n, (int64_t)j + 1, o);
+            (void)a64_carry_push(into, seen, work, &nwork, queued, n,
+                                 (int64_t)j + sign_extend((w >> 5) & 0x3FFFu, 14), o);
+        } else if ((w & 0xFE000000u) == 0xD6000000u && ((w >> 21) & 3u) != 1u) {
+            if (((w >> 21) & 0xFu) == 0) { /* BR: a jump table's case, any word */
+                size_t i;
+
+                for (i = 0; i < n; i++) {
+                    (void)a64_carry_push(into, seen, work, &nwork, queued, n, (int64_t)i, o);
+                }
+            }
+        } else {
+            (void)a64_carry_push(into, seen, work, &nwork, queued, n, (int64_t)j + 1, o);
+        }
+    }
+    free(into);
+    free(seen);
+    free(queued);
+    free(work);
+    return out;
+}
+
 static uint32_t get32(const uint8_t *p)
 {
     return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;

@@ -1421,19 +1421,28 @@ that made it:
   - Producers on one fiber that make two pages: `fiber slot N holds the page 0x.., which ADRPs in
     f+0x.. and g+0x.. make: here they make two pages, and which one it came from cannot be told`.
     Only unwinding the frames with the call frame information could say which frame set the
-    register. Before that refusal the load drops every producer whose page dies in place: from
-    its ADRP, through the function's own branches (the code hash's flow), the page is only ever
-    the base of an ADD of an offset or of a load or store, and is overwritten before any call, any
-    return or branch by register, any store of it or any other use (`page_escapes`). Such a page
-    is never in a register or a slot while the function waits in a call, so no paused thread
-    holds it; this build's code is the saving build's (its hash compared), so its flow is too.
-    When the producers left make one page, the word takes it, logged: `state: fiber slot N's page
-    0x.. is taken here as 0x.., from the ADRP in f+0x..: of the ADRPs that made it there (...),
-    the others' pages die in place ...`, and the resume's line counts them. Otherwise it is
-    refused with every producer named, those whose page dies in place marked; when none is left,
-    `none of them can keep it past its own uses`. The memory card manager's thread
-    (`iosMcManager`) has two such ADRPs: one of a message buffer whose page an ADD consumes as
-    the call's argument, and one kept in x25 across its wait, the only one a paused thread holds.
+    register. Only some ADRPs can have made the word at all. A thread pauses in a call (the
+    fiber switch is one: minicoro's saves x19-x30, sp and d8-d15), and AAPCS64 lets a call destroy
+    x9-x18 and lets the callee keep what its arguments hold. So a page reaches a paused thread
+    only through a call or a branch out of the function (BL, BLR, BR, RET, a tail call) with the
+    page in x0-x8 or x19-x28, a store of it, or a use the rule does not understand (an unknown
+    word, any read other than a base use, a MOV or an ADD of 0, which it follows as copies), on
+    some path through the function's own branches (`ico_code_a64_page_carried`, code_hash.h;
+    `page_carried` in tools/code_hash_a64.py, the twins kept equal by the shared corpus). A
+    register stops holding the page only where an instruction surely writes it. The rule reads an
+    ADD's immediate, which the code hash masks, so it is judged on the saving build's own words:
+    the save records only such producers (`ICO_XB_CARRIED` in the record's flags), and for a
+    state saved before this rule the legacy table made from its build's package holds the
+    verdict of every ADRP of its functions (`carry.z`). When the producers a record names make
+    two pages here, a record saved this way is refused (each of them can be held); an older
+    version's record keeps the producers its table says can be held (one it does not judge counts
+    as held), and the word takes their page when they agree, logged: `state: fiber slot N's page
+    0x.. is taken here as 0x.., from the ADRP in f+0x..: of the N ADRPs that made it there, its
+    version's table says L can be held by a paused thread (... K of them not judged ...) and D
+    cannot`. Otherwise, or with no such table, it is refused, every producer counted and the first
+    ones named. The memory card manager's thread (`iosMcManager`) has two ADRPs of one page: one
+    of a message buffer that an ADD turns into the call's argument (x1, not the page), and one
+    kept in x25 across its wait, the only one a paused thread can hold.
   - A word that is both a page word and an ordinary address (seen outside the fibers' frames, or a
     symbol, a block or a start-up value starts at it) must get one value from both readings:
     `0x.. is both the page an ADRP in f+0x.. makes and an address of its own, and here the two lie

@@ -37,6 +37,12 @@
  *                 for a format 2 record, 2 for v0.11.9 to v0.11.15): every
  *                 unit of a record must match it, which proves the table
  *                 is the saver's build.
+ *   carry.z       optional: per hashes.z row, a 16-bit count of the
+ *                 version's ADRPs in that function (0xffff: not judged)
+ *                 and that many bits (bytes rounded up), each set when a
+ *                 paused thread can hold its page (code_hash.h
+ *                 ico_code_a64_page_carried on the version's own words,
+ *                 tools/code_hash_a64.py page_carried), raw deflate
  *   manifest.txt  the commit text its states carry, the platform, the kind
  *                 (release, rc), the source APK and its SHA-256, the files,
  *                 "text_index 2" (texts.idx's format: a table without it,
@@ -84,7 +90,22 @@ typedef struct IcoLegacyTable {
     int verify_rules; /* the rules of the second column: the version's records' own */
     int record;       /* the version's records' format: 2 (everything above), 3 (the hashes
                          alone: such a record names its own words) */
+    /* carry.z (optional): per hashes row, the version's ADRPs in that
+       function in order, each one's bit set when a paused thread can hold
+       its page (code_hash.h ico_code_a64_page_carried on the version's own
+       words); NULL when the table has none */
+    uint8_t *carry;     /* the bits */
+    uint32_t *carry_at; /* n_hash: the row's first bit */
+    uint16_t *carry_n;  /* n_hash: its ADRPs (ICO_LEGACY_UNJUDGED: none judged) */
 } IcoLegacyTable;
+
+#define ICO_LEGACY_UNJUDGED 0xFFFFu
+
+/* By the table, whether the ADRP number `ord` (of `all` in the function
+   here) of the function at image offset `off` makes a page a paused thread
+   can hold in that version: 1, 0, or -1 when it does not say (no carry.z,
+   no such row, the row not judged, another count of ADRPs). */
+int ico_legacy_carried(const IcoLegacyTable *t, uint64_t off, uint32_t ord, uint32_t all);
 
 /* The table of states whose header names `commit` on `platform`: 1 and
    its name, 0 when the index has none, -1 when the index cannot be read. */
