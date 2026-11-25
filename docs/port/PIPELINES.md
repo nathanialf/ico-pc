@@ -2315,10 +2315,29 @@ the third cause, the picture still right), the lists right and the pictures not,
 unwritten (the draws not drawing the lists they were given: the first or second cause). Its mark
 (`port/platform/compact_mark.c`, `logs/compact-mark.txt`, the zero-area cull's stages: `trying`
 synced before the first replay with it, `counting` on a pass, `on` after `RD_VU_CMP_PROBATION`
-(250) pictures read back with it, `failed` on a refusal, removed when not checked) keeps it off on
-the install after a bad end while it was tried or on; the step runs before the other attempts'
-marks and reads theirs as the previous run left them (an end while one of them was trying is
-theirs). The loss ladder's start without the pre-pass leaves it off too. Tests' words:
+(250) pictures drawn with it whose recorded stamps all came back, `failed` on a refusal, removed
+when not checked) keeps it off on the install after a bad end while it was tried or on; the step
+runs before the other attempts' marks and reads theirs as the previous run left them (an end while
+one of them was trying is theirs), and their steps read its stage the same way
+(`compact_mark_stage_read`: its test can run after theirs wrote their marks, when a graphics API
+switch runs the start-up self-tests again). Only a lost device in its replays with it is a
+measured failure; a replay, a read or a build that fails without one, or a failure of the
+references drawn without it, is "not checked". The loss ladder's start without the pre-pass leaves
+it off too.
+
+In play (`rd__vu_compact_play_health`, called from the picture-health report's
+`rd__health_note` for every collected record with VU draws outside the self-tests): a picture
+whose recorded stamps came back unwritten after its work was signalled finished, the sign the
+phone's black pictures carried, while the form is on turns it off for the run at once (the plane
+dropped, the next picture without it) and writes its mark `failed`, so later starts leave it off
+until the version changes:
+
+    rd: VU index compaction: off for the run (in play: replay 812, frame 640, 16 of its recorded stamps unwritten after its work was signalled finished, the sign of ...): the next picture without it, every draw on its own index list; its mark says failed (off on this install until the version changes)
+
+The rate card holds it off for its frames (`rd__vu_compact_hold`; its vertex frame's triangles lie
+off the target and would all be fillers), its head line then ending `, the index compaction held
+off`. The tests' `ICO_RD_HEALTH_FAKE=play` reads every such record as that sign
+(`rd_vu_compact_play`). Tests' words:
 `ICO_RD_VU_COMPACT_SABOTAGE=lists` (the CPU's lists written one triangle off) and `=readback` (one filler of
 the test's read-back taken back to its corner 0); `ICO_COMPACT_BLOCK` as the mark exports it. `=unchecked` (its
 lists never copied back: not checked). Not judged in play by the A/B judge: a subject would have

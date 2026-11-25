@@ -399,7 +399,8 @@ enum {
     ICO_ATT_CMP_ST_PASSED = 1,
     ICO_ATT_CMP_ST_OWN_REFUSED = 2,
     ICO_ATT_CMP_ST_MARKED = 3,
-    ICO_ATT_CMP_ST_UNCHECKED = 4
+    ICO_ATT_CMP_ST_UNCHECKED = 4,
+    ICO_ATT_CMP_ST_PLAY_REFUSED = 5 /* v0.11.6's sign in play with it on */
 };
 
 /* the index compaction (rd_vu_compact.c, at the pre-pass's start and after

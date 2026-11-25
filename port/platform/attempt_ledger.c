@@ -729,6 +729,10 @@ int ico_attempt_decide_compaction(int compute, const char *notWhy, int cls, int 
         st = ICO_ATT_REFUSED;
         why = "its own start-up test refused it (the lists the CPU writes first read back, the "
               "pictures or the stamps): every draw reads its own index list";
+    } else if (selftest == ICO_ATT_CMP_ST_PLAY_REFUSED) {
+        st = ICO_ATT_REFUSED;
+        why = "off for the run in play: a picture's recorded stamps came back unwritten after its "
+              "work was signalled finished with it on";
     } else if (selftest == ICO_ATT_CMP_ST_MARKED) {
         st = ICO_ATT_REFUSED;
         why = "kept off on this install by its mark (the run before ended badly while it was "

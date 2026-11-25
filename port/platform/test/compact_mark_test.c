@@ -19,9 +19,12 @@
  *           ICO_COMPACT_VERSION and ICO_COMPACT_BLOCK exported; a crash
  *           while it was on and the twins' mark (as the previous run left
  *           it, read before their step) said trying: not blocked, the line
- *           names the twins; the same with the lean vertex outputs' and the
- *           rate card's files; the cull's own step after it then blocks
- *           nothing of the compaction's
+ *           names the twins; the same with the one-pass blend's mark and
+ *           the rate card's file (a leanvs-mark.txt is not read); the cull's
+ *           own step after it then blocks nothing of the compaction's; a
+ *           lost device while its own test was trying with the four others
+ *           counting or on: the five steps in diag_host.c's order, it
+ *           blocked, none of them (each line names it)
  * argv[1]: a folder the test may write in (a folder of its own).
  */
 #include <stdio.h>
@@ -29,6 +32,9 @@
 #include <string.h>
 
 #include "compact_mark.h"
+#include "fastps_mark.h"
+#include "nodiscard_mark.h"
+#include "onepass_mark.h"
 #include "exit_info.h"
 #include "host_fs.h"
 #include "last_run.h"
@@ -244,13 +250,15 @@ static void step(const char *dir)
     CHECK(got[0] == '\0');
     (void)ico_remove(nd);
 
-    /* the lean vertex outputs' mark, then the rate card's file */
+    /* a leanvs-mark.txt (a package not in this build, a file a test build
+       left) is no attempt's: not read, the crash is its own */
     writeText(lv, "trying v0.11.16\n");
     writeText(mark, "counting v0.11.16\n");
     s_lines[0] = '\0';
-    CHECK(compact_mark_step(act, "v0.11.16", -1, 0, logLine) == 0);
-    CHECK(strstr(s_lines, "the lean vertex outputs were being tried then (their mark)") != NULL);
+    CHECK(compact_mark_step(act, "v0.11.16", -1, 0, logLine) == 1);
+    CHECK(strstr(s_lines, "lean vertex") == NULL);
     (void)ico_remove(lv);
+    (void)ico_remove(mark);
     /* the one-pass blend's (its check runs after this one's test) */
     char op[1024];
     snprintf(op, sizeof op, "%s/onepass-mark.txt", dir);
@@ -271,6 +279,50 @@ static void step(const char *dir)
     writeText(mark, "on v0.11.16\n");
     CHECK(compact_mark_step(act, "v0.11.16", -1, 0, logLine) == 1);
     (void)ico_remove(mark);
+
+    /* a lost device while its own test was trying (run again after a
+       graphics API switch) and the four others counting or on: the five
+       steps in diag_host.c's order; it blocks, they do not (each reads its
+       stage, compact_mark_stage_read), each line names it */
+    char fp[1024];
+    snprintf(fp, sizeof fp, "%s/fastps-mark.txt", dir);
+    prevRun(prev, "graphics device lost");
+    writeText(mark, "trying v0.11.16\n");
+    writeText(zero, "counting v0.11.16\n");
+    writeText(nd, "on v0.11.16\n");
+    writeText(fp, "counting v0.11.16\n");
+    writeText(op, "on v0.11.16\n");
+    s_lines[0] = '\0';
+    CHECK(compact_mark_step(act, "v0.11.16", -1, 0, logLine) == 1);
+    CHECK(compact_mark_stage_read() == VU_ZERO_STAGE_TRYING);
+    CHECK(vu_zero_mark_step(act, "v0.11.16", -1, 0, logLine) == 0);
+    CHECK(nodiscard_mark_step(act, "v0.11.16", -1, 0, logLine) == 0);
+    CHECK(fastps_mark_step(act, "v0.11.16", -1, 0, logLine) == 0);
+    CHECK(onepass_mark_step(act, "v0.11.16", -1, 0, logLine) == 0);
+    CHECK(strstr(s_lines, "zero-area cull: was on, its first pictures being counted, when it ended "
+                          "(a lost graphics device): the index compaction was being tried then "
+                          "(its mark): tried again") != NULL);
+    CHECK(strstr(s_lines, "discard-free twins: were on when it ended (a lost graphics device): the "
+                          "index compaction was being tried then (its mark): tried again") != NULL);
+    CHECK(strstr(s_lines, "fast pixel build: was on, its first pictures being counted, when it "
+                          "ended (a lost graphics device): the index compaction was being tried "
+                          "then (its mark): tried again") != NULL);
+    CHECK(strstr(s_lines,
+                 "one-pass blend: was on when it ended (a lost graphics device): the index "
+                 "compaction was being tried then (its mark): tried again") != NULL);
+    if (fails) {
+        printf("%s", s_lines);
+    }
+    char got2[64];
+    readText(zero, got2, sizeof got2);
+    CHECK(strncmp(got2, "blocked", 7) != 0);
+    readText(mark, got2, sizeof got2);
+    CHECK(strcmp(got2, "blocked v0.11.16\n") == 0);
+    (void)ico_remove(mark);
+    (void)ico_remove(zero);
+    (void)ico_remove(nd);
+    (void)ico_remove(fp);
+    (void)ico_remove(op);
 }
 
 int main(int argc, char **argv)

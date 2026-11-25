@@ -10,11 +10,13 @@
 #include "rd_health.h"
 #include "rd_internal.h"
 #include "rd_perf_clock.h" /* RD_RESET_*, rd_perf_reset_counted */
+#include "rd_vu_compact.h" /* rd__vu_compact_play_health */
 
 static struct {
     bool begun;    /* the first record or self-test window decided on */
     bool on;       /* Vulkan: the records carry the slot clock's signs */
     bool fakeSelf; /* ICO_RD_HEALTH_FAKE=selftest (the tests) */
+    bool fakePlay; /* ICO_RD_HEALTH_FAKE=play: every record with VU draws outside a self-test */
     RdHealth h;    /* the render thread's */
     uint64_t judged, unfinished;
     /* the start-up self-test's window */
@@ -35,9 +37,12 @@ static void begin(void)
     const char *e = getenv("ICO_RD_HEALTH_FAKE"); /* the tests only: no setting */
     if (e != NULL && e[0] != '\0') {
         s_hl.fakeSelf = strcmp(e, "selftest") == 0;
+        s_hl.fakePlay = strcmp(e, "play") == 0;
         rd__log("picture health: ICO_RD_HEALTH_FAKE=%.16s: %s", e,
-                s_hl.fakeSelf ? "the start-up self-test's pictures read as hangs (the tests)"
-                              : "not selftest: ignored");
+                s_hl.fakeSelf   ? "the start-up self-test's pictures read as hangs (the tests)"
+                : s_hl.fakePlay ? "every picture with VU draws outside the self-tests read as a "
+                                  "hang (the tests)"
+                                : "neither selftest nor play: ignored");
     }
 }
 
@@ -81,6 +86,15 @@ void rd__health_note(const RdPerfRecord *r)
         s_hl.stN++;
         s_hl.stBad += rd_perf_reset_counted(sign) ? 1u : 0u;
         return;
+    }
+    if (r->vuDraws > 0u) {
+        /* the index compaction's Mali-G52 form: v0.11.6's sign in play
+           turns it off at once; a picture without it counts for its
+           probation (rd_vu_compact.h) */
+        const bool hang = s_hl.fakePlay || sign == RD_RESET_HANG;
+        rd__vu_compact_play_health(hang, s_hl.fakePlay ? 1u : (unsigned)r->gpuStampsMissing,
+                                   r->replay, r->frame);
+        sign = s_hl.fakePlay ? RD_RESET_HANG : sign;
     }
     if (!judged) {
         return;

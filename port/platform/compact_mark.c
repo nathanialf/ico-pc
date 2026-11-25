@@ -23,6 +23,14 @@
 
 static const char kHead[] = "the previous run: index compaction: ";
 
+/* the mark's stage as the last step read it, before it was rewritten */
+static int s_stageRead = VU_ZERO_STAGE_NONE;
+
+int compact_mark_stage_read(void)
+{
+    return s_stageRead;
+}
+
 void compact_mark_decide(const char *mark, int endKind, const char *endWords, const char *version,
                          int besideStage, const char *besideWho, char *out, size_t outSize,
                          char *line, size_t lineSize, int *block)
@@ -130,6 +138,11 @@ int compact_mark_step(const char *activityPath, const char *version, int exitRea
         }
     }
     const int kind = vu_zero_mark_end_kind(prevEnd, endText, exitReason, exitStatus);
+    {
+        char ver[64];
+        s_stageRead =
+            mark[0] != '\0' ? vu_zero_mark_parse(mark, ver, sizeof ver) : VU_ZERO_STAGE_NONE;
+    }
     char words[160], out[192], line[768];
     int block = 0;
     vu_zero_mark_end_words(kind, exitReason, exitStatus, words, sizeof words);
@@ -143,7 +156,6 @@ int compact_mark_step(const char *activityPath, const char *version, int exitRea
         {"vu-zero-mark.txt", "the zero-area cull was"},
         {"nodiscard-mark.txt", "the discard-free twins were"},
         {"fastps-mark.txt", "the fast pixel build was"},
-        {"leanvs-mark.txt", "the lean vertex outputs were"},
         {"onepass-mark.txt", "the one-pass blend was"},
     };
 

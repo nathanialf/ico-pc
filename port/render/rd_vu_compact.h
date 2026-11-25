@@ -335,9 +335,19 @@ void rd__vu_compact_check_copy(RhiCommandList cl, RhiBuffer rec, uint32_t head, 
    (rd_vu_compact_selftest.c); nothing where the class has the other form,
    or the compaction is off before it */
 void rd__vu_compact_own_selftest(RdTargetRec *t);
-/* the pictures the compaction drew in play (its mark's probation; the
-   readback of each, rd__vu_compact_slot_begin) */
+/* the pictures the compaction drew in play with every recorded stamp
+   written (its mark's probation, rd__vu_compact_play_health) */
 #define RD_VU_CMP_PROBATION 250u
+/* the rate card's frames (rd_ratecard_run.c): held off (on) or not; true
+   when it was in use before the hold (the card says so) */
+bool rd__vu_compact_hold(bool on);
+/* a collected record of a picture with VU draws, outside the self-tests
+   (rd_health_live.c rd__health_note): hang its recorded stamps came back
+   unwritten after its work was signalled finished (missing of them), the
+   v0.11.6 sign.  With the Mali-G52's form on: a hang turns it off for the
+   run at once and writes its mark failed; a picture without one counts
+   for the probation */
+void rd__vu_compact_play_health(bool hang, unsigned missing, uint32_t replay, uint32_t frame);
 #endif
 
 #endif /* PORT_RENDER_RD_VU_COMPACT_H */
