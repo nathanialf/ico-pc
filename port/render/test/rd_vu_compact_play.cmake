@@ -13,6 +13,7 @@
 # SKIP.
 # -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=... -DFIXTURES=... -DFIXTURE_HELPERS=...
 # -DLIST=<vu_flat0.txt> -DOUT=<a folder the test may write>
+cmake_policy(SET CMP0057 NEW) # if(... IN_LIST ...) in a -P script
 include("${FIXTURE_HELPERS}")
 rd_fixture_list("${LIST}" names)
 if(NOT "fx-mali-frame" IN_LIST names)
