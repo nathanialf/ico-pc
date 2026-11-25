@@ -32,7 +32,9 @@ repository's 256 KiB file cap:
 - its functions' code hashes.
 
 A format 3 table (`record 3`, `hash_verify_rules 2` in its manifest) holds the
-symbol file and the code hashes alone, about 400 KB.
+code hashes alone, about 160 KB (`build --hashes-only`). The newest release's
+also keeps its symbol file (about 240 KB more): the package gate names the
+functions by it. `check` enforces both.
 
 `index.txt` lists the tables. Each line gives the platform, the kind, the
 folder and the commit text that the version's states carry.
@@ -42,15 +44,21 @@ folder and the commit text that the version's states carry.
 | `v0.11.7-android` | release | `ico-pc-v0.11.7-android.apk` | `334f04819472b1353de45e0b0cfd52f103252fe50226f4df793f2baed3c2939a` | `v0.11.6-183-g66d9d0dcba` |
 | `v0.11.8-android` | release | `ico-pc-v0.11.8-android.apk` | `7b474d9be4e9fece3ebed6fbc199d00c652f0f7b279646c828c3c8704a572485` | `v0.11.7-68-gaeb00e6100` |
 | `v0.11.8-rc4-android` | rc | `ico-pc-v0.11.8-rc4-android.apk` | `10e43ab4ff7f2d93ab3a050e508ea7ead33494bf48c7c5cc560ba9c0b16afa3a` | `v0.11.7-66-gaf8507442c` |
+| `v0.11.9-android` | release, record 3 | `ico-pc-v0.11.9-android.apk` | `9c154b381b75cdd14bccf897183aaebf392b1ffb7d5f8374ae4f0a6e574f6bd0` | `v0.11.8-68-g96fd7c099a` |
+| `v0.11.10-android` | release, record 3 | `ico-pc-v0.11.10-android.apk` | `e8c33123ef238ca24bb2d37b456af8c3bd9a34329e40daeb45504df6ad337fc9` | `v0.11.9-6-ge9bcc9d3ef` |
+| `v0.11.11-android` | release, record 3 | `ico-pc-v0.11.11-android.apk` | `9d4c5fd0853166b785a700b4c63c8fd5dbede13f19a8b91766d5d9f06e6e05b1` | `v0.11.10-23-g4832c07665` |
+| `v0.11.12-android` | release, record 3 | `ico-pc-v0.11.12-android.apk` | `bbed93af3b06a575bb7021d87ddc28c365d999e61f0a37918c814e0c7a5a5f9c` | `v0.11.11-29-ga42959af67` |
+| `v0.11.13-android` | release, record 3 | `ico-pc-v0.11.13-android.apk` | `f7a4ebeb50e436c74ae69d97e99c272995ba7999d6f3f3c89eb1439aa118c821` | `v0.11.12-69-g0c585e991a` |
 | `v0.11.14-android` | release, record 3 | `ico-pc-v0.11.14-android.apk` | `13b2b65d24aa0c019890262c8befa21ddf505743982b1f1041854567dae5634e` | `v0.11.13-42-g0aaa7ac704` |
+| `v0.11.15-rc6-android` | rc, record 3 | `ico-pc-v0.11.15-rc6-android.apk` | `e700519208ecd4b09ba0fff39ba849821674f8bf472fd85f3c913142db249444` | `v0.11.14-58-g5ccc7f8365` |
 | `v0.11.15-android` | release, record 3 | `ico-pc-v0.11.15-android.apk` | `2efb30eea372cbc52b2a6dde95d101ec3bf9f79507d6260878cd019b0836fc36` | `v0.11.14-94-g5396fcfcd2` |
 
-The `v0.11.7-android` and `v0.11.8-android` tables keep code hashes of rules 2
-(`hash_rules_kept` in their manifests): their release APKs were not at hand
-when the rules became 3, so their states are read under rules 2, as before.
-`v0.11.8-rc4-android` was rebuilt at rules 3 from its APK (its other files came
-out byte for byte the same). v0.11.9 to v0.11.13 have no table: their release
-APKs were not at hand either, so their states compare under their own rules 2.
+Every table holds code hashes of rules 3. The release APKs of v0.11.7 to
+v0.11.13 came from the project's GitHub release pages (v0.11.7's and v0.11.8's
+SHA-256 equal the ones their first tables recorded; rebuilt, their other files
+came out byte for byte the same). `v0.11.15-rc6-android` is the release
+candidate the owner's test states came from; like rc4's it ships in release
+candidate APKs only.
 
 ## Which versions have a table
 
@@ -90,7 +98,7 @@ package gate over a fake pair of builds.
 ```
 python3 -I tools/state_legacy_table.py build --apk <the release APK> \
     --commit <the commit text its states carry> --name <version>-android [--kind rc] \
-    [--record 3]
+    [--record 3 [--hashes-only]]
 ```
 
 `--record 3` for v0.11.9 and later. The commit text is the one the library
@@ -105,7 +113,8 @@ gone keeps its rules with a `hash_rules_kept <why>` line in its manifest
 
 After every Android release, add its `--record 3` table: the next release's
 package gate compares with it, and its states compare through it when the
-rules change again. Each one adds about 400 KB to the repository and to the
+rules change again. The previous newest release's table then drops its symbol
+file (`build --hashes-only` again); each table adds about 160 KB to the
 APK.
 
 ## The package gate on the game's code

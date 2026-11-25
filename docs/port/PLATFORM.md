@@ -1544,9 +1544,10 @@ names another layout before any other reason. Two more changes came with this wo
 code hashes are of the rules of its build's day (rules 2 before rules 3). This build's code
 under rules 2 still carries the two gaps above, so a function with a linker patch site in only
 one of the two builds would refuse the state. A released Android build of this game data
-layout therefore also has a table of format 3 records (`record 3` in its manifest): its symbol
-file and every function's code hash under the records' rules (`hash_verify_rules 2`) and the
-current ones, no texts (`tools/state_legacy_table.py build --record 3`). At the check
+layout therefore also has a table of format 3 records (`record 3` in its manifest): every
+function's code hash under the records' rules (`hash_verify_rules 2`) and the current ones, no
+texts, about 160 KB (`tools/state_legacy_table.py build --record 3 --hashes-only`); the newest
+release's keeps its symbol file too, which the package gate reads. At the check
 (`state_host.c` `xb_probe_locked`, `IcoXbNow.xlate`), when the state's commit text names such a
 table: every function of the record must have its row there with the record's own hash, which
 proves the table is the saving build's; the table's current-rules hash of each function is then
