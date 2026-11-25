@@ -2168,14 +2168,15 @@ one-pass blend draws a proven pair once. `port/render/rd_onepass.h` says it all.
   goes to one pass is not fused (`rd__op_unfuse` in `vuFuseVerdict`): the cut draws once in one
   pass and the kick under its own state, the draws the fusion stands for. That unfused path is
   the leading suspect of the stretched triangles the reporter's phone drew when the form was
-  first shipped (its self-test never drew a code 36 pair), so each class is used only where its
-  own arm of the device check passed.
+  first shipped (its self-test never drew a code 36 pair), so the device check measures each
+  class on its own arm. Only the plain class is ever put in use (below); the cut class, and with
+  it the unfuse, runs only under the tests' `ICO_RD_ONEPASS=full`.
 - **The device check** (`rd_onepass_selftest.c`, after the fast build's self-test, on SCENE with
   the VU record at the size play makes it at start-up, the twins and the fast build held in their
   run states so the keys drawn are play's): the twins' clipper check's 13 cases (triangles across
   and near the eye plane) as frames of their own, each at code 32 and 34 (ABE on), 36 with the
   state's ABE off (fused where the device fuses: the reporter's pattern), all three untextured and
-  textured (RGBA32, MODULATE, TCC), and 36 with ABE on, every corner's alpha 9 to 124, then a
+  textured (RGBA32, MODULATE, TCC), and 36 with ABE on, every corner's alpha 9 to 127, then a
   depth probe at GS Z 0 with Z write off. Each frame drawn today (REF) and under the arms that
   change something on it: A one pass on the plain class; B code 36 unfused with its two passes
   kept (the suspect alone); C both classes and the unfuse; each compared with REF byte for byte.
@@ -2199,8 +2200,9 @@ one-pass blend draws a proven pair once. `port/render/rd_onepass.h` says it all.
   Only arms not checked, a failed read or a frame that could not be built: no verdict, the mark
   removed, the check again at the next start; a device loss is measured (`failed`).
 - **Never waited for:** its pipelines go through the twins' background queue: a pair whose
-  one-pass pipeline is not made yet is drawn in two passes, and a code 36 command is unfused only
-  once the cut's one-pass pipeline and the kick's own are made. With the device's dynamic blend
+  one-pass pipeline is not made yet is drawn in two passes, and (with the cut class, the tests'
+  `=full` only) a code 36 command is unfused only once the cut's one-pass pipeline and the kick's
+  own are made. With the device's dynamic blend
   state the bit folds into the colour pass's own pipeline (`rd__key_dynamic_normalise`), its blend
   state and constant set at each bind.
 - **The ways back** (each logged, none in the settings): the check (per arm, above); the install's
@@ -2216,7 +2218,7 @@ one-pass blend draws a proven pair once. `port/render/rd_onepass.h` says it all.
   arm `rd: one-pass blend: the check's arm C (...) over 13 cases: the same bytes (...)`, then
   `rd: one-pass blend: on (check: in use: ...; arms A the same bytes, B the same bytes, C the same
   bytes, D none) on SCENE ...`, the start line `rd: one-pass blend: on (...), P of its pipelines
-  alive`, the 10 s VU line's clause `; one-pass blend (both classes): P pairs a picture in one pass
+  alive`, the 10 s VU line's clause `; one-pass blend (outside code 36): P pairs a picture in one pass
   (Q of code 36), T triangles, U code 36 commands unfused (R pairs kept two-pass a picture: alpha
   above 128 a, ..., not made yet u, timed without it t)`, the judge's `A/B: one-pass blend, stage
   N: ...` and the attempt ledger's row `the one-pass blend timed in play`; `rd_replay_tool

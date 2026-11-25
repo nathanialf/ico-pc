@@ -79,8 +79,9 @@ them both, the same look the game gives when you call her with R1, but Ico
 does not call her and she does not come. With **Hold** the look lasts while
 you keep L3 held; with **Toggle** one press starts it and the next ends it.
 A look started with Toggle also ends when a cutscene takes over, when you
-go into another room, when you take her hand, and when you press R3 with
-Camera reset on; calling her with R1 leaves it on. While you hold her hand
+go into another room, when you take her hand, when you press R3 with
+Camera reset on and when you load a save state; calling her with R1,
+pausing and the menus leave it on. While you hold her hand
 L3 does nothing (she is beside you). When she is somewhere else in the
 castle the camera turns toward where she is, as it does when you press R1
 there. Where the game keeps the camera fixed when you call her, Ico still
@@ -89,7 +90,8 @@ from the title screen and the pause menu, and works on every disc. L3 can
 be moved to any other key or button under **Remap controls**; the touch
 screen has no L3 button, so there it only works with a controller or
 keyboard. While **Free movement** (under [Developer mode](OPTIONS.md#developer-mode))
-is on, L3 is its own button, so Look at Yorda waits until you turn it off.
+or the debug menu's camera is on, L3 is theirs, so Look at Yorda waits
+until you turn them off.
 
 A few more keys on a computer:
 

@@ -36,8 +36,8 @@
  * pair went to one pass, and the reporter's phone drew stretched triangles
  * (issue 179, v0.11.10's report; v01116 handbacks/TRI-ONEPASS.md: the
  * unfused code 36 path is the leading suspect, never drawn by that
- * release's self-test).  So two classes, each used only where its own arm
- * of the device check passed:
+ * release's self-test).  So two classes, each measured on its own arm of
+ * the device check (only the plain class is ever put in use: below):
  *   plain  a pair of a draw that is not code 36's (no cut, kick or fused
  *          bit in its VuCB);
  *   cut    a pair of a code 36 cut or kick drawn apart (the cut of a

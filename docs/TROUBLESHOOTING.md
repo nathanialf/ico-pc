@@ -897,7 +897,10 @@ type, Camera reset, Look at Yorda, the rows on the Gameplay pages and the rest).
 journey's difficulty comes from the state, as always. The one setting a
 state keeps is **Video mode**: a state saved in the other of 50 Hz and 60 Hz
 plays in the one it was saved in until you restart the game, and your
-setting is used again from then on.
+setting is used again from then on. A state saved with **Developer mode** on
+and loaded with it off closes the debug menu if it was open, and achievements
+stay off until you restart the game (as after using the debug menu); some of
+that menu's settings stay as the state had them until then.
 
 If a state fails to load for any other reason, send a
 [problem report](#send-a-problem-report): the log has lines that start with

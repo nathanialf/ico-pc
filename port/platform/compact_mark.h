@@ -11,11 +11,15 @@
  *   trying <v>    written and synced before its own start-up test's first
  *                 replay with it, until the test has passed
  *   counting <v>  written and synced when the test passed: on, its first
- *                 RD_VU_CMP_PROBATION pictures not yet read back
- *   on <v>        RD_VU_CMP_PROBATION pictures drawn with it (not synced)
+ *                 RD_VU_CMP_PROBATION pictures with every stamp back not
+ *                 yet drawn (rd__vu_compact_play_health)
+ *   on <v>        RD_VU_CMP_PROBATION pictures drawn with it whose stamps
+ *                 all came back (not synced)
  *   failed <v>    its own start-up test refused it (the lists read back,
- *                 the pictures or the stamps; synced); a test that could
- *                 not check removes the file instead
+ *                 the pictures or the stamps; synced), or a picture in play
+ *                 came back with stamps unwritten while it was on (synced,
+ *                 rd__vu_compact_play_health); a test that could not check
+ *                 removes the file instead
  *   blocked <v>   written here: it stays off on this install while version
  *                 v runs
  *

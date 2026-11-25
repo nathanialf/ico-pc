@@ -522,7 +522,13 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
     179's report, which the test refuses);
   - the scenery ending mid-trial: a trial past 16 pairs ends with no verdict and its line word
     for word, no verdict kept for the stage; back in scenery none before 2 s, then the trial and
-    its verdict in the same stage;
+    its verdict in the same stage; the broken trial not counted toward the run's 12 (0 counted
+    and 1 begun after the break, 1 and 2 at the end);
+  - the scenery broken during trials (`testSceneryBreaks`): the renderer's five subjects with
+    work, the one-pass blend last; 15 pauses each 2.32 s into play (more than the cap): no trial
+    counted, the subject on trial going round them in turn (the fewest trials begun first), each
+    with 3 begun; then a long stretch: all five judged, the one-pass blend too, 5 trials counted
+    and no cap line;
   - the twins' camera rule class (`RD_AB_ND_CAMERA`) beside the twins: the four subjects in the
     renderer's order and a fifth place; no trial of the class in a stage where it had no work, its
     own trial where it had; its verdict and the twins' independent both ways (twins on, class off
@@ -613,7 +619,9 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   refusal alone (As 129, FBA, PABE, LERP FIX, Cd*FIX + Cs, Z GREATER with Z write, another format, a
   destination read, two samples, a pass taken already), the classes (a plain draw, a cut and a kick
   drawn apart, a fused kick, a fused command's cut) and the classes in use from the arms' verdicts
-  (C fails, A passes: A alone; A fails: nothing), the run's choice under `ICO_RD_ONEPASS=full` and
+  (the plain class wherever A passes, whatever B and C say; A fails: nothing; never the cut class),
+  the draws the plain class may take (`rd_op_safe_draw`: clip mode none and a kick drawn apart,
+  a camera rule draw only when proven in front of the eye, never particles or a cut), the run's choice under `ICO_RD_ONEPASS=full` and
   `=plain` and under the check's arms (the alpha pass dropped, the passes after it moved down; REF
   and B take nothing; the unfuse under each arm; without a device the check's pipelines not made,
   counted for its retry), the fast pixel build taking a one-pass key and the dynamic blend state
@@ -632,8 +640,7 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `_onepass_unchecked`, `_onepass_sliver`, `_onepass_readfail`, `_onepass_marked` (`rd_onepass.cmake`, through
   `rd_vuprepass_selftest_test` and `test/rd_vuprepass_selftest.cmake`, the Mali fakes without
   dual-source blending, the mark in a file of each test's own): the device check with every state
-  in the pipeline keys and with dynamic blend state: a code 32 frame with pairs in one pass under
-  A, a code 36 frame fused today and unfused under B and C with pairs in one pass (the reporter's
+  in the pipeline keys and with dynamic blend state: a code 36 frame fused today and unfused under B and C with pairs in one pass (the reporter's
   pattern drawn), the code 32 frames refused for A (not proven in front of the eye) and the code
   34 frames taken, A and B the same bytes, C measured ("the same bytes" or "differs": its form is
   inexact by construction where a corner reaches the GPU behind the eye, lavapipe measures
